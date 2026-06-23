@@ -1560,6 +1560,7 @@
 
         // 工具函数
         function formatMoney(amount) {
+            if (typeof amount !== 'number' || isNaN(amount)) return '¥0.00';
             return '¥' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         }
 
@@ -1669,7 +1670,8 @@
 
             document.body.insertAdjacentHTML('beforeend', confirmHTML);
             setTimeout(() => {
-                document.getElementById('confirmOverlay').classList.add('active');
+                const overlay = document.getElementById('confirmOverlay');
+                if (overlay) overlay.classList.add('active');
             }, 10);
 
             // 存储回调函数
@@ -1716,8 +1718,10 @@
 
             document.body.insertAdjacentHTML('beforeend', drawerHTML);
             setTimeout(() => {
-                document.getElementById('drawerOverlay').classList.add('active');
-                document.querySelector('.drawer').style.transform = 'translateX(0)';
+                const overlay = document.getElementById('drawerOverlay');
+                const drawer = document.querySelector('.drawer');
+                if (overlay) overlay.classList.add('active');
+                if (drawer) drawer.style.transform = 'translateX(0)';
             }, 10);
         }
 
@@ -1736,10 +1740,10 @@
 
         // 页面渲染函数
         function renderDashboard() {
-            const todayOrders = '--';
-            const todayAmount = '--';
-            const todayProfit = '--';
-            const activeMerchants = '--';
+            const todayOrders = 0;
+            const todayAmount = 0;
+            const todayProfit = 0;
+            const activeMerchants = 0;
 
             return `
                 <div class="page-header">
@@ -2690,7 +2694,8 @@
                 settings: '系统配置',
                 logs: '操作日志'
             };
-            document.getElementById('breadcrumbCurrent').textContent = pageNames[page] || page;
+            const breadcrumb = document.getElementById('breadcrumbCurrent');
+            if (breadcrumb) breadcrumb.textContent = pageNames[page] || page;
 
             // 渲染页面
             const renderer = pageRenderers[page];
@@ -2713,6 +2718,7 @@
         // 侧边栏切换
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
+            if (!sidebar) return;
             state.sidebarCollapsed = !state.sidebarCollapsed;
             sidebar.classList.toggle('collapsed');
         }
@@ -2721,15 +2727,15 @@
         function openSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('drawerOverlay');
-            sidebar.classList.add('mobile-open');
-            overlay.classList.add('active');
+            if (sidebar) sidebar.classList.add('mobile-open');
+            if (overlay) overlay.classList.add('active');
         }
 
         function closeSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('drawerOverlay');
-            sidebar.classList.remove('mobile-open');
-            overlay.classList.remove('active');
+            if (sidebar) sidebar.classList.remove('mobile-open');
+            if (overlay) overlay.classList.remove('active');
         }
 
         // 主题切换
@@ -2743,7 +2749,7 @@
 
             // 更新图标
             const icon = document.querySelector('#themeToggle i');
-            icon.className = newTheme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
+            if (icon) icon.className = newTheme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
         }
 
         // 初始化主题
@@ -2755,7 +2761,7 @@
             state.theme = theme;
 
             const icon = document.querySelector('#themeToggle i');
-            icon.className = theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
+            if (icon) icon.className = theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
         }
 
         // 结算处理
@@ -2825,7 +2831,7 @@
                     document.documentElement.setAttribute('data-theme', theme);
                     state.theme = theme;
                     const icon = document.querySelector('#themeToggle i');
-                    icon.className = theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
+                    if (icon) icon.className = theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
                 }
             });
 
@@ -2886,7 +2892,8 @@
             if (modalHTML) {
                 document.body.insertAdjacentHTML('beforeend', modalHTML);
                 setTimeout(() => {
-                    document.getElementById('modalOverlay').classList.add('active');
+                    const overlay = document.getElementById('modalOverlay');
+                    if (overlay) overlay.classList.add('active');
                 }, 10);
             }
         }
