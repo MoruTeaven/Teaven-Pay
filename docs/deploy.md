@@ -101,13 +101,6 @@ wrangler kv:namespace create CACHE --preview
 
 将输出的 KV ID 填入 `wrangler.toml` 配置文件。
 
-### 3.3 创建 R2 存储桶 (可选)
-
-```bash
-# 创建 R2 存储桶
-wrangler r2 bucket create teaven-pay-storage
-```
-
 ---
 
 ## 四、配置项目
@@ -133,21 +126,6 @@ preview_database_id = "your-preview-database-id"
 binding = "CACHE"
 id = "your-kv-namespace-id"
 preview_id = "your-preview-kv-namespace-id"
-
-# 可选: R2 存储
-[[r2_buckets]]
-binding = "STORAGE"
-bucket_name = "teaven-pay-storage"
-
-# 可选: 队列
-[[queues.producers]]
-binding = "NOTIFY_QUEUE"
-queue = "teaven-pay-notify"
-
-[[queues.consumers]]
-queue = "teaven-pay-notify"
-max_batch_size = 10
-max_batch_timeout = 30
 ```
 
 ### 4.2 配置 Secrets

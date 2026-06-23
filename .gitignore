@@ -45,3 +45,33 @@ coverage/
 
 # Wrangler
 .wrangler/
+
+# Editor
+.cache/
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+.vim/
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.tmp
+
+# CI/CD
+.gitlab-ci.yml
+.travis.yml
+.semaphore/
+.circleci/
+.github/
+.gitlab/
+
+# Local development
+.dev/
+.local/
+.cache/
+.temp/

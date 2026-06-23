@@ -16,12 +16,6 @@ export interface Env {
     // KV 缓存
     CACHE: KVNamespace;
     
-    // R2 存储 (可选)
-    // STORAGE?: R2Bucket;
-    
-    // 队列 (可选)
-    // NOTIFY_QUEUE?: Queue;
-    
     // Secrets
     JWT_SECRET?: string;
     ENCRYPTION_KEY?: string;

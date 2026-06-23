@@ -28,27 +28,6 @@ binding = "CACHE"
 id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 # preview_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-# R2 存储配置 (可选，用于存储文件)
-# [[r2_buckets]]
-# binding = "STORAGE"
-# bucket_name = "teaven-pay-storage"
-
-# 队列配置 (可选，用于异步任务)
-# [[queues.producers]]
-# binding = "NOTIFY_QUEUE"
-# queue = "teaven-pay-notify"
-
-# [[queues.consumers]]
-# queue = "teaven-pay-notify"
-# max_batch_size = 10
-# max_batch_timeout = 30
-
-# Durable Objects (可选，用于分布式锁/限流)
-# [durable_objects]
-# bindings = [
-#   { name = "RATE_LIMITER", class_name = "RateLimiter" }
-# ]
-
 # 定时触发器 (可选)
 # [triggers]
 # crons = ["0 2 * * *"]  # 每天凌晨2点执行
