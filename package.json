@@ -1,0 +1,35 @@
+{
+  "name": "teaven-pay-workers",
+  "version": "1.0.0",
+  "description": "Teaven Pay - Cloudflare Workers 易支付系统",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "db:init": "wrangler d1 execute teaven-pay-db --file=./migrations/0001_initial.sql",
+    "db:reset": "wrangler d1 execute teaven-pay-db --file=./migrations/0001_initial.sql --force",
+    "db:console": "wrangler d1 execute teaven-pay-db --command 'SELECT * FROM users LIMIT 10'",
+    "tail": "wrangler tail",
+    "secret:put": "wrangler secret put"
+  },
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "hono": "^3.12.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0",
+    "wrangler": "^3.24.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

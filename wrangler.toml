@@ -1,0 +1,80 @@
+name = "teaven-pay"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 本地开发配置
+[dev]
+port = 8787
+local_protocol = "http"
+
+# 环境变量
+[vars]
+ENVIRONMENT = "production"
+DEFAULT_CURRENCY = "CNY"
+LOG_LEVEL = "info"
+ENABLE_CORS = "true"
+
+# D1 数据库配置
+[[d1_databases]]
+binding = "DB"
+database_name = "teaven-pay-db"
+database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+# preview_database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# KV 命名空间配置 (用于缓存)
+[[kv_namespaces]]
+binding = "CACHE"
+id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# preview_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# R2 存储配置 (可选，用于存储文件)
+# [[r2_buckets]]
+# binding = "STORAGE"
+# bucket_name = "teaven-pay-storage"
+
+# 队列配置 (可选，用于异步任务)
+# [[queues.producers]]
+# binding = "NOTIFY_QUEUE"
+# queue = "teaven-pay-notify"
+
+# [[queues.consumers]]
+# queue = "teaven-pay-notify"
+# max_batch_size = 10
+# max_batch_timeout = 30
+
+# Durable Objects (可选，用于分布式锁/限流)
+# [durable_objects]
+# bindings = [
+#   { name = "RATE_LIMITER", class_name = "RateLimiter" }
+# ]
+
+# 定时触发器 (可选)
+# [triggers]
+# crons = ["0 2 * * *"]  # 每天凌晨2点执行
+
+# 环境配置: 开发环境
+# [env.development]
+# vars = { ENVIRONMENT = "development", LOG_LEVEL = "debug" }
+# [[env.development.d1_databases]]
+# binding = "DB"
+# database_name = "teaven-pay-db-dev"
+# database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# 环境配置: 生产环境
+# [env.production]
+# vars = { ENVIRONMENT = "production", LOG_LEVEL = "info" }
+# [[env.production.d1_databases]]
+# binding = "DB"
+# database_name = "teaven-pay-db"
+# database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# 构建配置
+[build]
+command = "npm run build"
+watch_dir = "src"
+
+# 分析配置
+# [inspect]
+# ip = "localhost"
+# port = 9229
