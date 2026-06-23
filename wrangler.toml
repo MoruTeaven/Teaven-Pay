@@ -18,7 +18,7 @@ ENABLE_CORS = "true"
 # D1 数据库配置
 [[d1_databases]]
 binding = "DB"
-database_name = "teaven-pay-db"
+database_name = "teaven-pay"
 database_id = "7de39fde-b84c-46bd-bb0c-01004b6f5200"
 # preview_database_id = "16625207-21df-40f6-b5c2-445a90e01c58"
 
