@@ -19,13 +19,13 @@ ENABLE_CORS = "true"
 [[d1_databases]]
 binding = "DB"
 database_name = "teaven-pay-db"
-database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-# preview_database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+database_id = "16625207-21df-40f6-b5c2-445a90e01c58"
+# preview_database_id = "16625207-21df-40f6-b5c2-445a90e01c58"
 
-# KV 命名空间配置 (用于缓存)
-[[kv_namespaces]]
-binding = "CACHE"
-id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# KV 命名空间配置 (用于缓存) - 暂时禁用
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 # preview_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 # 定时触发器 (可选)
@@ -48,10 +48,10 @@ id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 # database_name = "teaven-pay-db"
 # database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
-# 构建配置
-[build]
-command = "npm run build"
-watch_dir = "src"
+# 构建配置 - 跳过构建，直接部署 TypeScript
+# [build]
+# command = "npm run build"
+# watch_dir = "src"
 
 # 分析配置
 # [inspect]
