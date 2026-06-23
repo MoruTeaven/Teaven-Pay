@@ -31,7 +31,7 @@ export function generateUUIDv7(): string {
     // 时间戳低位 (16 位) + 版本号 (4 位) + 亚毫秒 (12 位)
     const timeLowVersion = Number(((timestamp & 0xFFFFn) << 12n) | (7n << 8n) | BigInt(randomBytes[0] & 0xFF));
     // 变体 (2 位) + 随机数 (6 位) + 随机数 (8 位)
-    const variantRandom = Number((0b10 << 14n) | BigInt((randomBytes[1] & 0x3F) << 8) | BigInt(randomBytes[2]));
+    const variantRandom = Number((BigInt(0b10) << 14n) | (BigInt(randomBytes[1] & 0x3F) << 8n) | BigInt(randomBytes[2]));
     // 随机数 (8 位) + 随机数 (8 位)
     const random1 = Number((randomBytes[3] << 8) | randomBytes[4]);
     // 随机数 (8 位) + 随机数 (8 位)
