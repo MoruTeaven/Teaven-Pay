@@ -2705,7 +2705,11 @@
 
             // 初始化图表
             if (page === 'dashboard') {
-                initCharts();
+                try {
+                    initCharts();
+                } catch (e) {
+                    console.error('图表初始化失败:', e);
+                }
                 loadDashboardData();
             }
 
@@ -2798,9 +2802,6 @@
             // 初始化主题
             initTheme();
 
-            // 渲染默认页面
-            navigateTo('dashboard');
-
             // 侧边栏切换按钮
             document.getElementById('sidebarToggle').addEventListener('click', function() {
                 if (window.innerWidth <= 1024) {
@@ -2841,6 +2842,9 @@
                     closeSidebar();
                 }
             });
+
+            // 渲染默认页面
+            navigateTo('dashboard');
         });
 
         // 模态框HTML结构

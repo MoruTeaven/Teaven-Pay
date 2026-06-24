@@ -2842,7 +2842,13 @@ app.get('/admin', async (c) => {
 
             // 初始化图表
             if (page === 'dashboard') {
-                setTimeout(initCharts, 100);
+                setTimeout(function() {
+                    try {
+                        initCharts();
+                    } catch (e) {
+                        console.error('图表初始化失败:', e);
+                    }
+                }, 100);
             }
 
             // 移动端关闭侧边栏
@@ -3229,9 +3235,6 @@ app.get('/admin', async (c) => {
             // 初始化主题
             initTheme();
 
-            // 渲染默认页面
-            navigateTo('dashboard');
-
             // 侧边栏切换按钮
             document.getElementById('sidebarToggle').addEventListener('click', function() {
                 if (window.innerWidth <= 1024) {
@@ -3254,6 +3257,9 @@ app.get('/admin', async (c) => {
                     navigateTo(this.dataset.page);
                 });
             });
+
+            // 渲染默认页面
+            navigateTo('dashboard');
 
             // 监听系统主题变化
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
