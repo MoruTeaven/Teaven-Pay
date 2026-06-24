@@ -2085,7 +2085,7 @@ app.get('/admin', async (c) => {
                 '<div class="card fade-in">' +
                 '    <div class="card-header">' +
                 '        <span class="card-title">最近订单</span>' +
-                '        <a href="#" class="btn btn-sm btn-secondary" onclick="event.preventDefault(); navigateTo(\'orders\')">查看全部</a>' +
+                '        <a href="#" class="btn btn-sm btn-secondary" onclick="event.preventDefault(); navigateTo(\\'orders\\')">查看全部</a>' +
                 '    </div>' +
                 '    <div class="card-body" style="padding: 0;">' +
                 '        <div class="table-container">' +
@@ -2136,7 +2136,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">商户管理</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-primary" onclick="showModal(\'createMerchant\')">' +
+                '        <button class="btn btn-primary" onclick="showModal(\\'createMerchant\\')">' +
                 '            <i class="ri-add-line"></i>' +
                 '            创建商户' +
                 '        </button>' +
@@ -2213,10 +2213,10 @@ app.get('/admin', async (c) => {
                         '<td>' + formatDate(merchant.createdAt) + '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'查看详情\', \'商户详情页面开发中\')">' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'查看详情\\', \\'商户详情页面开发中\\')">' +
                         '            <i class="ri-eye-line"></i>' +
                         '        </button>' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\'success\', \'操作成功\', \'API Key 已重置\')">' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'success\\', \\'操作成功\\', \\'API Key 已重置\\')">' +
                         '            <i class="ri-refresh-line"></i>' +
                         '        </button>' +
                         '    </div>' +
@@ -2236,7 +2236,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">订单管理</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-secondary" onclick="showToast(\'success\', \'导出成功\', \'订单数据已导出\')">' +
+                '        <button class="btn btn-secondary" onclick="showToast(\\'success\\', \\'导出成功\\', \\'订单数据已导出\\')">' +
                 '            <i class="ri-download-2-line"></i>' +
                 '            导出订单' +
                 '        </button>' +
@@ -2321,7 +2321,7 @@ app.get('/admin', async (c) => {
                         '<td>' + formatDate(order.createdAt) + '</td>' +
                         '<td>' + formatDate(order.paidAt) + '</td>' +
                         '<td>' +
-                        '    <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'查看详情\', \'订单详情页面开发中\')">' +
+                        '    <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'查看详情\\', \\'订单详情页面开发中\\')">' +
                         '        <i class="ri-eye-line"></i>' +
                         '    </button>' +
                         '</td>' +
@@ -2399,8 +2399,8 @@ app.get('/admin', async (c) => {
                     var actionHtml = '-';
                     if (settlement.status === 0) {
                         actionHtml = '<div style="display: flex; gap: 8px;">' +
-                            '<button class="btn btn-sm btn-primary" onclick="handleSettlement(\'' + settlement.id + '\', \'approve\')">批准</button>' +
-                            '<button class="btn btn-sm btn-danger" onclick="handleSettlement(\'' + settlement.id + '\', \'reject\')">拒绝</button>' +
+                            '<button class="btn btn-sm btn-primary" onclick="handleSettlement(\\'' + settlement.id + '\\', \\'approve\\')">批准</button>' +
+                            '<button class="btn btn-sm btn-danger" onclick="handleSettlement(\\'' + settlement.id + '\\', \\'reject\\')">拒绝</button>' +
                             '</div>';
                     }
                     
@@ -2473,7 +2473,7 @@ app.get('/admin', async (c) => {
                 '                        <td><i class="ri-alipay-line" style="font-size: 24px;"></i></td>' +
                 '                        <td><span class="badge success">启用</span></td>' +
                 '                        <td>1</td>' +
-                '                        <td><button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'编辑\', \'支付方式编辑功能开发中\')"><i class="ri-edit-line"></i></button></td>' +
+                '                        <td><button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'支付方式编辑功能开发中\\')"><i class="ri-edit-line"></i></button></td>' +
                 '                    </tr>' +
                 '                    <tr>' +
                 '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">wxpay</code></td>' +
@@ -2481,7 +2481,7 @@ app.get('/admin', async (c) => {
                 '                        <td><i class="ri-wechat-pay-line" style="font-size: 24px;"></i></td>' +
                 '                        <td><span class="badge success">启用</span></td>' +
                 '                        <td>2</td>' +
-                '                        <td><button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'编辑\', \'支付方式编辑功能开发中\')"><i class="ri-edit-line"></i></button></td>' +
+                '                        <td><button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'支付方式编辑功能开发中\\')"><i class="ri-edit-line"></i></button></td>' +
                 '                    </tr>' +
                 '                    <tr>' +
                 '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">qqpay</code></td>' +
@@ -2489,7 +2489,7 @@ app.get('/admin', async (c) => {
                 '                        <td><i class="ri-qq-line" style="font-size: 24px;"></i></td>' +
                 '                        <td><span class="badge success">启用</span></td>' +
                 '                        <td>3</td>' +
-                '                        <td><button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'编辑\', \'支付方式编辑功能开发中\')"><i class="ri-edit-line"></i></button></td>' +
+                '                        <td><button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'支付方式编辑功能开发中\\')"><i class="ri-edit-line"></i></button></td>' +
                 '                    </tr>' +
                 '                </tbody>' +
                 '            </table>' +
@@ -2502,7 +2502,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">支付通道</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-primary" onclick="showToast(\'info\', \'添加通道\', \'添加通道功能开发中\')">' +
+                '        <button class="btn btn-primary" onclick="showToast(\\'info\\', \\'添加通道\\', \\'添加通道功能开发中\\')">' +
                 '            <i class="ri-add-line"></i>' +
                 '            添加通道' +
                 '        </button>' +
@@ -2535,8 +2535,8 @@ app.get('/admin', async (c) => {
                 '                        <td><span class="badge success">启用</span></td>' +
                 '                        <td>' +
                 '                            <div style="display: flex; gap: 8px;">' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'编辑\', \'通道编辑功能开发中\')"><i class="ri-edit-line"></i></button>' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'配置\', \'通道配置功能开发中\')"><i class="ri-settings-3-line"></i></button>' +
+                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'通道编辑功能开发中\\')"><i class="ri-edit-line"></i></button>' +
+                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'配置\\', \\'通道配置功能开发中\\')"><i class="ri-settings-3-line"></i></button>' +
                 '                            </div>' +
                 '                        </td>' +
                 '                    </tr>' +
@@ -2550,8 +2550,8 @@ app.get('/admin', async (c) => {
                 '                        <td><span class="badge success">启用</span></td>' +
                 '                        <td>' +
                 '                            <div style="display: flex; gap: 8px;">' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'编辑\', \'通道编辑功能开发中\')"><i class="ri-edit-line"></i></button>' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'配置\', \'通道配置功能开发中\')"><i class="ri-settings-3-line"></i></button>' +
+                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'通道编辑功能开发中\\')"><i class="ri-edit-line"></i></button>' +
+                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'配置\\', \\'通道配置功能开发中\\')"><i class="ri-settings-3-line"></i></button>' +
                 '                            </div>' +
                 '                        </td>' +
                 '                    </tr>' +
@@ -2565,8 +2565,8 @@ app.get('/admin', async (c) => {
                 '                        <td><span class="badge success">启用</span></td>' +
                 '                        <td>' +
                 '                            <div style="display: flex; gap: 8px;">' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'编辑\', \'通道编辑功能开发中\')"><i class="ri-edit-line"></i></button>' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'配置\', \'通道配置功能开发中\')"><i class="ri-settings-3-line"></i></button>' +
+                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'通道编辑功能开发中\\')"><i class="ri-edit-line"></i></button>' +
+                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'配置\\', \\'通道配置功能开发中\\')"><i class="ri-settings-3-line"></i></button>' +
                 '                            </div>' +
                 '                        </td>' +
                 '                    </tr>' +
