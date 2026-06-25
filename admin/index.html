@@ -1233,7 +1233,6 @@
                     <a href="#" class="nav-item" data-page="merchants">
                         <i class="ri-store-2-line"></i>
                         <span>商户管理</span>
-                        <span class="badge">12</span>
                     </a>
                     <a href="#" class="nav-item" data-page="orders">
                         <i class="ri-file-list-3-line"></i>
@@ -1242,7 +1241,6 @@
                     <a href="#" class="nav-item" data-page="settlements">
                         <i class="ri-money-cny-circle-line"></i>
                         <span>结算管理</span>
-                        <span class="badge">5</span>
                     </a>
                 </div>
                 <div class="nav-section">
@@ -1784,10 +1782,6 @@
                             </div>
                         </div>
                         <div class="stat-value">${todayOrders.toLocaleString()}</div>
-                        <div class="stat-change up">
-                            <i class="ri-arrow-up-line"></i>
-                            <span>12.5% 较昨日</span>
-                        </div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-header">
@@ -1797,10 +1791,6 @@
                             </div>
                         </div>
                         <div class="stat-value">${formatMoney(todayAmount)}</div>
-                        <div class="stat-change up">
-                            <i class="ri-arrow-up-line"></i>
-                            <span>8.3% 较昨日</span>
-                        </div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-header">
@@ -1810,10 +1800,6 @@
                             </div>
                         </div>
                         <div class="stat-value">${formatMoney(todayProfit)}</div>
-                        <div class="stat-change up">
-                            <i class="ri-arrow-up-line"></i>
-                            <span>15.2% 较昨日</span>
-                        </div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-header">
@@ -1823,10 +1809,6 @@
                             </div>
                         </div>
                         <div class="stat-value">${activeMerchants}</div>
-                        <div class="stat-change up">
-                            <i class="ri-arrow-up-line"></i>
-                            <span>3.2% 较上月</span>
-                        </div>
                     </div>
                 </div>
 
@@ -2314,12 +2296,36 @@
             `;
         }
 
-        function renderSettings() {
+        async function renderSettings() {
+            let config = {
+                siteName: '',
+                siteUrl: '',
+                currency: 'CNY',
+                language: 'zh-CN',
+                orderTimeout: 30,
+                notifyRetryTimes: 5,
+                notifyRetryInterval: '1,5,30,60,360',
+                ipWhitelist: '',
+                rateLimit: 100,
+                adminEmail: '',
+                smtpHost: '',
+                smtpPort: 465
+            };
+
+            try {
+                const result = await api.getConfig();
+                if (result.success && result.data) {
+                    config = { ...config, ...result.data };
+                }
+            } catch (error) {
+                console.error('获取配置失败:', error);
+            }
+
             return `
                 <div class="page-header">
                     <h1 class="page-title">系统配置</h1>
                     <div class="page-actions">
-                        <button class="btn btn-primary" onclick="showToast('success', '保存成功', '系统配置已更新')">
+                        <button class="btn btn-primary" onclick="saveConfig()">
                             <i class="ri-save-line"></i>
                             保存配置
                         </button>
@@ -2334,24 +2340,24 @@
                         <div class="card-body">
                             <div class="form-group">
                                 <label class="form-label">系统名称</label>
-                                <input type="text" class="form-input" value="Teaven Pay">
+                                <input type="text" class="form-input" id="configSiteName" value="${config.siteName}">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">系统URL</label>
-                                <input type="text" class="form-input" value="https://pay.example.com">
+                                <input type="text" class="form-input" id="configSiteUrl" value="${config.siteUrl}">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">默认货币</label>
-                                <select class="form-input form-select">
-                                    <option value="CNY" selected>人民币 (CNY)</option>
-                                    <option value="USD">美元 (USD)</option>
+                                <select class="form-input form-select" id="configCurrency">
+                                    <option value="CNY" ${config.currency === 'CNY' ? 'selected' : ''}>人民币 (CNY)</option>
+                                    <option value="USD" ${config.currency === 'USD' ? 'selected' : ''}>美元 (USD)</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label class="form-label">系统语言</label>
-                                <select class="form-input form-select">
-                                    <option value="zh-CN" selected>简体中文</option>
-                                    <option value="en-US">English</option>
+                                <select class="form-input form-select" id="configLanguage">
+                                    <option value="zh-CN" ${config.language === 'zh-CN' ? 'selected' : ''}>简体中文</option>
+                                    <option value="en-US" ${config.language === 'en-US' ? 'selected' : ''}>English</option>
                                 </select>
                             </div>
                         </div>
@@ -2364,17 +2370,17 @@
                         <div class="card-body">
                             <div class="form-group">
                                 <label class="form-label">订单超时时间 (分钟)</label>
-                                <input type="number" class="form-input" value="30">
+                                <input type="number" class="form-input" id="configOrderTimeout" value="${config.orderTimeout}">
                                 <div class="form-hint">未支付订单自动关闭时间</div>
                             </div>
                             <div class="form-group">
                                 <label class="form-label">通知重试次数</label>
-                                <input type="number" class="form-input" value="5">
+                                <input type="number" class="form-input" id="configNotifyRetryTimes" value="${config.notifyRetryTimes}">
                                 <div class="form-hint">异步通知失败重试次数</div>
                             </div>
                             <div class="form-group">
                                 <label class="form-label">通知重试间隔</label>
-                                <input type="text" class="form-input" value="1,5,30,60,360" readonly>
+                                <input type="text" class="form-input" id="configNotifyRetryInterval" value="${config.notifyRetryInterval}" readonly>
                                 <div class="form-hint">重试间隔(分钟)，用逗号分隔</div>
                             </div>
                         </div>
@@ -2387,12 +2393,11 @@
                         <div class="card-body">
                             <div class="form-group">
                                 <label class="form-label">IP白名单</label>
-                                <textarea class="form-input form-textarea" placeholder="每行一个IP地址，留空表示不限制">192.168.1.0/24
-10.0.0.0/8</textarea>
+                                <textarea class="form-input form-textarea" id="configIpWhitelist" placeholder="每行一个IP地址，留空表示不限制">${config.ipWhitelist}</textarea>
                             </div>
                             <div class="form-group">
                                 <label class="form-label">请求频率限制</label>
-                                <input type="number" class="form-input" value="100">
+                                <input type="number" class="form-input" id="configRateLimit" value="${config.rateLimit}">
                                 <div class="form-hint">每分钟最大请求数</div>
                             </div>
                         </div>
@@ -2405,20 +2410,49 @@
                         <div class="card-body">
                             <div class="form-group">
                                 <label class="form-label">管理员邮箱</label>
-                                <input type="email" class="form-input" value="admin@example.com">
+                                <input type="email" class="form-input" id="configAdminEmail" value="${config.adminEmail}">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">SMTP服务器</label>
-                                <input type="text" class="form-input" value="smtp.example.com">
+                                <input type="text" class="form-input" id="configSmtpHost" value="${config.smtpHost}">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">SMTP端口</label>
-                                <input type="number" class="form-input" value="465">
+                                <input type="number" class="form-input" id="configSmtpPort" value="${config.smtpPort}">
                             </div>
                         </div>
                     </div>
                 </div>
             `;
+        }
+
+        // 保存配置
+        async function saveConfig() {
+            const configData = {
+                siteName: document.getElementById('configSiteName')?.value || '',
+                siteUrl: document.getElementById('configSiteUrl')?.value || '',
+                currency: document.getElementById('configCurrency')?.value || 'CNY',
+                language: document.getElementById('configLanguage')?.value || 'zh-CN',
+                orderTimeout: document.getElementById('configOrderTimeout')?.value || 30,
+                notifyRetryTimes: document.getElementById('configNotifyRetryTimes')?.value || 5,
+                notifyRetryInterval: document.getElementById('configNotifyRetryInterval')?.value || '1,5,30,60,360',
+                ipWhitelist: document.getElementById('configIpWhitelist')?.value || '',
+                rateLimit: document.getElementById('configRateLimit')?.value || 100,
+                adminEmail: document.getElementById('configAdminEmail')?.value || '',
+                smtpHost: document.getElementById('configSmtpHost')?.value || '',
+                smtpPort: document.getElementById('configSmtpPort')?.value || 465
+            };
+
+            try {
+                const result = await api.updateConfig(configData);
+                if (result.success) {
+                    showToast('success', '保存成功', '系统配置已更新');
+                } else {
+                    showToast('error', '保存失败', result.message);
+                }
+            } catch (error) {
+                showToast('error', '保存失败', '网络错误，请重试');
+            }
         }
 
         async function renderLogs() {
@@ -2503,11 +2537,13 @@
                 }
 
                 // 更新趋势数据
-                const trendData = [45000, 52000, 48000, 61000, 58000, 72000, stats.today.amount];
-                if (window.trendChart) {
+                if (stats.trend && window.trendChart) {
                     window.trendChart.setOption({
+                        xAxis: {
+                            data: stats.trend.dates || []
+                        },
                         series: [{
-                            data: trendData
+                            data: stats.trend.amounts || []
                         }]
                     });
                 }
@@ -2539,7 +2575,7 @@
                 },
                 xAxis: {
                     type: 'category',
-                    data: ['6月17日', '6月18日', '6月19日', '6月20日', '6月21日', '6月22日', '6月23日'],
+                    data: [],
                     axisLine: {
                         lineStyle: {
                             color: '#9ca3af'
@@ -2573,7 +2609,7 @@
                         name: '交易金额',
                         type: 'line',
                         smooth: true,
-                        data: [45000, 52000, 48000, 61000, 58000, 72000, 89000],
+                        data: [],
                         itemStyle: {
                             color: '#f59e0b'
                         },
@@ -2639,11 +2675,7 @@
                         labelLine: {
                             show: false
                         },
-                        data: [
-                            { value: 58000, name: '支付宝', itemStyle: { color: '#3b82f6' } },
-                            { value: 35000, name: '微信支付', itemStyle: { color: '#10b981' } },
-                            { value: 12000, name: 'QQ钱包', itemStyle: { color: '#8b5cf6' } }
-                        ]
+                        data: []
                     }
                 ]
             };
@@ -2703,7 +2735,7 @@
                         name: '订单数',
                         type: 'bar',
                         barWidth: '60%',
-                        data: [12, 8, 5, 15, 45, 78, 95, 120, 110, 85, 65, 30],
+                        data: [],
                         itemStyle: {
                             color: {
                                 type: 'linear',
