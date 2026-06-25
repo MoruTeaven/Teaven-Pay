@@ -54,7 +54,7 @@ payRouter.post('/submit', async (c) => {
     try {
         // 查询商户信息
         const user = await env.DB.prepare(
-            'SELECT * FROM users WHERE id = ? AND role = ?'
+            'SELECT id, status, api_key FROM users WHERE id = ? AND role = ?'
         ).bind(pid, 'merchant').first();
         
         if (!user) {
@@ -178,18 +178,19 @@ payRouter.get('/query', async (c) => {
     
     if (!pid) return c.json({ code: -1, msg: '商户ID不能为空' });
     if (!tradeNo && !outTradeNo) return c.json({ code: -1, msg: '订单号不能为空' });
+    if (!sign && !key) return c.json({ code: -1, msg: '缺少验证参数' });
     
     try {
         // 查询商户
         const user = await env.DB.prepare(
-            'SELECT * FROM users WHERE id = ?'
-        ).bind(pid).first();
+            'SELECT id, api_key FROM users WHERE id = ? AND role = ?'
+        ).bind(pid, 'merchant').first();
         
         if (!user) {
             return c.json({ code: -3, msg: '商户不存在' });
         }
         
-        // 验证密钥或签名
+        // 验证签名或密钥
         if (sign) {
             const signParams: Record<string, string> = { pid };
             if (tradeNo) signParams.trade_no = tradeNo;
@@ -203,8 +204,6 @@ payRouter.get('/query', async (c) => {
             if (key !== user.api_key) {
                 return c.json({ code: -3, msg: '密钥错误' });
             }
-        } else {
-            return c.json({ code: -1, msg: '缺少验证参数' });
         }
         
         // 查询订单
@@ -267,7 +266,7 @@ payRouter.get('/orders', async (c) => {
     try {
         // 验证商户
         const user = await env.DB.prepare(
-            'SELECT * FROM users WHERE id = ? AND api_key = ?'
+            'SELECT id FROM users WHERE id = ? AND api_key = ?'
         ).bind(pid, key).first();
         
         if (!user) {
@@ -337,6 +336,7 @@ payRouter.post('/refund', async (c) => {
     if (!pid) return c.json({ code: -1, msg: '商户ID不能为空' });
     if (!tradeNo && !outTradeNo) return c.json({ code: -1, msg: '订单号不能为空' });
     if (!amount) return c.json({ code: -1, msg: '退款金额不能为空' });
+    if (!key && !sign) return c.json({ code: -1, msg: '缺少验证参数' });
     
     const refundAmount = parseFloat(amount);
     if (isNaN(refundAmount) || refundAmount <= 0) {
@@ -346,11 +346,22 @@ payRouter.post('/refund', async (c) => {
     try {
         // 验证商户
         const user = await env.DB.prepare(
-            'SELECT * FROM users WHERE id = ?'
-        ).bind(pid).first();
+            'SELECT id, api_key FROM users WHERE id = ? AND role = ?'
+        ).bind(pid, 'merchant').first();
         
         if (!user) {
             return c.json({ code: -3, msg: '商户不存在' });
+        }
+        
+        // 验证密钥或签名
+        if (sign) {
+            const signParams: Record<string, string> = { pid, money: amount };
+            if (tradeNo) signParams.trade_no = tradeNo;
+            if (outTradeNo) signParams.out_trade_no = outTradeNo;
+            const isValid = verifySign(signParams, user.api_key as string, sign, body.sign_type as string || 'md5');
+            if (!isValid) return c.json({ code: -2, msg: '签名验证失败' });
+        } else if (key) {
+            if (key !== user.api_key) return c.json({ code: -3, msg: '密钥错误' });
         }
         
         // 查询订单
@@ -472,11 +483,34 @@ payRouter.post('/close', async (c) => {
     const pid = body.pid as string;
     const tradeNo = body.trade_no as string;
     const outTradeNo = body.out_trade_no as string;
+    const key = body.key as string;
+    const sign = body.sign as string;
     
     if (!pid) return c.json({ code: -1, msg: '商户ID不能为空' });
     if (!tradeNo && !outTradeNo) return c.json({ code: -1, msg: '订单号不能为空' });
+    if (!key && !sign) return c.json({ code: -1, msg: '缺少验证参数' });
     
     try {
+        // 验证商户
+        const user = await env.DB.prepare(
+            'SELECT id, api_key FROM users WHERE id = ? AND role = ?'
+        ).bind(pid, 'merchant').first();
+        
+        if (!user) {
+            return c.json({ code: -3, msg: '商户不存在' });
+        }
+        
+        // 验证密钥或签名
+        if (sign) {
+            const signParams: Record<string, string> = { pid };
+            if (tradeNo) signParams.trade_no = tradeNo;
+            if (outTradeNo) signParams.out_trade_no = outTradeNo;
+            const isValid = verifySign(signParams, user.api_key as string, sign, body.sign_type as string || 'md5');
+            if (!isValid) return c.json({ code: -2, msg: '签名验证失败' });
+        } else if (key) {
+            if (key !== user.api_key) return c.json({ code: -3, msg: '密钥错误' });
+        }
+        
         // 查询订单
         let order;
         if (tradeNo) {

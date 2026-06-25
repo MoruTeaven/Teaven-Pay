@@ -75,7 +75,7 @@ export async function apiKeyMiddleware(c: Context<{ Bindings: Env }>, next: Next
     try {
         // 查询商户
         const user = await c.env.DB.prepare(
-            'SELECT * FROM users WHERE id = ? AND api_key = ? AND role = ?'
+            'SELECT id, role, status FROM users WHERE id = ? AND api_key = ? AND role = ?'
         ).bind(pid, apiKey, 'merchant').first();
         
         if (!user) {
@@ -96,22 +96,32 @@ export async function apiKeyMiddleware(c: Context<{ Bindings: Env }>, next: Next
 }
 
 /**
- * 验证 JWT
+ * 验证 JWT (HMAC-SHA256)
  */
 async function verifyJWT(token: string, secret: string): Promise<any> {
-    // TODO: 实现 JWT 验证
-    // 这里只是示例，实际应该使用 jose 等库
+    if (!secret) return null;
     try {
         const parts = token.split('.');
         if (parts.length !== 3) return null;
-        
-        const payload = JSON.parse(atob(parts[1]));
-        
-        // 检查过期时间
-        if (payload.exp && payload.exp < Date.now() / 1000) {
-            return null;
-        }
-        
+
+        const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+
+        if (header.alg !== 'HS256') return null;
+
+        const keyData = new TextEncoder().encode(secret);
+        const key = await crypto.subtle.importKey(
+            'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
+        );
+        const signature = Uint8Array.from(atob(parts[2].replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+        const data = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+        const valid = await crypto.subtle.verify('HMAC', key, signature, data);
+        if (!valid) return null;
+
+        const now = Math.floor(Date.now() / 1000);
+        if (payload.exp && payload.exp < now) return null;
+        if (payload.nbf && payload.nbf > now) return null;
+
         return payload;
     } catch {
         return null;

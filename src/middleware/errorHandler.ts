@@ -11,11 +11,12 @@ import { Env } from '../types/env';
 export function errorHandler(error: Error, c: Context<{ Bindings: Env }>) {
     console.error('Unhandled error:', error);
     
+    const isDev = c.env.ENVIRONMENT === 'development';
+    
     return c.json({
         code: -5,
         msg: '系统错误，请稍后再试',
-        error: error.message,
-        stack: error.stack
+        ...(isDev ? { error: error.message, stack: error.stack } : {})
     }, 500);
 }
 

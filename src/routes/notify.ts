@@ -63,7 +63,8 @@ notifyRouter.post('/alipay', async (c) => {
  */
 notifyRouter.post('/wxpay', async (c) => {
     try {
-        const body = await c.req.json();
+        const rawBody = await c.req.text();
+        const body = JSON.parse(rawBody);
         
         // 查询微信支付通道配置
         const channel = await c.env.DB.prepare(
@@ -75,6 +76,15 @@ notifyRouter.post('/wxpay', async (c) => {
         }
         
         const config = JSON.parse((channel as any).config || '{}');
+        
+        // 传递原始 headers 和 body 用于签名验证
+        body._headers = {
+            'wechatpay-signature': c.req.header('Wechatpay-Signature') || '',
+            'wechatpay-timestamp': c.req.header('Wechatpay-Timestamp') || '',
+            'wechatpay-nonce': c.req.header('Wechatpay-Nonce') || '',
+            'wechatpay-serial': c.req.header('Wechatpay-Serial') || '',
+        };
+        body._rawBody = rawBody;
         
         // 获取插件并验证通知
         const plugin = getPlugin('wxpay');
@@ -233,6 +243,12 @@ async function sendMerchantNotification(env: Env, order: any) {
         return;
     }
     
+    // 验证通知 URL 合法性 (防止 SSRF)
+    if (!isValidNotifyUrl(order.notify_url)) {
+        console.error(`Invalid notify_url blocked: ${order.notify_url}`);
+        return;
+    }
+    
     try {
         // 查询商户信息
         const user = await env.DB.prepare(
@@ -302,5 +318,23 @@ async function sendMerchantNotification(env: Env, order: any) {
                 last_notify_at = datetime('now')
             WHERE id = ?
         `).bind(order.id).run();
+    }
+}
+
+/**
+ * 验证通知 URL 合法性 (防止 SSRF)
+ * 只允许 https 协议，禁止内网地址
+ */
+function isValidNotifyUrl(url: string): boolean {
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'https:') return false;
+        const hostname = parsed.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
+        if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|0\.)/.test(hostname)) return false;
+        if (hostname.endsWith('.local') || hostname.endsWith('.internal')) return false;
+        return true;
+    } catch {
+        return false;
     }
 }

@@ -31,14 +31,18 @@ app.use('*', logger());
 app.use('*', secureHeaders());
 
 // CORS 配置
-app.use('*', cors({
-    origin: '*',
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposeHeaders: ['X-Request-Id'],
-    maxAge: 86400,
-    credentials: true,
-}));
+app.use('*', async (c, next) => {
+    const allowedOrigins = (c.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+    const corsMiddleware = cors({
+        origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
+        allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+        exposeHeaders: ['X-Request-Id'],
+        maxAge: 86400,
+        credentials: allowedOrigins.length > 0,
+    });
+    return corsMiddleware(c, next);
+});
 
 // 错误处理
 app.onError(errorHandler);
@@ -50,73 +54,6 @@ app.get('/api/health', (c) => {
         version: '1.0.0',
         timestamp: new Date().toISOString(),
     });
-});
-
-// 管理后台 API (不需要认证，用于管理后台页面)
-app.get('/api/admin/stats', async (c) => {
-    try {
-        const today = new Date().toISOString().split('T')[0];
-        
-        // 今日统计
-        const todayStats = await c.env.DB.prepare(`
-            SELECT 
-                COUNT(*) as total_orders,
-                SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) as success_orders,
-                SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) as total_amount,
-                SUM(CASE WHEN status = 1 THEN profit ELSE 0 END) as total_profit
-            FROM orders 
-            WHERE DATE(created_at) = ?
-        `).bind(today).first();
-        
-        // 商户统计
-        const merchantStats = await c.env.DB.prepare(`
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) as active,
-                SUM(CASE WHEN status = 2 THEN 1 ELSE 0 END) as pending
-            FROM users 
-            WHERE role = 'merchant'
-        `).first();
-        
-        // 总统计
-        const totalStats = await c.env.DB.prepare(`
-            SELECT 
-                COUNT(*) as total_orders,
-                SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) as total_amount
-            FROM orders
-        `).first();
-        
-        return c.json({
-            code: 1,
-            data: {
-                today: {
-                    orders: todayStats?.total_orders || 0,
-                    success_orders: todayStats?.success_orders || 0,
-                    amount: todayStats?.total_amount || 0,
-                    profit: todayStats?.total_profit || 0
-                },
-                merchants: {
-                    total: merchantStats?.total || 0,
-                    active: merchantStats?.active || 0,
-                    pending: merchantStats?.pending || 0
-                },
-                total: {
-                    orders: totalStats?.total_orders || 0,
-                    amount: totalStats?.total_amount || 0
-                }
-            }
-        });
-    } catch (error) {
-        console.error('Get stats error:', error);
-        return c.json({ 
-            code: 1, 
-            data: {
-                today: { orders: 0, success_orders: 0, amount: 0, profit: 0 },
-                merchants: { total: 0, active: 0, pending: 0 },
-                total: { orders: 0, amount: 0 }
-            }
-        });
-    }
 });
 
 // API 路由

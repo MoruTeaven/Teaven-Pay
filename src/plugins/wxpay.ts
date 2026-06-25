@@ -121,21 +121,78 @@ export class WxpayPlugin implements PaymentPlugin {
     }
     
     /**
-     * 验证支付回调
+     * 验证支付回调 (WxPay v3)
      */
     async verifyNotify(payload: any, config: PluginConfig): Promise<NotifyResult> {
         try {
-            // TODO: 实现微信支付回调验证
-            // 需要验证签名和解密资源数据
-            
+            const headers = payload._headers || {};
+            const signature = headers['wechatpay-signature'] || '';
+            const timestamp = headers['wechatpay-timestamp'] || '';
+            const nonce = headers['wechatpay-nonce'] || '';
+            const body = payload._rawBody || '';
+
+            if (!signature || !timestamp || !nonce) {
+                return { success: false, tradeNo: '', outTradeNo: '', status: 'failed' };
+            }
+
+            // 验证签名
+            const message = `${timestamp}\n${nonce}\n${body}\n`;
+            const keyData = new TextEncoder().encode(config.apiKey || '');
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+            );
+            const sig = await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(message));
+            const expectedSig = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+            if (expectedSig !== signature.toLowerCase()) {
+                return { success: false, tradeNo: '', outTradeNo: '', status: 'failed' };
+            }
+
+            // 解密资源数据
+            const resource = payload.resource || {};
+            const ciphertext = resource.ciphertext || '';
+            const nonce2 = resource.nonce || '';
+            const associatedData = resource.associated_data || '';
+
+            if (!ciphertext) {
+                return { success: false, tradeNo: '', outTradeNo: '', status: 'failed' };
+            }
+
+            const keyBytes = new TextEncoder().encode((config.apiKey || '').padEnd(32, '0').slice(0, 32));
+            const aesKey = await crypto.subtle.importKey(
+                'raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']
+            );
+            const ciphertextBytes = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
+            const ivBytes = new TextEncoder().encode(nonce2);
+            const aadBytes = new TextEncoder().encode(associatedData);
+
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: ivBytes, additionalData: aadBytes, tagLength: 128 },
+                aesKey,
+                ciphertextBytes
+            );
+            const decryptedData = JSON.parse(new TextDecoder().decode(decrypted));
+
+            if (decryptedData.trade_state !== 'SUCCESS') {
+                return {
+                    success: true,
+                    tradeNo: decryptedData.out_trade_no || '',
+                    outTradeNo: decryptedData.out_trade_no || '',
+                    thirdPartyTradeNo: decryptedData.transaction_id,
+                    status: 'pending',
+                    buyer: decryptedData.payer?.openid,
+                    response: JSON.stringify({ code: 'SUCCESS', message: 'OK' })
+                };
+            }
+
             return {
                 success: true,
-                tradeNo: payload.out_trade_no || '',
-                outTradeNo: payload.out_trade_no || '',
-                thirdPartyTradeNo: payload.transaction_id,
+                tradeNo: decryptedData.out_trade_no || '',
+                outTradeNo: decryptedData.out_trade_no || '',
+                thirdPartyTradeNo: decryptedData.transaction_id,
                 status: 'success',
-                buyer: payload.payer?.openid,
-                paidAt: payload.success_time,
+                buyer: decryptedData.payer?.openid,
+                paidAt: decryptedData.success_time,
                 response: JSON.stringify({ code: 'SUCCESS', message: 'OK' })
             };
         } catch (error) {
