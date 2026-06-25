@@ -183,8 +183,8 @@ app.get('/admin', async (c) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teaven Pay - 管理后台</title>
-    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/remixicon/4.0.0/remixicon.min.css">
-    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.moruteaven.com/npm/remixicon/4.9.1/remixicon.css">
+    <script src="https://cdn.moruteaven.com/npm/echarts/6.1.0/echarts.min.js"></script>
     <style>
         /* CSS 变量 */
         :root {

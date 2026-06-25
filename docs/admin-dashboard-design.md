@@ -525,8 +525,8 @@ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica N
 - skypack
 
 ### 推荐资源
-- Remix Icon: `https://cdn.bootcdn.net/ajax/libs/remixicon/4.0.0/remixicon.min.css`
-- ECharts: `https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js`
+- Remix Icon: `https://cdn.moruteaven.com/npm/remixicon/4.9.1/remixicon.css`
+- ECharts: `https://cdn.moruteaven.com/npm/echarts/6.1.0/echarts.min.js`
 
 ---
 
