@@ -1540,12 +1540,7 @@ app.get('/admin', async (c) => {
                     throw new Error(data.msg || '获取统计数据失败');
                 } catch (error) {
                     console.error('获取统计数据失败:', error);
-                    // 返回模拟数据作为后备
-                    return {
-                        today: { orders: 1234, success_orders: 1189, amount: 89012.50, profit: 1234.56 },
-                        merchants: { total: 156, active: 142, pending: 12 },
-                        total: { orders: 45678, amount: 3456789.00 }
-                    };
+                    throw error;
                 }
             },
 
@@ -1561,7 +1556,7 @@ app.get('/admin', async (c) => {
                     throw new Error(data.msg || '获取商户列表失败');
                 } catch (error) {
                     console.error('获取商户列表失败:', error);
-                    return { count: 5, data: mockData.merchants };
+                    throw error;
                 }
             },
 
@@ -1619,7 +1614,7 @@ app.get('/admin', async (c) => {
                     throw new Error(data.msg || '获取订单列表失败');
                 } catch (error) {
                     console.error('获取订单列表失败:', error);
-                    return { data: mockData.orders };
+                    throw error;
                 }
             },
 
@@ -1635,7 +1630,7 @@ app.get('/admin', async (c) => {
                     throw new Error(data.msg || '获取结算列表失败');
                 } catch (error) {
                     console.error('获取结算列表失败:', error);
-                    return { data: mockData.settlements };
+                    throw error;
                 }
             },
 
@@ -1695,46 +1690,6 @@ app.get('/admin', async (c) => {
                     return { success: false, message: error.message };
                 }
             }
-        };
-
-        // 模拟数据
-        const mockData = {
-            merchants: [
-                { id: 'm_001', username: '杭州星辰科技', email: 'xingchen@example.com', status: 1, balance: 15680.50, apiKey: 'sk_live_xxxx1234', createdAt: '2024-01-15 10:30:00' },
-                { id: 'm_002', username: '上海云端网络', email: 'yunduan@example.com', status: 1, balance: 8920.75, apiKey: 'sk_live_xxxx5678', createdAt: '2024-02-20 14:15:00' },
-                { id: 'm_003', username: '深圳创新科技', email: 'chuangxin@example.com', status: 2, balance: 0, apiKey: 'sk_live_xxxx9012', createdAt: '2024-03-10 09:45:00' },
-                { id: 'm_004', username: '北京智慧支付', email: 'zhihui@example.com', status: 1, balance: 23450.00, apiKey: 'sk_live_xxxx3456', createdAt: '2024-04-05 16:20:00' },
-                { id: 'm_005', username: '广州数字科技', email: 'shuzi@example.com', status: 0, balance: 1250.30, apiKey: 'sk_live_xxxx7890', createdAt: '2024-05-12 11:10:00' }
-            ],
-            orders: [
-                { tradeNo: '202606221234567890', outTradeNo: 'ORD_20260622_001', merchant: '杭州星辰科技', paymentType: 'alipay', amount: 299.00, status: 1, createdAt: '2026-06-22 14:30:00', paidAt: '2026-06-22 14:31:25' },
-                { tradeNo: '202606221234567891', outTradeNo: 'ORD_20260622_002', merchant: '上海云端网络', paymentType: 'wxpay', amount: 158.50, status: 1, createdAt: '2026-06-22 15:20:00', paidAt: '2026-06-22 15:21:10' },
-                { tradeNo: '202606221234567892', outTradeNo: 'ORD_20260622_003', merchant: '北京智慧支付', paymentType: 'qqpay', amount: 88.00, status: 0, createdAt: '2026-06-22 16:10:00', paidAt: null },
-                { tradeNo: '202606221234567893', outTradeNo: 'ORD_20260622_004', merchant: '杭州星辰科技', paymentType: 'alipay', amount: 999.00, status: 2, createdAt: '2026-06-22 17:05:00', paidAt: '2026-06-22 17:06:30' },
-                { tradeNo: '202606221234567894', outTradeNo: 'ORD_20260622_005', merchant: '深圳创新科技', paymentType: 'wxpay', amount: 456.78, status: 3, createdAt: '2026-06-22 18:30:00', paidAt: null }
-            ],
-            settlements: [
-                { id: 's_001', merchant: '杭州星辰科技', amount: 5000.00, status: 0, bankInfo: '工商银行 ****1234', createdAt: '2026-06-22 10:00:00', processedAt: null },
-                { id: 's_002', merchant: '上海云端网络', amount: 3000.00, status: 2, bankInfo: '建设银行 ****5678', createdAt: '2026-06-21 15:30:00', processedAt: '2026-06-22 09:00:00' },
-                { id: 's_003', merchant: '北京智慧支付', amount: 8000.00, status: 1, bankInfo: '农业银行 ****9012', createdAt: '2026-06-20 11:20:00', processedAt: '2026-06-21 14:30:00' },
-                { id: 's_004', merchant: '广州数字科技', amount: 1500.00, status: 3, bankInfo: '中国银行 ****3456', createdAt: '2026-06-19 16:45:00', processedAt: '2026-06-20 10:15:00' }
-            ],
-            paymentTypes: [
-                { id: 'pt_001', name: 'alipay', displayName: '支付宝', icon: 'ri-alipay-line', status: 1, sortOrder: 1 },
-                { id: 'pt_002', name: 'wxpay', displayName: '微信支付', icon: 'ri-wechat-pay-line', status: 1, sortOrder: 2 },
-                { id: 'pt_003', name: 'qqpay', displayName: 'QQ钱包', icon: 'ri-qq-line', status: 1, sortOrder: 3 }
-            ],
-            channels: [
-                { id: 'ch_001', name: '支付宝官方通道', paymentType: 'alipay', plugin: 'alipay_official', feeRate: 0.006, minAmount: 0.01, maxAmount: 50000, status: 1 },
-                { id: 'ch_002', name: '微信支付官方通道', paymentType: 'wxpay', plugin: 'wxpay_official', feeRate: 0.006, minAmount: 0.01, maxAmount: 50000, status: 1 },
-                { id: 'ch_003', name: 'QQ钱包官方通道', paymentType: 'qqpay', plugin: 'qqpay_official', feeRate: 0.006, minAmount: 0.01, maxAmount: 50000, status: 1 }
-            ],
-            logs: [
-                { id: 1, user: '管理员', action: '登录系统', detail: 'IP: 192.168.1.100', ip: '192.168.1.100', createdAt: '2026-06-23 09:00:00' },
-                { id: 2, user: '管理员', action: '创建商户', detail: '商户ID: m_006, 用户名: 成都科技', ip: '192.168.1.100', createdAt: '2026-06-23 09:15:00' },
-                { id: 3, user: '管理员', action: '审批结算', detail: '结算ID: s_002, 金额: 3000.00', ip: '192.168.1.100', createdAt: '2026-06-23 09:30:00' },
-                { id: 4, user: '管理员', action: '更新配置', detail: '系统名称更新', ip: '192.168.1.100', createdAt: '2026-06-23 10:00:00' }
-            ]
         };
 
         // 工具函数
