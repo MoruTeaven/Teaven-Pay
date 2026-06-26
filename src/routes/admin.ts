@@ -654,6 +654,89 @@ adminRouter.get('/payment-types', async (c) => {
 });
 
 /**
+ * 更新支付方式
+ * PUT /api/admin/payment-types/:id
+ */
+adminRouter.put('/payment-types/:id', async (c) => {
+    try {
+        const id = c.req.param('id');
+        const body = await c.req.json();
+        const { displayName, icon, description, sortOrder, status, config } = body;
+
+        const existing = await c.env.DB.prepare(
+            'SELECT id FROM payment_types WHERE id = ?'
+        ).bind(id).first();
+
+        if (!existing) {
+            return c.json({ code: -1, msg: '支付方式不存在' });
+        }
+
+        const now = new Date().toISOString();
+
+        await c.env.DB.prepare(`
+            UPDATE payment_types SET
+                display_name = COALESCE(?, display_name),
+                icon = ?,
+                description = ?,
+                sort_order = COALESCE(?, sort_order),
+                status = COALESCE(?, status),
+                config = ?,
+                updated_at = ?
+            WHERE id = ?
+        `).bind(
+            displayName || null,
+            icon !== undefined ? icon : undefined,
+            description !== undefined ? description : undefined,
+            sortOrder !== undefined ? sortOrder : null,
+            status !== undefined ? status : null,
+            config !== undefined ? (typeof config === 'string' ? config : JSON.stringify(config)) : undefined,
+            now,
+            id
+        ).run();
+
+        return c.json({ code: 1, msg: '支付方式更新成功' });
+    } catch (error) {
+        console.error('Update payment type error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 切换支付方式状态
+ * PATCH /api/admin/payment-types/:id/status
+ */
+adminRouter.patch('/payment-types/:id/status', async (c) => {
+    try {
+        const id = c.req.param('id');
+        const body = await c.req.json();
+        const { status } = body;
+
+        if (status !== 0 && status !== 1) {
+            return c.json({ code: -1, msg: '状态值无效' });
+        }
+
+        const existing = await c.env.DB.prepare(
+            'SELECT id FROM payment_types WHERE id = ?'
+        ).bind(id).first();
+
+        if (!existing) {
+            return c.json({ code: -1, msg: '支付方式不存在' });
+        }
+
+        const now = new Date().toISOString();
+
+        await c.env.DB.prepare(
+            'UPDATE payment_types SET status = ?, updated_at = ? WHERE id = ?'
+        ).bind(status, now, id).run();
+
+        return c.json({ code: 1, msg: status === 1 ? '支付方式已启用' : '支付方式已禁用' });
+    } catch (error) {
+        console.error('Toggle payment type status error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
  * 支付通道列表
  * GET /api/admin/channels
  */

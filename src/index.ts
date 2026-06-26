@@ -1853,6 +1853,44 @@ app.get('/admin', async (c) => {
                 }
             },
 
+            // 更新支付方式
+            async updatePaymentType(id, paymentTypeData) {
+                try {
+                    const response = await this.request('/api/admin/payment-types/' + id, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(paymentTypeData)
+                    });
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { success: true };
+                    }
+                    throw new Error(data.msg || '更新支付方式失败');
+                } catch (error) {
+                    console.error('更新支付方式失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
+            // 切换支付方式状态
+            async togglePaymentTypeStatus(id, status) {
+                try {
+                    const response = await this.request('/api/admin/payment-types/' + id + '/status', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status })
+                    });
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { success: true };
+                    }
+                    throw new Error(data.msg || '切换状态失败');
+                } catch (error) {
+                    console.error('切换状态失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
             // 获取支付通道列表
             async getChannels() {
                 try {
@@ -2710,7 +2748,12 @@ app.get('/admin', async (c) => {
                         '<td><i class="' + (item.icon || 'ri-bank-card-line') + '" style="font-size: 24px;"></i></td>' +
                         '<td>' + (item.status === 1 ? '<span class="badge success">启用</span>' : '<span class="badge error">禁用</span>') + '</td>' +
                         '<td>' + (item.sortOrder || 0) + '</td>' +
-                        '<td><button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'支付方式编辑功能开发中\\')"><i class="ri-edit-line"></i></button></td>' +
+                        '<td>' +
+                        '    <button class="btn btn-sm btn-secondary" onclick="editPaymentType(\'' + item.id + '\')" title="编辑"><i class="ri-edit-line"></i></button>' +
+                        '    <button class="btn btn-sm ' + (item.status === 1 ? 'btn-warning' : 'btn-success') + '" onclick="togglePaymentTypeStatus(\'' + item.id + '\', ' + (item.status === 1 ? 0 : 1) + ')" title="' + (item.status === 1 ? '禁用' : '启用') + '">' +
+                        '        <i class="' + (item.status === 1 ? 'ri-pause-circle-line' : 'ri-play-circle-line') + '"></i>' +
+                        '    </button>' +
+                        '</td>' +
                         '</tr>';
                 });
                 tbody.innerHTML = html;
@@ -3524,6 +3567,63 @@ app.get('/admin', async (c) => {
                 setTimeout(function() {
                     document.getElementById('modalOverlay').classList.add('active');
                 }, 10);
+            } else if (type === 'editPaymentType') {
+                var paymentTypeData = data || {};
+
+                var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
+                    '<div class="modal" style="max-width: 500px;">' +
+                    '    <div class="modal-header">' +
+                    '        <span class="modal-title">编辑支付方式</span>' +
+                    '        <button class="modal-close" onclick="closeModal()">' +
+                    '            <i class="ri-close-line"></i>' +
+                    '        </button>' +
+                    '    </div>' +
+                    '    <div class="modal-body">' +
+                    '        <input type="hidden" id="paymentTypeId" value="' + (paymentTypeData.id || '') + '">' +
+                    '        <div class="form-group">' +
+                    '            <label class="form-label">标识</label>' +
+                    '            <input type="text" class="form-input" value="' + (paymentTypeData.name || '') + '" disabled style="background: var(--bg-tertiary); color: var(--text-tertiary);">' +
+                    '            <div class="form-hint">标识不可修改</div>' +
+                    '        </div>' +
+                    '        <div class="form-group">' +
+                    '            <label class="form-label">显示名称 <span style="color: var(--error);">*</span></label>' +
+                    '            <input type="text" class="form-input" id="paymentTypeDisplayName" value="' + (paymentTypeData.displayName || '') + '" placeholder="请输入显示名称">' +
+                    '        </div>' +
+                    '        <div class="form-group">' +
+                    '            <label class="form-label">图标</label>' +
+                    '            <input type="text" class="form-input" id="paymentTypeIcon" value="' + (paymentTypeData.icon || '') + '" placeholder="图标 class 或 URL">' +
+                    '            <div class="form-hint">支持 Remix Icon class 或图片 URL</div>' +
+                    '        </div>' +
+                    '        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">排序</label>' +
+                    '                <input type="number" class="form-input" id="paymentTypeSortOrder" value="' + (paymentTypeData.sortOrder || 0) + '" min="0" placeholder="0">' +
+                    '                <div class="form-hint">数值越小越靠前</div>' +
+                    '            </div>' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">状态</label>' +
+                    '                <select class="form-input form-select" id="paymentTypeStatus">' +
+                    '                    <option value="1" ' + (paymentTypeData.status === 1 ? 'selected' : '') + '>启用</option>' +
+                    '                    <option value="0" ' + (paymentTypeData.status === 0 ? 'selected' : '') + '>禁用</option>' +
+                    '                </select>' +
+                    '            </div>' +
+                    '        </div>' +
+                    '        <div class="form-group">' +
+                    '            <label class="form-label">描述</label>' +
+                    '            <textarea class="form-input" id="paymentTypeDescription" rows="3" placeholder="支付方式描述信息">' + (paymentTypeData.description || '') + '</textarea>' +
+                    '        </div>' +
+                    '    </div>' +
+                    '    <div class="modal-footer">' +
+                    '        <button class="btn btn-secondary" onclick="closeModal()">取消</button>' +
+                    '        <button class="btn btn-primary" onclick="submitPaymentType()">保存</button>' +
+                    '    </div>' +
+                    '</div>' +
+                    '</div>';
+
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                setTimeout(function() {
+                    document.getElementById('modalOverlay').classList.add('active');
+                }, 10);
             }
         }
 
@@ -3647,6 +3747,78 @@ app.get('/admin', async (c) => {
                 }
             } catch (error) {
                 showToast('error', id ? '更新失败' : '创建失败', '网络错误，请重试');
+            }
+        }
+
+        // 提交支付方式表单
+        async function submitPaymentType() {
+            var id = document.getElementById('paymentTypeId').value;
+            var displayName = document.getElementById('paymentTypeDisplayName').value;
+            var icon = document.getElementById('paymentTypeIcon').value;
+            var sortOrder = parseInt(document.getElementById('paymentTypeSortOrder').value) || 0;
+            var status = parseInt(document.getElementById('paymentTypeStatus').value);
+            var description = document.getElementById('paymentTypeDescription').value;
+
+            if (!displayName) {
+                showToast('error', '验证失败', '显示名称不能为空');
+                return;
+            }
+
+            var paymentTypeData = {
+                displayName: displayName,
+                icon: icon || null,
+                sortOrder: sortOrder,
+                status: status,
+                description: description || null
+            };
+
+            try {
+                var result = await api.updatePaymentType(id, paymentTypeData);
+                if (result.success) {
+                    showToast('success', '更新成功', '支付方式已更新');
+                    closeModal();
+                    if (state.currentPage === 'paymentTypes') {
+                        loadPaymentTypesData();
+                    }
+                } else {
+                    showToast('error', '更新失败', result.message);
+                }
+            } catch (error) {
+                showToast('error', '更新失败', '网络错误，请重试');
+            }
+        }
+
+        // 编辑支付方式
+        async function editPaymentType(id) {
+            try {
+                var result = await api.getPaymentTypes();
+                var paymentTypes = result.data || [];
+                var paymentType = paymentTypes.find(function(pt) { return pt.id === id; });
+                
+                if (!paymentType) {
+                    showToast('error', '错误', '支付方式不存在');
+                    return;
+                }
+                
+                showModal('editPaymentType', paymentType);
+            } catch (error) {
+                showToast('error', '加载失败', '无法获取支付方式数据');
+            }
+        }
+
+        // 切换支付方式状态
+        async function togglePaymentTypeStatus(id, status) {
+            try {
+                var result = await api.togglePaymentTypeStatus(id, status);
+                if (result.success) {
+                    showToast('success', '状态更新', '支付方式已' + (status === 1 ? '启用' : '禁用'));
+                } else {
+                    showToast('error', '更新失败', result.message);
+                    loadPaymentTypesData();
+                }
+            } catch (error) {
+                showToast('error', '更新失败', '网络错误，请重试');
+                loadPaymentTypesData();
             }
         }
 
