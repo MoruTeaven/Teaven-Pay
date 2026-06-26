@@ -694,6 +694,205 @@ adminRouter.get('/channels', async (c) => {
 });
 
 /**
+ * 创建通道
+ * POST /api/admin/channels
+ */
+adminRouter.post('/channels', async (c) => {
+    try {
+        const body = await c.req.json();
+        const { paymentTypeId, name, plugin, config, feeRate, minAmount, maxAmount, dailyLimit, timeStart, timeStop, sortOrder, status, description } = body;
+
+        if (!paymentTypeId || !name || !plugin) {
+            return c.json({ code: -1, msg: '支付方式、通道名称和插件标识不能为空' });
+        }
+
+        const paymentType = await c.env.DB.prepare(
+            'SELECT id FROM payment_types WHERE id = ?'
+        ).bind(paymentTypeId).first();
+
+        if (!paymentType) {
+            return c.json({ code: -1, msg: '支付方式不存在' });
+        }
+
+        const id = generateUUIDv7();
+        const now = new Date().toISOString();
+
+        await c.env.DB.prepare(`
+            INSERT INTO channels (id, payment_type_id, name, plugin, config, fee_rate, min_amount, max_amount, daily_limit, time_start, time_stop, sort_order, status, description, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+            id,
+            paymentTypeId,
+            name,
+            plugin,
+            config ? JSON.stringify(config) : null,
+            feeRate || 0,
+            minAmount || 0,
+            maxAmount || 0,
+            dailyLimit || 0,
+            timeStart || null,
+            timeStop || null,
+            sortOrder || 0,
+            status !== undefined ? status : 1,
+            description || null,
+            now,
+            now
+        ).run();
+
+        return c.json({
+            code: 1,
+            msg: '通道创建成功',
+            data: { id }
+        });
+    } catch (error) {
+        console.error('Create channel error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 更新通道
+ * PUT /api/admin/channels/:id
+ */
+adminRouter.put('/channels/:id', async (c) => {
+    try {
+        const id = c.req.param('id');
+        const body = await c.req.json();
+        const { paymentTypeId, name, plugin, config, feeRate, minAmount, maxAmount, dailyLimit, timeStart, timeStop, sortOrder, status, description } = body;
+
+        const existing = await c.env.DB.prepare(
+            'SELECT id FROM channels WHERE id = ?'
+        ).bind(id).first();
+
+        if (!existing) {
+            return c.json({ code: -1, msg: '通道不存在' });
+        }
+
+        if (paymentTypeId) {
+            const paymentType = await c.env.DB.prepare(
+                'SELECT id FROM payment_types WHERE id = ?'
+            ).bind(paymentTypeId).first();
+
+            if (!paymentType) {
+                return c.json({ code: -1, msg: '支付方式不存在' });
+            }
+        }
+
+        const now = new Date().toISOString();
+
+        await c.env.DB.prepare(`
+            UPDATE channels SET
+                payment_type_id = COALESCE(?, payment_type_id),
+                name = COALESCE(?, name),
+                plugin = COALESCE(?, plugin),
+                config = ?,
+                fee_rate = COALESCE(?, fee_rate),
+                min_amount = COALESCE(?, min_amount),
+                max_amount = COALESCE(?, max_amount),
+                daily_limit = COALESCE(?, daily_limit),
+                time_start = ?,
+                time_stop = ?,
+                sort_order = COALESCE(?, sort_order),
+                status = COALESCE(?, status),
+                description = ?,
+                updated_at = ?
+            WHERE id = ?
+        `).bind(
+            paymentTypeId || null,
+            name || null,
+            plugin || null,
+            config !== undefined ? JSON.stringify(config) : undefined,
+            feeRate !== undefined ? feeRate : null,
+            minAmount !== undefined ? minAmount : null,
+            maxAmount !== undefined ? maxAmount : null,
+            dailyLimit !== undefined ? dailyLimit : null,
+            timeStart !== undefined ? timeStart : undefined,
+            timeStop !== undefined ? timeStop : undefined,
+            sortOrder !== undefined ? sortOrder : null,
+            status !== undefined ? status : null,
+            description !== undefined ? description : undefined,
+            now,
+            id
+        ).run();
+
+        return c.json({ code: 1, msg: '通道更新成功' });
+    } catch (error) {
+        console.error('Update channel error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 删除通道
+ * DELETE /api/admin/channels/:id
+ */
+adminRouter.delete('/channels/:id', async (c) => {
+    try {
+        const id = c.req.param('id');
+
+        const existing = await c.env.DB.prepare(
+            'SELECT id FROM channels WHERE id = ?'
+        ).bind(id).first();
+
+        if (!existing) {
+            return c.json({ code: -1, msg: '通道不存在' });
+        }
+
+        const orderCount = await c.env.DB.prepare(
+            'SELECT COUNT(*) as count FROM orders WHERE channel_id = ?'
+        ).bind(id).first();
+
+        if ((orderCount as any)?.count > 0) {
+            return c.json({ code: -1, msg: '该通道存在关联订单，无法删除' });
+        }
+
+        await c.env.DB.prepare(
+            'DELETE FROM channels WHERE id = ?'
+        ).bind(id).run();
+
+        return c.json({ code: 1, msg: '通道删除成功' });
+    } catch (error) {
+        console.error('Delete channel error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 切换通道状态
+ * PATCH /api/admin/channels/:id/status
+ */
+adminRouter.patch('/channels/:id/status', async (c) => {
+    try {
+        const id = c.req.param('id');
+        const body = await c.req.json();
+        const { status } = body;
+
+        if (status !== 0 && status !== 1) {
+            return c.json({ code: -1, msg: '状态值无效' });
+        }
+
+        const existing = await c.env.DB.prepare(
+            'SELECT id FROM channels WHERE id = ?'
+        ).bind(id).first();
+
+        if (!existing) {
+            return c.json({ code: -1, msg: '通道不存在' });
+        }
+
+        const now = new Date().toISOString();
+
+        await c.env.DB.prepare(
+            'UPDATE channels SET status = ?, updated_at = ? WHERE id = ?'
+        ).bind(status, now, id).run();
+
+        return c.json({ code: 1, msg: status === 1 ? '通道已启用' : '通道已禁用' });
+    } catch (error) {
+        console.error('Toggle channel status error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
  * 操作日志列表
  * GET /api/admin/logs
  */

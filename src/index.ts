@@ -845,6 +845,57 @@ app.get('/admin', async (c) => {
             padding: 8px;
         }
 
+        /* 开关 */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-tertiary);
+            border-radius: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-slider:before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: var(--primary-500);
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .toggle-switch input:focus + .toggle-slider {
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+        }
+
         /* 表单 */
         .form-group {
             margin-bottom: 16px;
@@ -1817,6 +1868,80 @@ app.get('/admin', async (c) => {
                 }
             },
 
+            // 创建通道
+            async createChannel(channelData) {
+                try {
+                    const response = await this.request('/api/admin/channels', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(channelData)
+                    });
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { success: true, data: data.data };
+                    }
+                    throw new Error(data.msg || '创建通道失败');
+                } catch (error) {
+                    console.error('创建通道失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
+            // 更新通道
+            async updateChannel(id, channelData) {
+                try {
+                    const response = await this.request('/api/admin/channels/' + id, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(channelData)
+                    });
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { success: true };
+                    }
+                    throw new Error(data.msg || '更新通道失败');
+                } catch (error) {
+                    console.error('更新通道失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
+            // 删除通道
+            async deleteChannel(id) {
+                try {
+                    const response = await this.request('/api/admin/channels/' + id, {
+                        method: 'DELETE'
+                    });
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { success: true };
+                    }
+                    throw new Error(data.msg || '删除通道失败');
+                } catch (error) {
+                    console.error('删除通道失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
+            // 切换通道状态
+            async toggleChannelStatus(id, status) {
+                try {
+                    const response = await this.request('/api/admin/channels/' + id + '/status', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status })
+                    });
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { success: true };
+                    }
+                    throw new Error(data.msg || '切换状态失败');
+                } catch (error) {
+                    console.error('切换状态失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
             // 获取操作日志列表
             async getLogs(params = {}) {
                 try {
@@ -2600,7 +2725,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">支付通道</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-primary" onclick="showToast(\\'info\\', \\'添加通道\\', \\'添加通道功能开发中\\')">' +
+                '        <button class="btn btn-primary" onclick="showModal(\\'createChannel\\')">' +
                 '            <i class="ri-add-line"></i>' +
                 '            添加通道' +
                 '        </button>' +
@@ -2612,7 +2737,6 @@ app.get('/admin', async (c) => {
                 '            <table class="data-table">' +
                 '                <thead>' +
                 '                    <tr>' +
-                '                        <th>通道ID</th>' +
                 '                        <th>通道名称</th>' +
                 '                        <th>支付方式</th>' +
                 '                        <th>插件</th>' +
@@ -2623,7 +2747,7 @@ app.get('/admin', async (c) => {
                 '                    </tr>' +
                 '                </thead>' +
                 '                <tbody id="channelsTableBody">' +
-                '                    <tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-tertiary);">加载中...</td></tr>' +
+                '                    <tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-tertiary);">加载中...</td></tr>' +
                 '                </tbody>' +
                 '            </table>' +
                 '        </div>' +
@@ -2644,7 +2768,7 @@ app.get('/admin', async (c) => {
 
                 var list = result.data || [];
                 if (list.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-tertiary);">暂无支付通道数据</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-tertiary);">暂无支付通道数据</td></tr>';
                     if (countEl) countEl.textContent = '共 0 条记录';
                     return;
                 }
@@ -2654,17 +2778,22 @@ app.get('/admin', async (c) => {
                     var minStr = channel.minAmount ? formatMoney(channel.minAmount) : '不限';
                     var maxStr = channel.maxAmount ? formatMoney(channel.maxAmount) : '不限';
                     html += '<tr>' +
-                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + (channel.id || '') + '</code></td>' +
                         '<td>' + (channel.name || '') + '</td>' +
                         '<td><i class="' + getPaymentTypeIcon(channel.paymentType) + '" style="margin-right: 4px;"></i>' + (channel.paymentTypeDisplay || getPaymentTypeName(channel.paymentType)) + '</td>' +
                         '<td>' + (channel.plugin || '') + '</td>' +
                         '<td>' + ((channel.feeRate || 0) * 100).toFixed(2) + '%</td>' +
                         '<td>' + minStr + ' - ' + maxStr + '</td>' +
-                        '<td>' + (channel.status === 1 ? '<span class="badge success">启用</span>' : '<span class="badge error">禁用</span>') + '</td>' +
+                        '<td>' +
+                        '    <label class="toggle-switch" style="display: inline-flex;">' +
+                        '        <input type="checkbox" ' + (channel.status === 1 ? 'checked' : '') + ' onchange="toggleChannelStatus(\\'' + channel.id + '\\', this.checked ? 1 : 0)">' +
+                        '        <span class="toggle-slider"></span>' +
+                        '    </label>' +
+                        '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'通道编辑功能开发中\\')"><i class="ri-edit-line"></i></button>' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'配置\\', \\'通道配置功能开发中\\')"><i class="ri-settings-3-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="editChannel(\\'' + channel.id + '\\')" title="编辑"><i class="ri-edit-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showChannelConfig(\\'' + channel.id + '\\')" title="配置"><i class="ri-settings-3-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-danger" onclick="deleteChannel(\\'' + channel.id + '\\', \\'' + (channel.name || '') + '\\')" title="删除"><i class="ri-delete-bin-line"></i></button>' +
                         '    </div>' +
                         '</td>' +
                         '</tr>';
@@ -3239,7 +3368,7 @@ app.get('/admin', async (c) => {
         }
 
         // 显示模态框
-        function showModal(type) {
+        async function showModal(type, data) {
             if (type === 'createMerchant') {
                 var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
                     '<div class="modal">' +
@@ -3272,6 +3401,121 @@ app.get('/admin', async (c) => {
                     '    <div class="modal-footer">' +
                     '        <button class="btn btn-secondary" onclick="closeModal()">取消</button>' +
                     '        <button class="btn btn-primary" onclick="submitMerchant()">创建</button>' +
+                    '    </div>' +
+                    '</div>' +
+                    '</div>';
+
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                setTimeout(function() {
+                    document.getElementById('modalOverlay').classList.add('active');
+                }, 10);
+            } else if (type === 'createChannel' || type === 'editChannel') {
+                var isEdit = type === 'editChannel';
+                var channelData = data || {};
+                
+                // 获取支付方式列表
+                var paymentTypes = [];
+                try {
+                    var ptResult = await api.getPaymentTypes();
+                    paymentTypes = ptResult.data || [];
+                } catch (e) {
+                    console.error('获取支付方式失败:', e);
+                }
+                
+                var pluginOptions = [
+                    { value: 'alipay', label: '支付宝' },
+                    { value: 'wxpay', label: '微信支付' },
+                    { value: 'qqpay', label: 'QQ钱包' }
+                ];
+                
+                var paymentTypeOptions = paymentTypes.map(function(pt) {
+                    return '<option value="' + pt.id + '" ' + (channelData.paymentTypeId === pt.id ? 'selected' : '') + '>' + (pt.displayName || pt.name) + '</option>';
+                }).join('');
+                
+                var pluginSelectOptions = pluginOptions.map(function(p) {
+                    return '<option value="' + p.value + '" ' + (channelData.plugin === p.value ? 'selected' : '') + '>' + p.label + '</option>';
+                }).join('');
+                
+                var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
+                    '<div class="modal" style="max-width: 600px;">' +
+                    '    <div class="modal-header">' +
+                    '        <span class="modal-title">' + (isEdit ? '编辑通道' : '添加通道') + '</span>' +
+                    '        <button class="modal-close" onclick="closeModal()">' +
+                    '            <i class="ri-close-line"></i>' +
+                    '        </button>' +
+                    '    </div>' +
+                    '    <div class="modal-body">' +
+                    '        <input type="hidden" id="channelId" value="' + (channelData.id || '') + '">' +
+                    '        <div class="form-group">' +
+                    '            <label class="form-label">通道名称 <span style="color: var(--error);">*</span></label>' +
+                    '            <input type="text" class="form-input" id="channelName" value="' + (channelData.name || '') + '" placeholder="请输入通道名称">' +
+                    '        </div>' +
+                    '        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">支付方式 <span style="color: var(--error);">*</span></label>' +
+                    '                <select class="form-input form-select" id="channelPaymentTypeId">' +
+                    '                    <option value="">请选择支付方式</option>' +
+                    paymentTypeOptions +
+                    '                </select>' +
+                    '            </div>' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">插件 <span style="color: var(--error);">*</span></label>' +
+                    '                <select class="form-input form-select" id="channelPlugin">' +
+                    '                    <option value="">请选择插件</option>' +
+                    pluginSelectOptions +
+                    '                </select>' +
+                    '            </div>' +
+                    '        </div>' +
+                    '        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">费率 (%)</label>' +
+                    '                <input type="number" class="form-input" id="channelFeeRate" value="' + ((channelData.feeRate || 0) * 100) + '" step="0.01" min="0" max="100" placeholder="0">' +
+                    '            </div>' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">最小金额</label>' +
+                    '                <input type="number" class="form-input" id="channelMinAmount" value="' + (channelData.minAmount || '') + '" step="0.01" min="0" placeholder="不限">' +
+                    '            </div>' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">最大金额</label>' +
+                    '                <input type="number" class="form-input" id="channelMaxAmount" value="' + (channelData.maxAmount || '') + '" step="0.01" min="0" placeholder="不限">' +
+                    '            </div>' +
+                    '        </div>' +
+                    '        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">每日限额</label>' +
+                    '                <input type="number" class="form-input" id="channelDailyLimit" value="' + (channelData.dailyLimit || '') + '" step="0.01" min="0" placeholder="不限">' +
+                    '            </div>' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">开始时间</label>' +
+                    '                <input type="number" class="form-input" id="channelTimeStart" value="' + (channelData.timeStart || '') + '" min="0" max="23" placeholder="0-23">' +
+                    '            </div>' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">结束时间</label>' +
+                    '                <input type="number" class="form-input" id="channelTimeStop" value="' + (channelData.timeStop || '') + '" min="0" max="23" placeholder="0-23">' +
+                    '            </div>' +
+                    '        </div>' +
+                    '        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">排序</label>' +
+                    '                <input type="number" class="form-input" id="channelSortOrder" value="' + (channelData.sortOrder || 0) + '" min="0" placeholder="0">' +
+                    '                <div class="form-hint">数值越小越靠前</div>' +
+                    '            </div>' +
+                    '            <div class="form-group">' +
+                    '                <label class="form-label">状态</label>' +
+                    '                <select class="form-input form-select" id="channelStatus">' +
+                    '                    <option value="1" ' + (channelData.status === 1 || !isEdit ? 'selected' : '') + '>启用</option>' +
+                    '                    <option value="0" ' + (channelData.status === 0 ? 'selected' : '') + '>禁用</option>' +
+                    '                </select>' +
+                    '            </div>' +
+                    '        </div>' +
+                    '        <div class="form-group">' +
+                    '            <label class="form-label">描述</label>' +
+                    '            <textarea class="form-input" id="channelDescription" rows="3" placeholder="通道描述信息">' + (channelData.description || '') + '</textarea>' +
+                    '        </div>' +
+                    '    </div>' +
+                    '    <div class="modal-footer">' +
+                    '        <button class="btn btn-secondary" onclick="closeModal()">取消</button>' +
+                    '        <button class="btn btn-primary" onclick="submitChannel()">' + (isEdit ? '保存' : '创建') + '</button>' +
                     '    </div>' +
                     '</div>' +
                     '</div>';
@@ -3337,6 +3581,277 @@ app.get('/admin', async (c) => {
                 }
             } catch (error) {
                 showToast('error', '创建失败', '网络错误，请重试');
+            }
+        }
+
+        // 提交通道表单
+        async function submitChannel() {
+            var id = document.getElementById('channelId').value;
+            var name = document.getElementById('channelName').value;
+            var paymentTypeId = document.getElementById('channelPaymentTypeId').value;
+            var plugin = document.getElementById('channelPlugin').value;
+            var feeRate = parseFloat(document.getElementById('channelFeeRate').value) || 0;
+            var minAmount = parseFloat(document.getElementById('channelMinAmount').value) || 0;
+            var maxAmount = parseFloat(document.getElementById('channelMaxAmount').value) || 0;
+            var dailyLimit = parseFloat(document.getElementById('channelDailyLimit').value) || 0;
+            var timeStart = document.getElementById('channelTimeStart').value;
+            var timeStop = document.getElementById('channelTimeStop').value;
+            var sortOrder = parseInt(document.getElementById('channelSortOrder').value) || 0;
+            var status = parseInt(document.getElementById('channelStatus').value);
+            var description = document.getElementById('channelDescription').value;
+
+            if (!name) {
+                showToast('error', '验证失败', '通道名称不能为空');
+                return;
+            }
+            if (!paymentTypeId) {
+                showToast('error', '验证失败', '请选择支付方式');
+                return;
+            }
+            if (!plugin) {
+                showToast('error', '验证失败', '请选择插件');
+                return;
+            }
+
+            var channelData = {
+                name: name,
+                paymentTypeId: paymentTypeId,
+                plugin: plugin,
+                feeRate: feeRate / 100,
+                minAmount: minAmount,
+                maxAmount: maxAmount,
+                dailyLimit: dailyLimit,
+                timeStart: timeStart !== '' ? parseInt(timeStart) : null,
+                timeStop: timeStop !== '' ? parseInt(timeStop) : null,
+                sortOrder: sortOrder,
+                status: status,
+                description: description || null
+            };
+
+            try {
+                var result;
+                if (id) {
+                    result = await api.updateChannel(id, channelData);
+                } else {
+                    result = await api.createChannel(channelData);
+                }
+
+                if (result.success) {
+                    showToast('success', id ? '更新成功' : '创建成功', '通道 ' + name + ' 已' + (id ? '更新' : '创建'));
+                    closeModal();
+                    if (state.currentPage === 'channels') {
+                        loadChannelsData();
+                    }
+                } else {
+                    showToast('error', id ? '更新失败' : '创建失败', result.message);
+                }
+            } catch (error) {
+                showToast('error', id ? '更新失败' : '创建失败', '网络错误，请重试');
+            }
+        }
+
+        // 编辑通道
+        async function editChannel(id) {
+            try {
+                var result = await api.getChannels();
+                var channels = result.data || [];
+                var channel = channels.find(function(c) { return c.id === id; });
+                
+                if (!channel) {
+                    showToast('error', '错误', '通道不存在');
+                    return;
+                }
+                
+                showModal('editChannel', channel);
+            } catch (error) {
+                showToast('error', '加载失败', '无法获取通道数据');
+            }
+        }
+
+        // 删除通道
+        async function deleteChannel(id, name) {
+            showConfirm('删除确认', '确定要删除通道 "' + name + '" 吗？此操作不可撤销。', async function(confirmed) {
+                if (!confirmed) return;
+                
+                try {
+                    var result = await api.deleteChannel(id);
+                    if (result.success) {
+                        showToast('success', '删除成功', '通道已删除');
+                        loadChannelsData();
+                    } else {
+                        showToast('error', '删除失败', result.message);
+                    }
+                } catch (error) {
+                    showToast('error', '删除失败', '网络错误，请重试');
+                }
+            });
+        }
+
+        // 切换通道状态
+        async function toggleChannelStatus(id, status) {
+            try {
+                var result = await api.toggleChannelStatus(id, status);
+                if (result.success) {
+                    showToast('success', '状态更新', '通道已' + (status === 1 ? '启用' : '禁用'));
+                } else {
+                    showToast('error', '更新失败', result.message);
+                    loadChannelsData();
+                }
+            } catch (error) {
+                showToast('error', '更新失败', '网络错误，请重试');
+                loadChannelsData();
+            }
+        }
+
+        // 显示通道配置
+        async function showChannelConfig(id) {
+            try {
+                var result = await api.getChannels();
+                var channels = result.data || [];
+                var channel = channels.find(function(c) { return c.id === id; });
+                
+                if (!channel) {
+                    showToast('error', '错误', '通道不存在');
+                    return;
+                }
+                
+                var config = {};
+                try {
+                    config = channel.config ? JSON.parse(channel.config) : {};
+                } catch (e) {
+                    config = {};
+                }
+                
+                var configFields = '';
+                if (channel.plugin === 'alipay') {
+                    configFields =
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">应用 ID (app_id)</label>' +
+                        '            <input type="text" class="form-input" id="config_appId" value="' + (config.appId || '') + '" placeholder="支付宝应用ID">' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">应用私钥</label>' +
+                        '            <textarea class="form-input" id="config_appSecret" rows="4" placeholder="应用私钥">' + (config.appSecret || '') + '</textarea>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">支付宝公钥</label>' +
+                        '            <textarea class="form-input" id="config_alipayPublicKey" rows="4" placeholder="支付宝公钥">' + (config.alipayPublicKey || '') + '</textarea>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">签名类型</label>' +
+                        '            <select class="form-input form-select" id="config_signType">' +
+                        '                <option value="RSA2" ' + (config.signType === 'RSA2' ? 'selected' : '') + '>RSA2</option>' +
+                        '                <option value="RSA" ' + (config.signType === 'RSA' ? 'selected' : '') + '>RSA</option>' +
+                        '            </select>' +
+                        '        </div>';
+                } else if (channel.plugin === 'wxpay') {
+                    configFields =
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">商户号 (mch_id)</label>' +
+                        '            <input type="text" class="form-input" id="config_appId" value="' + (config.appId || '') + '" placeholder="微信支付商户号">' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">API 密钥</label>' +
+                        '            <input type="text" class="form-input" id="config_appSecret" value="' + (config.appSecret || '') + '" placeholder="API密钥">' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">API 证书序列号</label>' +
+                        '            <input type="text" class="form-input" id="config_serialNo" value="' + (config.serialNo || '') + '" placeholder="证书序列号">' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">API 私钥</label>' +
+                        '            <textarea class="form-input" id="config_privateKey" rows="4" placeholder="API私钥">' + (config.privateKey || '') + '</textarea>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">微信平台公钥</label>' +
+                        '            <textarea class="form-input" id="config_wxpayPublicKey" rows="4" placeholder="微信平台公钥">' + (config.wxpayPublicKey || '') + '</textarea>' +
+                        '        </div>';
+                } else {
+                    configFields =
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">配置内容 (JSON)</label>' +
+                        '            <textarea class="form-input" id="config_json" rows="10" placeholder="{}">' + JSON.stringify(config, null, 2) + '</textarea>' +
+                        '            <div class="form-hint">请输入有效的 JSON 格式配置</div>' +
+                        '        </div>';
+                }
+                
+                var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
+                    '<div class="modal" style="max-width: 500px;">' +
+                    '    <div class="modal-header">' +
+                    '        <span class="modal-title">通道配置 - ' + (channel.name || '') + '</span>' +
+                    '        <button class="modal-close" onclick="closeModal()">' +
+                    '            <i class="ri-close-line"></i>' +
+                    '        </button>' +
+                    '    </div>' +
+                    '    <div class="modal-body">' +
+                    '        <input type="hidden" id="configChannelId" value="' + id + '">' +
+                    '        <input type="hidden" id="configChannelPlugin" value="' + (channel.plugin || '') + '">' +
+                    configFields +
+                    '    </div>' +
+                    '    <div class="modal-footer">' +
+                    '        <button class="btn btn-secondary" onclick="closeModal()">取消</button>' +
+                    '        <button class="btn btn-primary" onclick="saveChannelConfig()">保存配置</button>' +
+                    '    </div>' +
+                    '</div>' +
+                    '</div>';
+
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                setTimeout(function() {
+                    document.getElementById('modalOverlay').classList.add('active');
+                }, 10);
+            } catch (error) {
+                showToast('error', '加载失败', '无法获取通道数据');
+            }
+        }
+
+        // 保存通道配置
+        async function saveChannelConfig() {
+            var id = document.getElementById('configChannelId').value;
+            var plugin = document.getElementById('configChannelPlugin').value;
+            
+            var config = {};
+            
+            if (plugin === 'alipay' || plugin === 'wxpay') {
+                var appId = document.getElementById('config_appId').value;
+                var appSecret = document.getElementById('config_appSecret').value;
+                
+                if (!appId) {
+                    showToast('error', '验证失败', '应用ID/商户号不能为空');
+                    return;
+                }
+                
+                config.appId = appId;
+                config.appSecret = appSecret;
+                
+                if (plugin === 'alipay') {
+                    config.alipayPublicKey = document.getElementById('config_alipayPublicKey').value;
+                    config.signType = document.getElementById('config_signType').value;
+                } else if (plugin === 'wxpay') {
+                    config.serialNo = document.getElementById('config_serialNo').value;
+                    config.privateKey = document.getElementById('config_privateKey').value;
+                    config.wxpayPublicKey = document.getElementById('config_wxpayPublicKey').value;
+                }
+            } else {
+                var jsonStr = document.getElementById('config_json').value;
+                try {
+                    config = JSON.parse(jsonStr || '{}');
+                } catch (e) {
+                    showToast('error', '格式错误', '请输入有效的 JSON 格式');
+                    return;
+                }
+            }
+            
+            try {
+                var result = await api.updateChannel(id, { config: config });
+                if (result.success) {
+                    showToast('success', '保存成功', '通道配置已更新');
+                    closeModal();
+                    loadChannelsData();
+                } else {
+                    showToast('error', '保存失败', result.message);
+                }
+            } catch (error) {
+                showToast('error', '保存失败', '网络错误，请重试');
             }
         }
 
