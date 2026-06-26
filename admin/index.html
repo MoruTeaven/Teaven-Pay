@@ -1478,6 +1478,21 @@
                 }
             },
 
+            // 获取商户详情
+            async getMerchantDetail(id) {
+                try {
+                    const response = await this.request(`/api/admin/merchants/${id}`);
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { success: true, data: data.data };
+                    }
+                    throw new Error(data.msg || '获取商户详情失败');
+                } catch (error) {
+                    console.error('获取商户详情失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
             // 创建商户
             async createMerchant(merchantData) {
                 try {
@@ -1665,6 +1680,18 @@
         function formatDate(dateStr) {
             if (!dateStr) return '-';
             return dateStr;
+        }
+
+        function copyToClipboard(text) {
+            if (!text) {
+                showToast('warning', '复制失败', '没有可复制的内容');
+                return;
+            }
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('success', '复制成功', '内容已复制到剪贴板');
+            }).catch(() => {
+                showToast('error', '复制失败', '请手动复制');
+            });
         }
 
         function getStatusBadge(status, type) {
@@ -2065,7 +2092,7 @@
                                             <td>${formatDate(merchant.createdAt)}</td>
                                             <td>
                                                 <div style="display: flex; gap: 8px;">
-                                                    <button class="btn btn-sm btn-secondary" onclick="showToast('info', '查看详情', '商户详情页面开发中')">
+                                                    <button class="btn btn-sm btn-secondary" onclick="navigateToMerchantDetail('${merchant.id}')">
                                                         <i class="ri-eye-line"></i>
                                                     </button>
                                                     <button class="btn btn-sm btn-secondary" onclick="showToast('success', '操作成功', 'API Key 已重置')">
@@ -2084,6 +2111,239 @@
                                 <button class="pagination-btn" disabled>&lt;</button>
                                 <button class="pagination-btn active">1</button>
                                 <button class="pagination-btn">&gt;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function renderMerchantDetail(merchantId) {
+            let merchant = null;
+
+            try {
+                const result = await api.getMerchantDetail(merchantId);
+                if (result.success) {
+                    merchant = result.data;
+                } else {
+                    showToast('error', '获取失败', result.message);
+                    navigateTo('merchants');
+                    return '';
+                }
+            } catch (error) {
+                console.error('获取商户详情失败:', error);
+                showToast('error', '获取失败', '系统错误');
+                navigateTo('merchants');
+                return '';
+            }
+
+            if (!merchant) {
+                navigateTo('merchants');
+                return '';
+            }
+
+            return `
+                <div class="page-header">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <button class="btn btn-secondary" onclick="navigateTo('merchants')">
+                            <i class="ri-arrow-left-line"></i>
+                            返回
+                        </button>
+                        <h1 class="page-title">商户详情 - ${merchant.username}</h1>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn btn-secondary" onclick="showToast('info', '提示', '编辑功能开发中')">
+                            <i class="ri-edit-line"></i>
+                            编辑
+                        </button>
+                    </div>
+                </div>
+
+                <div class="stats-grid fade-in">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">今日收入</span>
+                            <div class="stat-icon green"><i class="ri-money-cny-circle-line"></i></div>
+                        </div>
+                        <div class="stat-value">${formatMoney(merchant.todayIncome)}</div>
+                        <div class="stat-change up">
+                            <span>今日订单: ${merchant.todayOrders}</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">昨日收入</span>
+                            <div class="stat-icon blue"><i class="ri-line-chart-line"></i></div>
+                        </div>
+                        <div class="stat-value">${formatMoney(merchant.yesterdayIncome)}</div>
+                        <div class="stat-change">
+                            <span>昨日订单: ${merchant.yesterdayOrders}</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">总余额</span>
+                            <div class="stat-icon yellow"><i class="ri-wallet-line"></i></div>
+                        </div>
+                        <div class="stat-value">${formatMoney(merchant.balance)}</div>
+                        <div class="stat-change">
+                            <span>冻结: ${formatMoney(merchant.frozenBalance)}</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">总收入</span>
+                            <div class="stat-icon purple"><i class="ri-bar-chart-line"></i></div>
+                        </div>
+                        <div class="stat-value">${formatMoney(merchant.totalIncome)}</div>
+                        <div class="stat-change">
+                            <span>总订单: ${merchant.totalOrders}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+                    <div class="card fade-in">
+                        <div class="card-header">
+                            <h3 class="card-title">基本信息</h3>
+                        </div>
+                        <div class="card-body">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                                <div class="form-group">
+                                    <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">商户ID</label>
+                                    <div style="font-family: monospace; background: var(--bg-tertiary); padding: 8px; border-radius: 6px; font-size: 13px;">${merchant.id}</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">用户名</label>
+                                    <div style="padding: 8px;">${merchant.username}</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">邮箱</label>
+                                    <div style="padding: 8px;">${merchant.email || '-'}</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">状态</label>
+                                    <div style="padding: 8px;">${getStatusBadge(merchant.status, 'merchant')}</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">QQ</label>
+                                    <div style="padding: 8px;">${merchant.contactQq || '-'}</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">微信</label>
+                                    <div style="padding: 8px;">${merchant.contactWechat || '-'}</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">创建时间</label>
+                                    <div style="padding: 8px;">${formatDate(merchant.createdAt)}</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">最后登录</label>
+                                    <div style="padding: 8px;">${formatDate(merchant.lastLoginAt) || '-'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card fade-in">
+                        <div class="card-header">
+                            <h3 class="card-title">API 配置</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">API Key</label>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <code style="flex: 1; background: var(--bg-tertiary); padding: 8px; border-radius: 6px; font-size: 12px; word-break: break-all;">${merchant.apiKey || '-'}</code>
+                                    <button class="btn btn-sm btn-secondary" onclick="copyToClipboard('${merchant.apiKey}')">
+                                        <i class="ri-file-copy-line"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">签名方式</label>
+                                <div style="padding: 8px;">${merchant.apiKeyType === 'md5' ? 'MD5' : 'HMAC-SHA256'}</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">异步通知地址</label>
+                                <div style="padding: 8px; word-break: break-all; font-size: 13px;">${merchant.notifyUrl || '-'}</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">同步返回地址</label>
+                                <div style="padding: 8px; word-break: break-all; font-size: 13px;">${merchant.returnUrl || '-'}</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">分组ID</label>
+                                <div style="padding: 8px;">${merchant.groupId || '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                    <div class="card fade-in">
+                        <div class="card-header">
+                            <h3 class="card-title">最近订单</h3>
+                        </div>
+                        <div class="card-body" style="padding: 0;">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>订单号</th>
+                                            <th>金额</th>
+                                            <th>状态</th>
+                                            <th>时间</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${merchant.recentOrders.length > 0 ? merchant.recentOrders.map(order => `
+                                            <tr>
+                                                <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${order.order_no || order.id}</code></td>
+                                                <td>${formatMoney(order.amount)}</td>
+                                                <td>${getStatusBadge(order.status, 'order')}</td>
+                                                <td style="font-size: 12px;">${formatDate(order.created_at)}</td>
+                                            </tr>
+                                        `).join('') : `
+                                            <tr>
+                                                <td colspan="4" style="text-align: center; color: var(--text-tertiary); padding: 24px;">暂无订单</td>
+                                            </tr>
+                                        `}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card fade-in">
+                        <div class="card-header">
+                            <h3 class="card-title">最近结算</h3>
+                        </div>
+                        <div class="card-body" style="padding: 0;">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>结算ID</th>
+                                            <th>金额</th>
+                                            <th>状态</th>
+                                            <th>时间</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${merchant.recentSettlements.length > 0 ? merchant.recentSettlements.map(settle => `
+                                            <tr>
+                                                <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${settle.id.substring(0, 8)}...</code></td>
+                                                <td>${formatMoney(settle.amount)}</td>
+                                                <td>${getStatusBadge(settle.status, 'settlement')}</td>
+                                                <td style="font-size: 12px;">${formatDate(settle.created_at)}</td>
+                                            </tr>
+                                        `).join('') : `
+                                            <tr>
+                                                <td colspan="4" style="text-align: center; color: var(--text-tertiary); padding: 24px;">暂无结算</td>
+                                            </tr>
+                                        `}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -2876,6 +3136,29 @@
             settings: renderSettings,
             logs: renderLogs
         };
+
+        // 导航到商户详情页面
+        async function navigateToMerchantDetail(merchantId) {
+            state.currentPage = 'merchantDetail';
+
+            // 更新面包屑
+            const breadcrumb = document.getElementById('breadcrumbCurrent');
+            if (breadcrumb) breadcrumb.textContent = '商户详情';
+
+            // 渲染页面
+            const html = await renderMerchantDetail(merchantId);
+            if (html) {
+                document.getElementById('mainContent').innerHTML = html;
+            }
+
+            // 移动端关闭侧边栏
+            if (window.innerWidth <= 1024) {
+                const sidebar = document.getElementById('sidebar');
+                const overlay = document.getElementById('drawerOverlay');
+                if (sidebar) sidebar.classList.remove('mobile-open');
+                if (overlay) overlay.classList.remove('active');
+            }
+        }
 
         // 导航到指定页面
         async function navigateTo(page) {

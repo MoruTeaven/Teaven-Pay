@@ -341,6 +341,99 @@ adminRouter.post('/merchants', async (c) => {
 });
 
 /**
+ * 获取商户详情
+ * GET /api/admin/merchants/:id
+ */
+adminRouter.get('/merchants/:id', async (c) => {
+    const { id } = c.req.param();
+    
+    try {
+        const merchant = await c.env.DB.prepare(
+            'SELECT * FROM users WHERE id = ? AND role = ?'
+        ).bind(id, 'merchant').first();
+        
+        if (!merchant) {
+            return c.json({ code: -1, msg: '商户不存在' });
+        }
+        
+        // 获取今日统计
+        const today = new Date().toISOString().split('T')[0];
+        const todayStats = await c.env.DB.prepare(`
+            SELECT 
+                COUNT(*) as order_count,
+                SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) as income
+            FROM orders 
+            WHERE user_id = ? AND DATE(created_at) = ?
+        `).bind(id, today).first();
+        
+        // 获取昨日统计
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const yesterdayStats = await c.env.DB.prepare(`
+            SELECT 
+                COUNT(*) as order_count,
+                SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) as income
+            FROM orders 
+            WHERE user_id = ? AND DATE(created_at) = ?
+        `).bind(id, yesterday).first();
+        
+        // 获取最近10条订单
+        const recentOrders = await c.env.DB.prepare(`
+            SELECT * FROM orders 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT 10
+        `).bind(id).all();
+        
+        // 获取最近5条结算记录
+        const recentSettlements = await c.env.DB.prepare(`
+            SELECT * FROM settlements 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT 5
+        `).bind(id).all();
+        
+        const m = merchant as any;
+        
+        return c.json({
+            code: 1,
+            data: {
+                id: m.id,
+                username: m.username,
+                email: m.email || '',
+                status: m.status,
+                balance: m.balance || 0,
+                frozenBalance: m.frozen_balance || 0,
+                apiKey: m.api_key || '',
+                apiKeyType: m.api_key_type || 'md5',
+                notifyUrl: m.notify_url || '',
+                returnUrl: m.return_url || '',
+                contactQq: m.contact_qq || '',
+                contactWechat: m.contact_wechat || '',
+                settleType: m.settle_type || '',
+                settleAccount: m.settle_account || '',
+                settleName: m.settle_name || '',
+                groupId: m.group_id || '',
+                todayIncome: todayStats?.income || 0,
+                todayOrders: todayStats?.order_count || 0,
+                yesterdayIncome: yesterdayStats?.income || 0,
+                yesterdayOrders: yesterdayStats?.order_count || 0,
+                totalIncome: m.total_income || 0,
+                totalOrders: m.total_orders || 0,
+                lastLoginAt: m.last_login_at || '',
+                lastLoginIp: m.last_login_ip || '',
+                createdAt: m.created_at || '',
+                updatedAt: m.updated_at || '',
+                recentOrders: recentOrders.results || [],
+                recentSettlements: recentSettlements.results || []
+            }
+        });
+    } catch (error) {
+        console.error('Get merchant detail error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
  * 更新商户状态
  * PUT /api/admin/merchants/:id/status
  */
