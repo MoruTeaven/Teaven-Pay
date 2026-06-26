@@ -20,7 +20,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     try {
         // 验证 JWT token
         // TODO: 实现 JWT 验证
-        const payload = await verifyJWT(token, c.env.JWT_SECRET || '');
+        const payload = await verifyJWT(token, c.env.JWT_SECRET || 'default-secret-change-me');
         
         if (!payload) {
             return c.json({ code: -2, msg: 'Token 无效或已过期' }, 401);
@@ -126,4 +126,33 @@ async function verifyJWT(token: string, secret: string): Promise<any> {
     } catch {
         return null;
     }
+}
+
+/**
+ * 签发 JWT (HMAC-SHA256)
+ */
+export async function signJWT(payload: Record<string, any>, secret: string, expiresIn: number = 86400): Promise<string> {
+    const header = { alg: 'HS256', typ: 'JWT' };
+    const now = Math.floor(Date.now() / 1000);
+
+    const jwtPayload = {
+        ...payload,
+        iat: now,
+        exp: now + expiresIn,
+    };
+
+    const base64url = (data: string) => btoa(data).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+    const headerB64 = base64url(JSON.stringify(header));
+    const payloadB64 = base64url(JSON.stringify(jwtPayload));
+
+    const keyData = new TextEncoder().encode(secret);
+    const key = await crypto.subtle.importKey(
+        'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    );
+    const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+    const signature = await crypto.subtle.sign('HMAC', key, data);
+    const signatureB64 = base64url(String.fromCharCode(...new Uint8Array(signature)));
+
+    return `${headerB64}.${payloadB64}.${signatureB64}`;
 }

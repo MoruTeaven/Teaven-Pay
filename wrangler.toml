@@ -57,3 +57,19 @@ database_id = "7de39fde-b84c-46bd-bb0c-01004b6f5200"
 # [inspect]
 # ip = "localhost"
 # port = 9229
+
+# Observability 配置
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1

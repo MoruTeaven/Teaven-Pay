@@ -183,8 +183,8 @@ app.get('/admin', async (c) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teaven Pay - 管理后台</title>
-    <link rel="stylesheet" href="https://cdn.moruteaven.com/npm/remixicon/4.9.1/remixicon.css">
-    <script src="https://cdn.moruteaven.com/npm/echarts/6.1.0/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.9.1/fonts/remixicon.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
     <style>
         /* CSS 变量 */
         :root {
@@ -1235,22 +1235,6 @@ app.get('/admin', async (c) => {
             right: 0;
             bottom: 0;
             background-color: rgba(0, 0, 0, 0.5);
-            z-index: 99;
-            display: none;
-        }
-
-        .drawer-overlay.active {
-            display: block;
-        }
-
-        /* 抽屉样式 */
-        .drawer-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
             z-index: 1000;
             display: none;
         }
@@ -1478,8 +1462,8 @@ app.get('/admin', async (c) => {
                     </button>
                     <div class="user-menu">
                         <button class="user-menu-button">
-                            <div class="user-avatar">管</div>
-                            <span>管理员</span>
+                            <div class="user-avatar" id="userAvatar">管</div>
+                            <span id="userDisplayName">管理员</span>
                             <i class="ri-arrow-down-s-line"></i>
                         </button>
                         <div class="user-menu-dropdown">
@@ -1491,7 +1475,7 @@ app.get('/admin', async (c) => {
                                 <i class="ri-settings-3-line"></i>
                                 <span>账号设置</span>
                             </a>
-                            <a href="#" class="dropdown-item">
+                            <a href="#" class="dropdown-item" data-action="logout" onclick="handleLogout()">
                                 <i class="ri-logout-box-r-line"></i>
                                 <span>退出登录</span>
                             </a>
@@ -1524,15 +1508,127 @@ app.get('/admin', async (c) => {
             merchants: [],
             orders: [],
             settlements: [],
-            logs: []
+            logs: [],
+            token: localStorage.getItem('admin_token') || null,
+            user: JSON.parse(localStorage.getItem('admin_user') || 'null')
         };
+
+        // Token 管理
+        function getToken() {
+            return state.token;
+        }
+
+        function setAuth(token, user) {
+            state.token = token;
+            state.user = user;
+            localStorage.setItem('admin_token', token);
+            localStorage.setItem('admin_user', JSON.stringify(user));
+        }
+
+        function clearAuth() {
+            state.token = null;
+            state.user = null;
+            localStorage.removeItem('admin_token');
+            localStorage.removeItem('admin_user');
+        }
+
+        function isLoggedIn() {
+            return !!state.token;
+        }
+
+        // 登录页面
+        function renderLogin() {
+            return '<div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary);">' +
+                '<div class="card fade-in" style="width: 100%; max-width: 400px; margin: 16px;">' +
+                '    <div class="card-header" style="justify-content: center;">' +
+                '        <div style="text-align: center;">' +
+                '            <i class="ri-bank-card-line" style="font-size: 48px; color: var(--primary-500);"></i>' +
+                '            <h2 style="margin-top: 12px; font-size: 20px; font-weight: 600;">Teaven Pay 管理后台</h2>' +
+                '        </div>' +
+                '    </div>' +
+                '    <div class="card-body">' +
+                '        <form id="loginForm" onsubmit="handleLogin(event)">' +
+                '            <div class="form-group">' +
+                '                <label class="form-label">用户名</label>' +
+                '                <input type="text" class="form-input" id="loginUsername" placeholder="请输入管理员用户名" required>' +
+                '            </div>' +
+                '            <div class="form-group">' +
+                '                <label class="form-label">密码</label>' +
+                '                <input type="password" class="form-input" id="loginPassword" placeholder="请输入密码" required>' +
+                '            </div>' +
+                '            <div id="loginError" style="display: none; color: var(--error); font-size: 13px; margin-bottom: 12px;"></div>' +
+                '            <button type="submit" class="btn btn-primary" style="width: 100%;" id="loginBtn">登录</button>' +
+                '        </form>' +
+                '    </div>' +
+                '</div>' +
+                '</div>';
+        }
+
+        // 处理登录
+        async function handleLogin(event) {
+            event.preventDefault();
+            var username = document.getElementById('loginUsername').value;
+            var password = document.getElementById('loginPassword').value;
+            var errorEl = document.getElementById('loginError');
+            var btnEl = document.getElementById('loginBtn');
+
+            errorEl.style.display = 'none';
+            btnEl.disabled = true;
+            btnEl.textContent = '登录中...';
+
+            try {
+                var response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ username, password })
+                });
+                var data = await response.json();
+
+                if (data.code === 0) {
+                    setAuth(data.data.token, data.data.user);
+                    // 重新加载页面以恢复完整布局
+                    window.location.reload();
+                } else {
+                    errorEl.textContent = data.msg || '登录失败';
+                    errorEl.style.display = 'block';
+                }
+            } catch (error) {
+                errorEl.textContent = '网络错误，请重试';
+                errorEl.style.display = 'block';
+            } finally {
+                btnEl.disabled = false;
+                btnEl.textContent = '登录';
+            }
+        }
+
+        // 退出登录
+        function handleLogout() {
+            clearAuth();
+            navigateTo('login');
+        }
 
         // API 服务
         const api = {
+            // 通用请求方法
+            async request(url, options = {}) {
+                const token = getToken();
+                const headers = options.headers || {};
+                if (token) {
+                    headers['Authorization'] = 'Bearer ' + token;
+                }
+                const response = await fetch(url, { ...options, headers });
+                if (response.status === 401) {
+                    clearAuth();
+                    navigateTo('login');
+                    throw new Error('登录已过期，请重新登录');
+                }
+                return response;
+            },
+
             // 获取统计数据
             async getStats() {
                 try {
-                    const response = await fetch('/api/admin/stats');
+                    const response = await this.request('/api/admin/stats');
                     const data = await response.json();
                     if (data.code === 1) {
                         return data.data;
@@ -1548,7 +1644,7 @@ app.get('/admin', async (c) => {
             async getMerchants(params = {}) {
                 try {
                     const queryString = new URLSearchParams(params).toString();
-                    const response = await fetch('/api/admin/merchants?' + queryString);
+                    const response = await this.request('/api/admin/merchants?' + queryString);
                     const data = await response.json();
                     if (data.code === 1) {
                         return { count: data.count, data: data.data };
@@ -1563,7 +1659,7 @@ app.get('/admin', async (c) => {
             // 创建商户
             async createMerchant(merchantData) {
                 try {
-                    const response = await fetch('/api/admin/merchants', {
+                    const response = await this.request('/api/admin/merchants', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1584,7 +1680,7 @@ app.get('/admin', async (c) => {
             // 更新商户状态
             async updateMerchantStatus(id, status) {
                 try {
-                    const response = await fetch('/api/admin/merchants/' + id + '/status', {
+                    const response = await this.request('/api/admin/merchants/' + id + '/status', {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1606,7 +1702,7 @@ app.get('/admin', async (c) => {
             async getOrders(params = {}) {
                 try {
                     const queryString = new URLSearchParams(params).toString();
-                    const response = await fetch('/api/admin/orders?' + queryString);
+                    const response = await this.request('/api/admin/orders?' + queryString);
                     const data = await response.json();
                     if (data.code === 1) {
                         return { data: data.data };
@@ -1622,7 +1718,7 @@ app.get('/admin', async (c) => {
             async getSettlements(params = {}) {
                 try {
                     const queryString = new URLSearchParams(params).toString();
-                    const response = await fetch('/api/admin/settlements?' + queryString);
+                    const response = await this.request('/api/admin/settlements?' + queryString);
                     const data = await response.json();
                     if (data.code === 1) {
                         return { data: data.data };
@@ -1637,7 +1733,7 @@ app.get('/admin', async (c) => {
             // 处理结算
             async processSettlement(id, action, reason) {
                 try {
-                    const response = await fetch('/api/admin/settlements/' + id, {
+                    const response = await this.request('/api/admin/settlements/' + id, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1658,7 +1754,7 @@ app.get('/admin', async (c) => {
             // 获取系统配置
             async getConfig() {
                 try {
-                    const response = await fetch('/api/admin/config');
+                    const response = await this.request('/api/admin/config');
                     const data = await response.json();
                     if (data.code === 1) {
                         return { success: true, data: data.data };
@@ -1673,7 +1769,7 @@ app.get('/admin', async (c) => {
             // 更新系统配置
             async updateConfig(configData) {
                 try {
-                    const response = await fetch('/api/admin/config', {
+                    const response = await this.request('/api/admin/config', {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -1688,6 +1784,52 @@ app.get('/admin', async (c) => {
                 } catch (error) {
                     console.error('更新配置失败:', error);
                     return { success: false, message: error.message };
+                }
+            },
+
+            // 获取支付方式列表
+            async getPaymentTypes() {
+                try {
+                    const response = await this.request('/api/admin/payment-types');
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { data: data.data };
+                    }
+                    throw new Error(data.msg || '获取支付方式失败');
+                } catch (error) {
+                    console.error('获取支付方式失败:', error);
+                    return { data: [] };
+                }
+            },
+
+            // 获取支付通道列表
+            async getChannels() {
+                try {
+                    const response = await this.request('/api/admin/channels');
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { data: data.data };
+                    }
+                    throw new Error(data.msg || '获取支付通道失败');
+                } catch (error) {
+                    console.error('获取支付通道失败:', error);
+                    return { data: [] };
+                }
+            },
+
+            // 获取操作日志列表
+            async getLogs(params = {}) {
+                try {
+                    var queryString = new URLSearchParams(params).toString();
+                    const response = await this.request('/api/admin/logs?' + queryString);
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { data: data.data };
+                    }
+                    throw new Error(data.msg || '获取操作日志失败');
+                } catch (error) {
+                    console.error('获取操作日志失败:', error);
+                    return { data: [] };
                 }
             }
         };
@@ -1889,10 +2031,7 @@ app.get('/admin', async (c) => {
                 '            </div>' +
                 '        </div>' +
                 '        <div class="stat-value" id="todayOrders">' + todayOrders + '</div>' +
-                '        <div class="stat-change up">' +
-                '            <i class="ri-arrow-up-line"></i>' +
-                '            <span>12.5% 较昨日</span>' +
-                '        </div>' +
+                '        <div class="stat-change"><span id="todayOrdersChange">-</span></div>' +
                 '    </div>' +
                 '    <div class="stat-card">' +
                 '        <div class="stat-header">' +
@@ -1902,10 +2041,7 @@ app.get('/admin', async (c) => {
                 '            </div>' +
                 '        </div>' +
                 '        <div class="stat-value" id="todayAmount">' + todayAmount + '</div>' +
-                '        <div class="stat-change up">' +
-                '            <i class="ri-arrow-up-line"></i>' +
-                '            <span>8.3% 较昨日</span>' +
-                '        </div>' +
+                '        <div class="stat-change"><span id="todayAmountChange">-</span></div>' +
                 '    </div>' +
                 '    <div class="stat-card">' +
                 '        <div class="stat-header">' +
@@ -1915,10 +2051,7 @@ app.get('/admin', async (c) => {
                 '            </div>' +
                 '        </div>' +
                 '        <div class="stat-value" id="todayProfit">' + todayProfit + '</div>' +
-                '        <div class="stat-change up">' +
-                '            <i class="ri-arrow-up-line"></i>' +
-                '            <span>15.2% 较昨日</span>' +
-                '        </div>' +
+                '        <div class="stat-change"><span id="todayProfitChange">-</span></div>' +
                 '    </div>' +
                 '    <div class="stat-card">' +
                 '        <div class="stat-header">' +
@@ -1928,10 +2061,6 @@ app.get('/admin', async (c) => {
                 '            </div>' +
                 '        </div>' +
                 '        <div class="stat-value" id="activeMerchants">' + activeMerchants + '</div>' +
-                '        <div class="stat-change up">' +
-                '            <i class="ri-arrow-up-line"></i>' +
-                '            <span>3.2% 较上月</span>' +
-                '        </div>' +
                 '    </div>' +
                 '</div>' +
                 '<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px;" class="fade-in">' +
@@ -1992,7 +2121,7 @@ app.get('/admin', async (c) => {
                 '                        <th>创建时间</th>' +
                 '                    </tr>' +
                 '                </thead>' +
-                '                <tbody>' +
+                '                <tbody id="recentOrdersBody">' +
                 '                    <tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-tertiary);">加载中...</td></tr>' +
                 '                </tbody>' +
                 '            </table>' +
@@ -2012,12 +2141,75 @@ app.get('/admin', async (c) => {
                 var todayProfitEl = document.getElementById('todayProfit');
                 var activeMerchantsEl = document.getElementById('activeMerchants');
                 
-                if (todayOrdersEl) todayOrdersEl.textContent = stats.today.orders.toLocaleString();
-                if (todayAmountEl) todayAmountEl.textContent = formatMoney(stats.today.amount);
-                if (todayProfitEl) todayProfitEl.textContent = formatMoney(stats.today.profit);
-                if (activeMerchantsEl) activeMerchantsEl.textContent = stats.merchants.active.toLocaleString();
+                if (todayOrdersEl) todayOrdersEl.textContent = (stats.today.orders || 0).toLocaleString();
+                if (todayAmountEl) todayAmountEl.textContent = formatMoney(stats.today.amount || 0);
+                if (todayProfitEl) todayProfitEl.textContent = formatMoney(stats.today.profit || 0);
+                if (activeMerchantsEl) activeMerchantsEl.textContent = (stats.merchants.active || 0).toLocaleString();
 
-                showToast('success', '数据已更新', '仪表盘数据已刷新');
+                // 更新交易趋势图
+                if (window.trendChart && stats.trend) {
+                    window.trendChart.setOption({
+                        xAxis: { data: stats.trend.dates || [] },
+                        series: [{ name: '交易金额', data: stats.trend.amounts || [] }]
+                    });
+                }
+
+                // 更新支付方式分布图
+                if (window.paymentChart && stats.paymentDistribution) {
+                    var colorPalette = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444'];
+                    var pieData = (stats.paymentDistribution || []).map(function(item, idx) {
+                        return {
+                            value: item.value,
+                            name: item.name,
+                            itemStyle: { color: colorPalette[idx % colorPalette.length] }
+                        };
+                    });
+                    if (pieData.length === 0) {
+                        pieData = [{ value: 0, name: '暂无数据', itemStyle: { color: '#d1d5db' } }];
+                    }
+                    window.paymentChart.setOption({
+                        series: [{ name: '支付方式', data: pieData }]
+                    });
+                }
+
+                // 更新每小时订单柱状图
+                if (window.hourlyChart && stats.hourly) {
+                    window.hourlyChart.setOption({
+                        series: [{ name: '订单数', data: stats.hourly.orders || [] }]
+                    });
+                    if (stats.hourly.hours) {
+                        window.hourlyChart.setOption({
+                            xAxis: { data: stats.hourly.hours }
+                        });
+                    }
+                }
+
+                // 加载最近订单
+                try {
+                    var ordersResult = await api.getOrders({ limit: 5 });
+                    var recentBody = document.getElementById('recentOrdersBody');
+                    if (recentBody) {
+                        var recentOrders = ordersResult.data || [];
+                        if (recentOrders.length === 0) {
+                            recentBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-tertiary);">暂无订单数据</td></tr>';
+                        } else {
+                            var html = '';
+                            recentOrders.forEach(function(order) {
+                                html += '<tr>' +
+                                    '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + (order.tradeNo || '') + '</code></td>' +
+                                    '<td>' + (order.merchant || '-') + '</td>' +
+                                    '<td><i class="' + getPaymentTypeIcon(order.paymentType) + '" style="margin-right: 4px;"></i>' + getPaymentTypeName(order.paymentType) + '</td>' +
+                                    '<td>' + formatMoney(order.amount || 0) + '</td>' +
+                                    '<td>' + getStatusBadge(order.status, 'order') + '</td>' +
+                                    '<td>' + formatDate(order.createdAt) + '</td>' +
+                                    '</tr>';
+                            });
+                            recentBody.innerHTML = html;
+                        }
+                    }
+                } catch (e) {
+                    console.error('加载最近订单失败:', e);
+                }
             } catch (error) {
                 console.error('加载仪表盘数据失败:', error);
                 showToast('error', '加载失败', '无法获取仪表盘数据');
@@ -2358,36 +2550,50 @@ app.get('/admin', async (c) => {
                 '                        <th>操作</th>' +
                 '                    </tr>' +
                 '                </thead>' +
-                '                <tbody>' +
-                '                    <tr>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">alipay</code></td>' +
-                '                        <td>支付宝</td>' +
-                '                        <td><i class="ri-alipay-line" style="font-size: 24px;"></i></td>' +
-                '                        <td><span class="badge success">启用</span></td>' +
-                '                        <td>1</td>' +
-                '                        <td><button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'支付方式编辑功能开发中\\')"><i class="ri-edit-line"></i></button></td>' +
-                '                    </tr>' +
-                '                    <tr>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">wxpay</code></td>' +
-                '                        <td>微信支付</td>' +
-                '                        <td><i class="ri-wechat-pay-line" style="font-size: 24px;"></i></td>' +
-                '                        <td><span class="badge success">启用</span></td>' +
-                '                        <td>2</td>' +
-                '                        <td><button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'支付方式编辑功能开发中\\')"><i class="ri-edit-line"></i></button></td>' +
-                '                    </tr>' +
-                '                    <tr>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">qqpay</code></td>' +
-                '                        <td>QQ钱包</td>' +
-                '                        <td><i class="ri-qq-line" style="font-size: 24px;"></i></td>' +
-                '                        <td><span class="badge success">启用</span></td>' +
-                '                        <td>3</td>' +
-                '                        <td><button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'支付方式编辑功能开发中\\')"><i class="ri-edit-line"></i></button></td>' +
-                '                    </tr>' +
+                '                <tbody id="paymentTypesTableBody">' +
+                '                    <tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-tertiary);">加载中...</td></tr>' +
                 '                </tbody>' +
                 '            </table>' +
                 '        </div>' +
+                '        <div class="pagination">' +
+                '            <div class="pagination-info" id="paymentTypesCount">共 0 条记录</div>' +
+                '        </div>' +
                 '    </div>' +
                 '</div>';
+        }
+
+        // 加载支付方式数据
+        async function loadPaymentTypesData() {
+            try {
+                var result = await api.getPaymentTypes();
+                var tbody = document.getElementById('paymentTypesTableBody');
+                var countEl = document.getElementById('paymentTypesCount');
+                if (!tbody) return;
+
+                var list = result.data || [];
+                if (list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-tertiary);">暂无支付方式数据</td></tr>';
+                    if (countEl) countEl.textContent = '共 0 条记录';
+                    return;
+                }
+
+                var html = '';
+                list.forEach(function(item) {
+                    html += '<tr>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + (item.name || '') + '</code></td>' +
+                        '<td>' + (item.displayName || '') + '</td>' +
+                        '<td><i class="' + (item.icon || 'ri-bank-card-line') + '" style="font-size: 24px;"></i></td>' +
+                        '<td>' + (item.status === 1 ? '<span class="badge success">启用</span>' : '<span class="badge error">禁用</span>') + '</td>' +
+                        '<td>' + (item.sortOrder || 0) + '</td>' +
+                        '<td><button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'支付方式编辑功能开发中\\')"><i class="ri-edit-line"></i></button></td>' +
+                        '</tr>';
+                });
+                tbody.innerHTML = html;
+                if (countEl) countEl.textContent = '共 ' + list.length + ' 条记录';
+            } catch (error) {
+                console.error('加载支付方式失败:', error);
+                showToast('error', '加载失败', '无法获取支付方式数据');
+            }
         }
 
         function renderChannels() {
@@ -2416,57 +2622,59 @@ app.get('/admin', async (c) => {
                 '                        <th>操作</th>' +
                 '                    </tr>' +
                 '                </thead>' +
-                '                <tbody>' +
-                '                    <tr>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">ch_001</code></td>' +
-                '                        <td>支付宝官方通道</td>' +
-                '                        <td><i class="ri-alipay-line" style="margin-right: 4px;"></i>支付宝</td>' +
-                '                        <td>alipay_official</td>' +
-                '                        <td>0.60%</td>' +
-                '                        <td>¥0.01 - ¥50,000.00</td>' +
-                '                        <td><span class="badge success">启用</span></td>' +
-                '                        <td>' +
-                '                            <div style="display: flex; gap: 8px;">' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'通道编辑功能开发中\\')"><i class="ri-edit-line"></i></button>' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'配置\\', \\'通道配置功能开发中\\')"><i class="ri-settings-3-line"></i></button>' +
-                '                            </div>' +
-                '                        </td>' +
-                '                    </tr>' +
-                '                    <tr>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">ch_002</code></td>' +
-                '                        <td>微信支付官方通道</td>' +
-                '                        <td><i class="ri-wechat-pay-line" style="margin-right: 4px;"></i>微信支付</td>' +
-                '                        <td>wxpay_official</td>' +
-                '                        <td>0.60%</td>' +
-                '                        <td>¥0.01 - ¥50,000.00</td>' +
-                '                        <td><span class="badge success">启用</span></td>' +
-                '                        <td>' +
-                '                            <div style="display: flex; gap: 8px;">' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'通道编辑功能开发中\\')"><i class="ri-edit-line"></i></button>' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'配置\\', \\'通道配置功能开发中\\')"><i class="ri-settings-3-line"></i></button>' +
-                '                            </div>' +
-                '                        </td>' +
-                '                    </tr>' +
-                '                    <tr>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">ch_003</code></td>' +
-                '                        <td>QQ钱包官方通道</td>' +
-                '                        <td><i class="ri-qq-line" style="margin-right: 4px;"></i>QQ钱包</td>' +
-                '                        <td>qqpay_official</td>' +
-                '                        <td>0.60%</td>' +
-                '                        <td>¥0.01 - ¥50,000.00</td>' +
-                '                        <td><span class="badge success">启用</span></td>' +
-                '                        <td>' +
-                '                            <div style="display: flex; gap: 8px;">' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'通道编辑功能开发中\\')"><i class="ri-edit-line"></i></button>' +
-                '                                <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'配置\\', \\'通道配置功能开发中\\')"><i class="ri-settings-3-line"></i></button>' +
-                '                            </div>' +
-                '                        </td>' +
-                '                    </tr>' +
+                '                <tbody id="channelsTableBody">' +
+                '                    <tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-tertiary);">加载中...</td></tr>' +
                 '                </tbody>' +
                 '            </table>' +
                 '        </div>' +
+                '        <div class="pagination">' +
+                '            <div class="pagination-info" id="channelsCount">共 0 条记录</div>' +
+                '        </div>' +
                 '    </div>' +
                 '</div>';
+        }
+
+        // 加载支付通道数据
+        async function loadChannelsData() {
+            try {
+                var result = await api.getChannels();
+                var tbody = document.getElementById('channelsTableBody');
+                var countEl = document.getElementById('channelsCount');
+                if (!tbody) return;
+
+                var list = result.data || [];
+                if (list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-tertiary);">暂无支付通道数据</td></tr>';
+                    if (countEl) countEl.textContent = '共 0 条记录';
+                    return;
+                }
+
+                var html = '';
+                list.forEach(function(channel) {
+                    var minStr = channel.minAmount ? formatMoney(channel.minAmount) : '不限';
+                    var maxStr = channel.maxAmount ? formatMoney(channel.maxAmount) : '不限';
+                    html += '<tr>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + (channel.id || '') + '</code></td>' +
+                        '<td>' + (channel.name || '') + '</td>' +
+                        '<td><i class="' + getPaymentTypeIcon(channel.paymentType) + '" style="margin-right: 4px;"></i>' + (channel.paymentTypeDisplay || getPaymentTypeName(channel.paymentType)) + '</td>' +
+                        '<td>' + (channel.plugin || '') + '</td>' +
+                        '<td>' + ((channel.feeRate || 0) * 100).toFixed(2) + '%</td>' +
+                        '<td>' + minStr + ' - ' + maxStr + '</td>' +
+                        '<td>' + (channel.status === 1 ? '<span class="badge success">启用</span>' : '<span class="badge error">禁用</span>') + '</td>' +
+                        '<td>' +
+                        '    <div style="display: flex; gap: 8px;">' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'编辑\\', \\'通道编辑功能开发中\\')"><i class="ri-edit-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'配置\\', \\'通道配置功能开发中\\')"><i class="ri-settings-3-line"></i></button>' +
+                        '    </div>' +
+                        '</td>' +
+                        '</tr>';
+                });
+                tbody.innerHTML = html;
+                if (countEl) countEl.textContent = '共 ' + list.length + ' 条记录';
+            } catch (error) {
+                console.error('加载支付通道失败:', error);
+                showToast('error', '加载失败', '无法获取支付通道数据');
+            }
         }
 
         function renderSettings() {
@@ -2487,24 +2695,24 @@ app.get('/admin', async (c) => {
                 '        <div class="card-body">' +
                 '            <div class="form-group">' +
                 '                <label class="form-label">系统名称</label>' +
-                '                <input type="text" class="form-input" id="config_site_name" value="Teaven Pay">' +
+                '                <input type="text" class="form-input" id="config_site_name" data-config-key="site_name" placeholder="加载中...">' +
                 '            </div>' +
                 '            <div class="form-group">' +
                 '                <label class="form-label">系统URL</label>' +
-                '                <input type="text" class="form-input" id="config_site_url" value="https://pay.example.com">' +
+                '                <input type="text" class="form-input" id="config_site_url" data-config-key="site_url" placeholder="加载中...">' +
                 '            </div>' +
                 '            <div class="form-group">' +
-                '                <label class="form-label">默认货币</label>' +
-                '                <select class="form-input form-select" id="config_currency">' +
-                '                    <option value="CNY" selected>人民币 (CNY)</option>' +
-                '                    <option value="USD">美元 (USD)</option>' +
+                '                <label class="form-label">是否开启注册</label>' +
+                '                <select class="form-input form-select" id="config_enable_register" data-config-key="enable_register">' +
+                '                    <option value="1">开启</option>' +
+                '                    <option value="0">关闭</option>' +
                 '                </select>' +
                 '            </div>' +
                 '            <div class="form-group">' +
-                '                <label class="form-label">系统语言</label>' +
-                '                <select class="form-input form-select" id="config_language">' +
-                '                    <option value="zh-CN" selected>简体中文</option>' +
-                '                    <option value="en-US">English</option>' +
+                '                <label class="form-label">是否开启商户审核</label>' +
+                '                <select class="form-input form-select" id="config_enable_review" data-config-key="enable_review">' +
+                '                    <option value="1">开启</option>' +
+                '                    <option value="0">关闭</option>' +
                 '                </select>' +
                 '            </div>' +
                 '        </div>' +
@@ -2515,18 +2723,26 @@ app.get('/admin', async (c) => {
                 '        </div>' +
                 '        <div class="card-body">' +
                 '            <div class="form-group">' +
-                '                <label class="form-label">订单超时时间 (分钟)</label>' +
-                '                <input type="number" class="form-input" id="config_order_timeout" value="30">' +
+                '                <label class="form-label">最低结算金额 (元)</label>' +
+                '                <input type="number" class="form-input" id="config_min_settle_amount" data-config-key="min_settle_amount" placeholder="加载中...">' +
+                '            </div>' +
+                '            <div class="form-group">' +
+                '                <label class="form-label">结算手续费 (元)</label>' +
+                '                <input type="number" class="form-input" id="config_settle_fee" data-config-key="settle_fee" placeholder="加载中...">' +
+                '            </div>' +
+                '            <div class="form-group">' +
+                '                <label class="form-label">订单过期时间 (分钟)</label>' +
+                '                <input type="number" class="form-input" id="config_order_expire_minutes" data-config-key="order_expire_minutes" placeholder="加载中...">' +
                 '                <div class="form-hint">未支付订单自动关闭时间</div>' +
                 '            </div>' +
                 '            <div class="form-group">' +
                 '                <label class="form-label">通知重试次数</label>' +
-                '                <input type="number" class="form-input" id="config_notify_retry" value="5">' +
+                '                <input type="number" class="form-input" id="config_notify_retry_count" data-config-key="notify_retry_count" placeholder="加载中...">' +
                 '                <div class="form-hint">异步通知失败重试次数</div>' +
                 '            </div>' +
                 '            <div class="form-group">' +
                 '                <label class="form-label">通知重试间隔</label>' +
-                '                <input type="text" class="form-input" id="config_notify_interval" value="1,5,30,60,360" readonly>' +
+                '                <input type="text" class="form-input" id="config_notify_retry_interval" data-config-key="notify_retry_interval" placeholder="加载中...">' +
                 '                <div class="form-hint">重试间隔(分钟)，用逗号分隔</div>' +
                 '            </div>' +
                 '        </div>' +
@@ -2538,12 +2754,35 @@ app.get('/admin', async (c) => {
                 '        <div class="card-body">' +
                 '            <div class="form-group">' +
                 '                <label class="form-label">IP白名单</label>' +
-                '                <textarea class="form-input form-textarea" id="config_ip_whitelist" placeholder="每行一个IP地址，留空表示不限制">192.168.1.0/24\\n10.0.0.0/8</textarea>' +
+                '                <textarea class="form-input form-textarea" id="config_ip_whitelist" data-config-key="ip_whitelist" placeholder="每行一个IP地址，留空表示不限制"></textarea>' +
                 '            </div>' +
                 '            <div class="form-group">' +
-                '                <label class="form-label">请求频率限制</label>' +
-                '                <input type="number" class="form-input" id="config_rate_limit" value="100">' +
-                '                <div class="form-hint">每分钟最大请求数</div>' +
+                '                <label class="form-label">是否开启IP白名单</label>' +
+                '                <select class="form-input form-select" id="config_enable_ip_whitelist" data-config-key="enable_ip_whitelist">' +
+                '                    <option value="1">开启</option>' +
+                '                    <option value="0">关闭</option>' +
+                '                </select>' +
+                '            </div>' +
+                '            <div class="form-group">' +
+                '                <label class="form-label">是否开启域名白名单</label>' +
+                '                <select class="form-input form-select" id="config_enable_domain_whitelist" data-config-key="enable_domain_whitelist">' +
+                '                    <option value="1">开启</option>' +
+                '                    <option value="0">关闭</option>' +
+                '                </select>' +
+                '            </div>' +
+                '            <div class="form-group">' +
+                '                <label class="form-label">是否开启实名认证</label>' +
+                '                <select class="form-input form-select" id="config_enable_cert_verify" data-config-key="enable_cert_verify">' +
+                '                    <option value="1">开启</option>' +
+                '                    <option value="0">关闭</option>' +
+                '                </select>' +
+                '            </div>' +
+                '            <div class="form-group">' +
+                '                <label class="form-label">是否开启风控</label>' +
+                '                <select class="form-input form-select" id="config_enable_risk_control" data-config-key="enable_risk_control">' +
+                '                    <option value="1">开启</option>' +
+                '                    <option value="0">关闭</option>' +
+                '                </select>' +
                 '            </div>' +
                 '        </div>' +
                 '    </div>' +
@@ -2554,38 +2793,56 @@ app.get('/admin', async (c) => {
                 '        <div class="card-body">' +
                 '            <div class="form-group">' +
                 '                <label class="form-label">管理员邮箱</label>' +
-                '                <input type="email" class="form-input" id="config_admin_email" value="admin@example.com">' +
-                '            </div>' +
-                '            <div class="form-group">' +
-                '                <label class="form-label">SMTP服务器</label>' +
-                '                <input type="text" class="form-input" id="config_smtp_host" value="smtp.example.com">' +
-                '            </div>' +
-                '            <div class="form-group">' +
-                '                <label class="form-label">SMTP端口</label>' +
-                '                <input type="number" class="form-input" id="config_smtp_port" value="465">' +
+                '                <input type="email" class="form-input" id="config_admin_email" data-config-key="admin_email" placeholder="加载中...">' +
                 '            </div>' +
                 '        </div>' +
                 '    </div>' +
                 '</div>';
         }
 
+        // 加载系统配置数据
+        async function loadSettingsData() {
+            try {
+                var result = await api.getConfig();
+                var config = (result.success && result.data) ? result.data : {};
+                // 遍历所有带 data-config-key 的表单元素，填充真实配置值
+                var elements = document.querySelectorAll('[data-config-key]');
+                elements.forEach(function(el) {
+                    var key = el.getAttribute('data-config-key');
+                    var val = config[key] !== undefined ? config[key] : '';
+                    if (el.tagName === 'SELECT') {
+                        // 找到匹配的 option
+                        var matched = false;
+                        for (var i = 0; i < el.options.length; i++) {
+                            if (el.options[i].value === String(val)) {
+                                el.options[i].selected = true;
+                                matched = true;
+                            } else {
+                                el.options[i].selected = false;
+                            }
+                        }
+                        if (!matched && val !== '') {
+                            // 没有匹配项时保持第一个
+                        }
+                    } else {
+                        el.value = val;
+                    }
+                });
+            } catch (error) {
+                console.error('加载系统配置失败:', error);
+                showToast('error', '加载失败', '无法获取系统配置');
+            }
+        }
+
         // 保存设置
         async function saveSettings() {
             try {
-                var configData = {
-                    site_name: document.getElementById('config_site_name').value,
-                    site_url: document.getElementById('config_site_url').value,
-                    currency: document.getElementById('config_currency').value,
-                    language: document.getElementById('config_language').value,
-                    order_timeout: document.getElementById('config_order_timeout').value,
-                    notify_retry: document.getElementById('config_notify_retry').value,
-                    notify_interval: document.getElementById('config_notify_interval').value,
-                    ip_whitelist: document.getElementById('config_ip_whitelist').value,
-                    rate_limit: document.getElementById('config_rate_limit').value,
-                    admin_email: document.getElementById('config_admin_email').value,
-                    smtp_host: document.getElementById('config_smtp_host').value,
-                    smtp_port: document.getElementById('config_smtp_port').value
-                };
+                var configData = {};
+                var elements = document.querySelectorAll('[data-config-key]');
+                elements.forEach(function(el) {
+                    var key = el.getAttribute('data-config-key');
+                    configData[key] = el.value;
+                });
                 
                 var result = await api.updateConfig(configData);
                 if (result.success) {
@@ -2605,12 +2862,12 @@ app.get('/admin', async (c) => {
                 '<div class="card fade-in">' +
                 '    <div class="card-body">' +
                 '        <div class="filter-bar">' +
-                '            <input type="text" class="form-input" placeholder="搜索操作内容...">' +
-                '            <button class="btn btn-secondary">' +
+                '            <input type="text" class="form-input" id="logsKeyword" placeholder="搜索操作内容...">' +
+                '            <button class="btn btn-secondary" onclick="loadLogsData()">' +
                 '                <i class="ri-search-line"></i>' +
                 '                搜索' +
                 '            </button>' +
-                '            <button class="btn btn-secondary">' +
+                '            <button class="btn btn-secondary" onclick="document.getElementById(\\'logsKeyword\\').value=\\'\\';loadLogsData()">' +
                 '                <i class="ri-refresh-line"></i>' +
                 '                重置' +
                 '            </button>' +
@@ -2627,52 +2884,55 @@ app.get('/admin', async (c) => {
                 '                        <th>操作时间</th>' +
                 '                    </tr>' +
                 '                </thead>' +
-                '                <tbody>' +
-                '                    <tr>' +
-                '                        <td>1</td>' +
-                '                        <td>管理员</td>' +
-                '                        <td><span class="badge info">登录系统</span></td>' +
-                '                        <td>IP: 192.168.1.100</td>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">192.168.1.100</code></td>' +
-                '                        <td>2026-06-23 09:00:00</td>' +
-                '                    </tr>' +
-                '                    <tr>' +
-                '                        <td>2</td>' +
-                '                        <td>管理员</td>' +
-                '                        <td><span class="badge info">创建商户</span></td>' +
-                '                        <td>商户ID: m_006, 用户名: 成都科技</td>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">192.168.1.100</code></td>' +
-                '                        <td>2026-06-23 09:15:00</td>' +
-                '                    </tr>' +
-                '                    <tr>' +
-                '                        <td>3</td>' +
-                '                        <td>管理员</td>' +
-                '                        <td><span class="badge info">审批结算</span></td>' +
-                '                        <td>结算ID: s_002, 金额: 3000.00</td>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">192.168.1.100</code></td>' +
-                '                        <td>2026-06-23 09:30:00</td>' +
-                '                    </tr>' +
-                '                    <tr>' +
-                '                        <td>4</td>' +
-                '                        <td>管理员</td>' +
-                '                        <td><span class="badge info">更新配置</span></td>' +
-                '                        <td>系统名称更新</td>' +
-                '                        <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">192.168.1.100</code></td>' +
-                '                        <td>2026-06-23 10:00:00</td>' +
-                '                    </tr>' +
+                '                <tbody id="logsTableBody">' +
+                '                    <tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-tertiary);">加载中...</td></tr>' +
                 '                </tbody>' +
                 '            </table>' +
                 '        </div>' +
                 '        <div class="pagination">' +
-                '            <div class="pagination-info">共 4 条记录</div>' +
-                '            <div class="pagination-buttons">' +
-                '                <button class="pagination-btn" disabled>&lt;</button>' +
-                '                <button class="pagination-btn active">1</button>' +
-                '                <button class="pagination-btn">&gt;</button>' +
-                '            </div>' +
+                '            <div class="pagination-info" id="logsCount">共 0 条记录</div>' +
                 '        </div>' +
                 '    </div>' +
                 '</div>';
+        }
+
+        // 加载操作日志数据
+        async function loadLogsData() {
+            try {
+                var keywordEl = document.getElementById('logsKeyword');
+                var params = {};
+                if (keywordEl && keywordEl.value.trim()) {
+                    params.keyword = keywordEl.value.trim();
+                }
+                var result = await api.getLogs(params);
+                var tbody = document.getElementById('logsTableBody');
+                var countEl = document.getElementById('logsCount');
+                if (!tbody) return;
+
+                var list = result.data || [];
+                if (list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-tertiary);">暂无操作日志</td></tr>';
+                    if (countEl) countEl.textContent = '共 0 条记录';
+                    return;
+                }
+
+                var html = '';
+                list.forEach(function(log) {
+                    html += '<tr>' +
+                        '<td>' + (log.id || '') + '</td>' +
+                        '<td>' + (log.user || '系统') + '</td>' +
+                        '<td><span class="badge info">' + (log.action || '') + '</span></td>' +
+                        '<td>' + (log.detail || (log.target ? '目标: ' + log.target : '-')) + '</td>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + (log.ip || '-') + '</code></td>' +
+                        '<td>' + formatDate(log.createdAt) + '</td>' +
+                        '</tr>';
+                });
+                tbody.innerHTML = html;
+                if (countEl) countEl.textContent = '共 ' + list.length + ' 条记录';
+            } catch (error) {
+                console.error('加载操作日志失败:', error);
+                showToast('error', '加载失败', '无法获取操作日志数据');
+            }
         }
 
         // 页面映射
@@ -2692,12 +2952,22 @@ app.get('/admin', async (c) => {
             dashboard: loadDashboardData,
             merchants: loadMerchantsData,
             orders: loadOrdersData,
-            settlements: loadSettlementsData
+            settlements: loadSettlementsData,
+            'payment-types': loadPaymentTypesData,
+            channels: loadChannelsData,
+            settings: loadSettingsData,
+            logs: loadLogsData
         };
 
         // 导航到指定页面
         function navigateTo(page) {
             state.currentPage = page;
+
+            // 登录页面特殊处理
+            if (page === 'login') {
+                document.querySelector('.layout').innerHTML = renderLogin();
+                return;
+            }
 
             // 更新导航激活状态
             document.querySelectorAll('.nav-item').forEach(function(item) {
@@ -2770,7 +3040,7 @@ app.get('/admin', async (c) => {
                     },
                     xAxis: {
                         type: 'category',
-                        data: ['6月17日', '6月18日', '6月19日', '6月20日', '6月21日', '6月22日', '6月23日'],
+                        data: [],
                         axisLine: {
                             lineStyle: {
                                 color: '#9ca3af'
@@ -2804,7 +3074,7 @@ app.get('/admin', async (c) => {
                             name: '交易金额',
                             type: 'line',
                             smooth: true,
-                            data: [45000, 52000, 48000, 61000, 58000, 72000, 89000],
+                            data: [],
                             itemStyle: {
                                 color: '#f59e0b'
                             },
@@ -2873,11 +3143,7 @@ app.get('/admin', async (c) => {
                             labelLine: {
                                 show: false
                             },
-                            data: [
-                                { value: 58000, name: '支付宝', itemStyle: { color: '#3b82f6' } },
-                                { value: 35000, name: '微信支付', itemStyle: { color: '#10b981' } },
-                                { value: 12000, name: 'QQ钱包', itemStyle: { color: '#8b5cf6' } }
-                            ]
+                            data: []
                         }
                     ]
                 };
@@ -2940,7 +3206,7 @@ app.get('/admin', async (c) => {
                             name: '订单数',
                             type: 'bar',
                             barWidth: '60%',
-                            data: [12, 8, 5, 15, 45, 78, 95, 120, 110, 85, 65, 30],
+                            data: [],
                             itemStyle: {
                                 color: {
                                     type: 'linear',
@@ -3122,55 +3388,111 @@ app.get('/admin', async (c) => {
             icon.className = theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
         }
 
-        // 初始化
-        document.addEventListener('DOMContentLoaded', function() {
+        // 注册全局事件监听器（登录前后都需要）
+        function setupEventListeners() {
             // 初始化主题
             initTheme();
 
             // 侧边栏切换按钮
-            document.getElementById('sidebarToggle').addEventListener('click', function() {
-                if (window.innerWidth <= 1024) {
-                    openSidebar();
-                } else {
-                    toggleSidebar();
-                }
-            });
+            var sidebarToggle = document.getElementById('sidebarToggle');
+            if (sidebarToggle && !sidebarToggle._bound) {
+                sidebarToggle._bound = true;
+                sidebarToggle.addEventListener('click', function() {
+                    if (window.innerWidth <= 1024) {
+                        openSidebar();
+                    } else {
+                        toggleSidebar();
+                    }
+                });
+            }
 
             // 遮罩层点击
-            document.getElementById('drawerOverlay').addEventListener('click', closeSidebar);
+            var drawerOverlay = document.getElementById('drawerOverlay');
+            if (drawerOverlay && !drawerOverlay._bound) {
+                drawerOverlay._bound = true;
+                drawerOverlay.addEventListener('click', closeSidebar);
+            }
 
             // 主题切换
-            document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+            var themeToggle = document.getElementById('themeToggle');
+            if (themeToggle && !themeToggle._bound) {
+                themeToggle._bound = true;
+                themeToggle.addEventListener('click', toggleTheme);
+            }
 
             // 导航点击
             document.querySelectorAll('.nav-item[data-page]').forEach(function(item) {
-                item.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    navigateTo(this.dataset.page);
-                });
+                if (!item._bound) {
+                    item._bound = true;
+                    item.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        navigateTo(this.dataset.page);
+                    });
+                }
             });
+
+            // 退出登录按钮
+            var logoutBtn = document.querySelector('[data-action="logout"]');
+            if (logoutBtn && !logoutBtn._bound) {
+                logoutBtn._bound = true;
+                logoutBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    handleLogout();
+                });
+            }
+
+            // 监听系统主题变化
+            if (!window._themeListenerBound) {
+                window._themeListenerBound = true;
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+                    if (!localStorage.getItem('theme')) {
+                        var theme = e.matches ? 'dark' : 'light';
+                        document.documentElement.setAttribute('data-theme', theme);
+                        state.theme = theme;
+                        var icon = document.querySelector('#themeToggle i');
+                        if (icon) icon.className = theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
+                    }
+                });
+            }
+
+            // 窗口大小变化处理
+            if (!window._resizeListenerBound) {
+                window._resizeListenerBound = true;
+                window.addEventListener('resize', function() {
+                    if (window.innerWidth > 1024) {
+                        closeSidebar();
+                    }
+                });
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 先注册事件监听器
+            setupEventListeners();
+
+            // 检查登录状态
+            if (!isLoggedIn()) {
+                navigateTo('login');
+                return;
+            }
+
+            // 更新用户信息显示
+            updateUserDisplay();
 
             // 渲染默认页面
             navigateTo('dashboard');
-
-            // 监听系统主题变化
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
-                if (!localStorage.getItem('theme')) {
-                    var theme = e.matches ? 'dark' : 'light';
-                    document.documentElement.setAttribute('data-theme', theme);
-                    state.theme = theme;
-                    var icon = document.querySelector('#themeToggle i');
-                    icon.className = theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
-                }
-            });
-
-            // 窗口大小变化处理
-            window.addEventListener('resize', function() {
-                if (window.innerWidth > 1024) {
-                    closeSidebar();
-                }
-            });
         });
+
+        // 更新用户信息显示
+        function updateUserDisplay() {
+            if (state.user) {
+                var avatarEl = document.getElementById('userAvatar');
+                var nameEl = document.getElementById('userDisplayName');
+                if (avatarEl) avatarEl.textContent = (state.user.username || '管').charAt(0);
+                if (nameEl) nameEl.textContent = state.user.username || '管理员';
+            }
+        }
     </script>
 </body>
 </html>`);

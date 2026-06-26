@@ -230,8 +230,8 @@ CREATE INDEX IF NOT EXISTS idx_daily_stats_user_id ON daily_stats(user_id);
 -- 插入默认配置
 INSERT OR IGNORE INTO system_config (key, value, description) VALUES 
     ('site_name', 'Teaven Pay', '站点名称'),
-    ('site_url', 'https://pay.example.com', '站点URL'),
-    ('admin_email', 'admin@example.com', '管理员邮箱'),
+    ('site_url', '', '站点URL'),
+    ('admin_email', '', '管理员邮箱'),
     ('enable_register', '1', '是否开启注册'),
     ('enable_review', '0', '是否开启商户审核'),
     ('min_settle_amount', '100', '最低结算金额'),
@@ -262,6 +262,6 @@ INSERT OR IGNORE INTO user_groups (id, name, description, fee_rate) VALUES
 -- 注意: 实际部署时应该修改密码
 INSERT OR IGNORE INTO users (id, username, email, password_hash, salt, role, status) VALUES 
     ('user_admin', 'admin', 'admin@example.com', 
-     'pbkdf2_placeholder_请替换为实际哈希值', 
-     'random_salt_placeholder', 
+     'c91aa403f5908f83cb8b167a07d6168bab0653ce9db7ad4a90ade63453c1a6b9', 
+     'ca3ac51bcfe3cb34c13f2d59c14aecb4', 
      'admin', 1);
