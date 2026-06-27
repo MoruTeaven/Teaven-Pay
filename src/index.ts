@@ -184,7 +184,7 @@ app.get('/admin', async (c) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teaven Pay - 管理后台</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.9.1/fonts/remixicon.css">
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
     <style>
         /* CSS 变量 */
         :root {
@@ -1589,15 +1589,16 @@ app.get('/admin', async (c) => {
 
         // 登录页面
         function renderLogin() {
-            return '<div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary);">' +
-                '<div class="card fade-in" style="width: 100%; max-width: 400px; margin: 16px;">' +
-                '    <div class="card-header" style="justify-content: center;">' +
-                '        <div style="text-align: center;">' +
-                '            <i class="ri-bank-card-line" style="font-size: 48px; color: var(--primary-500);"></i>' +
-                '            <h2 style="margin-top: 12px; font-size: 20px; font-weight: 600;">Teaven Pay 管理后台</h2>' +
+            return '<div style="min-height: 100vh; width: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); padding: 20px;">' +
+                '<div class="card fade-in" style="width: 100%; max-width: 420px; margin: auto;">' +
+                '    <div class="card-body" style="padding: 40px;">' +
+                '        <div style="text-align: center; margin-bottom: 32px;">' +
+                '            <div style="width: 64px; height: 64px; margin: 0 auto 16px; background: var(--primary-50); border-radius: 16px; display: flex; align-items: center; justify-content: center;">' +
+                '                <i class="ri-bank-card-line" style="font-size: 32px; color: var(--primary-500);"></i>' +
+                '            </div>' +
+                '            <h1 style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">Teaven Pay</h1>' +
+                '            <p style="font-size: 14px; color: var(--text-secondary);">管理后台登录</p>' +
                 '        </div>' +
-                '    </div>' +
-                '    <div class="card-body">' +
                 '        <form id="loginForm" onsubmit="handleLogin(event)">' +
                 '            <div class="form-group">' +
                 '                <label class="form-label">用户名</label>' +
@@ -1608,7 +1609,7 @@ app.get('/admin', async (c) => {
                 '                <input type="password" class="form-input" id="loginPassword" placeholder="请输入密码" required>' +
                 '            </div>' +
                 '            <div id="loginError" style="display: none; color: var(--error); font-size: 13px; margin-bottom: 12px;"></div>' +
-                '            <button type="submit" class="btn btn-primary" style="width: 100%;" id="loginBtn">登录</button>' +
+                '            <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 8px;" id="loginBtn">登录</button>' +
                 '        </form>' +
                 '    </div>' +
                 '</div>' +
@@ -1668,10 +1669,28 @@ app.get('/admin', async (c) => {
                     headers['Authorization'] = 'Bearer ' + token;
                 }
                 const response = await fetch(url, { ...options, headers });
+                // HTTP 401 直接判定为登录失效
                 if (response.status === 401) {
                     clearAuth();
                     navigateTo('login');
                     throw new Error('登录已过期，请重新登录');
+                }
+                // 兼容后端业务码：code === -2 表示未授权/Token 失效/权限不足
+                // 管理后台中此类情况一律回到登录页
+                if (response.status === 403 || response.status === 200) {
+                    let bizCode = null;
+                    try {
+                        const clone = response.clone();
+                        const data = await clone.json();
+                        bizCode = data && typeof data.code !== 'undefined' ? data.code : null;
+                    } catch (e) {
+                        // 非 JSON 响应，忽略
+                    }
+                    if (bizCode === -2) {
+                        clearAuth();
+                        navigateTo('login');
+                        throw new Error('登录已失效，请重新登录');
+                    }
                 }
                 return response;
             },
@@ -1999,6 +2018,7 @@ app.get('/admin', async (c) => {
 
         // 工具函数
         function formatMoney(amount) {
+            if (typeof amount !== 'number' || isNaN(amount)) return '¥0.00';
             return '¥' + amount.toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',');
         }
 
@@ -2269,7 +2289,7 @@ app.get('/admin', async (c) => {
                 '<div class="card fade-in">' +
                 '    <div class="card-header">' +
                 '        <span class="card-title">最近订单</span>' +
-                '        <a href="#" class="btn btn-sm btn-secondary" onclick="event.preventDefault(); navigateTo(\\'orders\\')">查看全部</a>' +
+                '        <a href="#" class="btn btn-sm btn-secondary" onclick="event.preventDefault(); navigateTo(\'orders\')">查看全部</a>' +
                 '    </div>' +
                 '    <div class="card-body" style="padding: 0;">' +
                 '        <div class="table-container">' +
@@ -2383,7 +2403,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">商户管理</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-primary" onclick="showModal(\\'createMerchant\\')">' +
+                '        <button class="btn btn-primary" onclick="showModal(\'createMerchant\')">' +
                 '            <i class="ri-add-line"></i>' +
                 '            创建商户' +
                 '        </button>' +
@@ -2460,10 +2480,10 @@ app.get('/admin', async (c) => {
                         '<td>' + formatDate(merchant.createdAt) + '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'查看详情\\', \\'商户详情页面开发中\\')">' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'查看详情\', \'商户详情页面开发中\')">' +
                         '            <i class="ri-eye-line"></i>' +
                         '        </button>' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'success\\', \\'操作成功\\', \\'API Key 已重置\\')">' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\'success\', \'操作成功\', \'API Key 已重置\')">' +
                         '            <i class="ri-refresh-line"></i>' +
                         '        </button>' +
                         '    </div>' +
@@ -2483,7 +2503,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">订单管理</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-secondary" onclick="showToast(\\'success\\', \\'导出成功\\', \\'订单数据已导出\\')">' +
+                '        <button class="btn btn-secondary" onclick="showToast(\'success\', \'导出成功\', \'订单数据已导出\')">' +
                 '            <i class="ri-download-2-line"></i>' +
                 '            导出订单' +
                 '        </button>' +
@@ -2568,7 +2588,7 @@ app.get('/admin', async (c) => {
                         '<td>' + formatDate(order.createdAt) + '</td>' +
                         '<td>' + formatDate(order.paidAt) + '</td>' +
                         '<td>' +
-                        '    <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'查看详情\\', \\'订单详情页面开发中\\')">' +
+                        '    <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'查看详情\', \'订单详情页面开发中\')">' +
                         '        <i class="ri-eye-line"></i>' +
                         '    </button>' +
                         '</td>' +
@@ -2646,8 +2666,8 @@ app.get('/admin', async (c) => {
                     var actionHtml = '-';
                     if (settlement.status === 0) {
                         actionHtml = '<div style="display: flex; gap: 8px;">' +
-                            '<button class="btn btn-sm btn-primary" onclick="handleSettlement(\\'' + settlement.id + '\\', \\'approve\\')">批准</button>' +
-                            '<button class="btn btn-sm btn-danger" onclick="handleSettlement(\\'' + settlement.id + '\\', \\'reject\\')">拒绝</button>' +
+                            '<button class="btn btn-sm btn-primary" onclick="handleSettlement(\'' + settlement.id + '\', \'approve\')">批准</button>' +
+                            '<button class="btn btn-sm btn-danger" onclick="handleSettlement(\'' + settlement.id + '\', \'reject\')">拒绝</button>' +
                             '</div>';
                     }
                     
@@ -2768,7 +2788,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">支付通道</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-primary" onclick="showModal(\\'createChannel\\')">' +
+                '        <button class="btn btn-primary" onclick="showModal(\'createChannel\')">' +
                 '            <i class="ri-add-line"></i>' +
                 '            添加通道' +
                 '        </button>' +
@@ -2828,15 +2848,15 @@ app.get('/admin', async (c) => {
                         '<td>' + minStr + ' - ' + maxStr + '</td>' +
                         '<td>' +
                         '    <label class="toggle-switch" style="display: inline-flex;">' +
-                        '        <input type="checkbox" ' + (channel.status === 1 ? 'checked' : '') + ' onchange="toggleChannelStatus(\\'' + channel.id + '\\', this.checked ? 1 : 0)">' +
+                        '        <input type="checkbox" ' + (channel.status === 1 ? 'checked' : '') + ' onchange="toggleChannelStatus(\'' + channel.id + '\', this.checked ? 1 : 0)">' +
                         '        <span class="toggle-slider"></span>' +
                         '    </label>' +
                         '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="editChannel(\\'' + channel.id + '\\')" title="编辑"><i class="ri-edit-line"></i></button>' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showChannelConfig(\\'' + channel.id + '\\')" title="配置"><i class="ri-settings-3-line"></i></button>' +
-                        '        <button class="btn btn-sm btn-danger" onclick="deleteChannel(\\'' + channel.id + '\\', \\'' + (channel.name || '') + '\\')" title="删除"><i class="ri-delete-bin-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="editChannel(\'' + channel.id + '\')" title="编辑"><i class="ri-edit-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showChannelConfig(\'' + channel.id + '\')" title="配置"><i class="ri-settings-3-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-danger" onclick="deleteChannel(\'' + channel.id + '\', \'' + (channel.name || '') + '\')" title="删除"><i class="ri-delete-bin-line"></i></button>' +
                         '    </div>' +
                         '</td>' +
                         '</tr>';
@@ -3039,7 +3059,7 @@ app.get('/admin', async (c) => {
                 '                <i class="ri-search-line"></i>' +
                 '                搜索' +
                 '            </button>' +
-                '            <button class="btn btn-secondary" onclick="document.getElementById(\\'logsKeyword\\').value=\\'\\';loadLogsData()">' +
+                '            <button class="btn btn-secondary" onclick="document.getElementById(\'logsKeyword\').value=\'\';loadLogsData()">' +
                 '                <i class="ri-refresh-line"></i>' +
                 '                重置' +
                 '            </button>' +
