@@ -1803,6 +1803,23 @@ app.get('/admin', async (c) => {
                 }
             },
 
+            // 生成商户用户中心登录 Token
+            async getMerchantLoginToken(id) {
+                try {
+                    const response = await this.request('/api/admin/merchants/' + id + '/login-token', {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+                    if (data.code === 0) {
+                        return { success: true, data: data.data };
+                    }
+                    throw new Error(data.msg || '生成登录链接失败');
+                } catch (error) {
+                    console.error('生成商户登录链接失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
             // 获取订单列表
             async getOrders(params = {}) {
                 try {
@@ -2527,6 +2544,9 @@ app.get('/admin', async (c) => {
                         '        <button class="btn btn-sm btn-secondary" onclick="navigateToMerchantDetail(\\'' + merchant.id + '\\')" title="查看详情">' +
                         '            <i class="ri-eye-line"></i>' +
                         '        </button>' +
+                        '        <button class="btn btn-sm btn-primary" onclick="loginAsMerchant(\\'' + merchant.id + '\\')" title="一键登录用户中心">' +
+                        '            <i class="ri-login-box-line"></i>' +
+                        '        </button>' +
                         '    </div>' +
                         '</td>' +
                         '</tr>';
@@ -2574,6 +2594,7 @@ app.get('/admin', async (c) => {
                 '        <h1 class="page-title">商户详情 - ' + escapeHtml(merchant.username) + '</h1>' +
                 '    </div>' +
                 '    <div class="page-actions">' +
+                '        <button class="btn btn-primary" onclick="loginAsMerchant(\\'' + merchant.id + '\\')"><i class="ri-login-box-line"></i>登录用户中心</button>' +
                 '        <button class="btn btn-secondary" onclick="showEditMerchantModal()"><i class="ri-edit-line"></i>编辑</button>' +
                 statusButton +
                 '    </div>' +
@@ -3892,6 +3913,31 @@ app.get('/admin', async (c) => {
             }
         }
 
+        // 一键登录商户用户中心
+        async function loginAsMerchant(id) {
+            var userWindow = window.open('', '_blank');
+            if (!userWindow) {
+                showToast('error', '打开失败', '浏览器阻止了新窗口，请允许弹窗后重试');
+                return;
+            }
+
+            userWindow.document.write('<!DOCTYPE html><html><head><title>正在登录...</title><meta charset="utf-8"></head><body style="font-family: sans-serif; padding: 24px;">正在进入用户中心...</body></html>');
+
+            try {
+                var result = await api.getMerchantLoginToken(id);
+                if (result.success && result.data && result.data.token) {
+                    userWindow.location.href = '/user?token=' + encodeURIComponent(result.data.token);
+                    showToast('success', '生成成功', '已打开商户用户中心');
+                } else {
+                    userWindow.close();
+                    showToast('error', '生成失败', result.message || '无法生成登录链接');
+                }
+            } catch (error) {
+                userWindow.close();
+                showToast('error', '登录失败', '网络错误，请重试');
+            }
+        }
+
         // 切换商户状态
         function handleMerchantStatus(id, status) {
             var actionText = status === 1 ? '启用' : '禁用';
@@ -4601,7 +4647,15 @@ app.get('/user', async (c) => {
     </div>
     <script>
     (function() {
-        var token = localStorage.getItem('merchant_token');
+        var urlParams = new URLSearchParams(window.location.search);
+        var urlToken = urlParams.get('token');
+        var token = urlToken || localStorage.getItem('merchant_token');
+        if (urlToken) {
+            localStorage.setItem('merchant_token', urlToken);
+            urlParams.delete('token');
+            var cleanQuery = urlParams.toString();
+            window.history.replaceState(null, '', window.location.pathname + (cleanQuery ? '?' + cleanQuery : '') + window.location.hash);
+        }
         var currentUser = null;
         var currentPage = 'dashboard';
         var app = document.getElementById('app');

@@ -434,6 +434,70 @@ adminRouter.get('/merchants/:id', async (c) => {
 });
 
 /**
+ * 生成商户用户中心登录 Token
+ * POST /api/admin/merchants/:id/login-token
+ */
+adminRouter.post('/merchants/:id/login-token', async (c) => {
+    const { id } = c.req.param();
+    const admin = c.get('user') as any;
+
+    try {
+        const merchant = await c.env.DB.prepare(
+            'SELECT id, username, status FROM users WHERE id = ? AND role = ?'
+        ).bind(id, 'merchant').first();
+
+        if (!merchant) {
+            return c.json({ code: -1, msg: '商户不存在' });
+        }
+
+        if ((merchant as any).status !== 1) {
+            return c.json({ code: -1, msg: '商户账号状态异常，无法登录用户中心' });
+        }
+
+        const secret = c.env.JWT_SECRET || 'default-secret-change-me';
+        const token = await signJWT(
+            {
+                id: (merchant as any).id,
+                username: (merchant as any).username,
+                role: 'merchant',
+                impersonated_by: admin?.id || null,
+            },
+            secret,
+            3600
+        );
+
+        const now = new Date().toISOString();
+        await c.env.DB.prepare(`
+            INSERT INTO operation_logs (user_id, action, target, detail, ip, user_agent, created_at)
+            VALUES (?, 'admin_login_merchant', ?, ?, ?, ?, ?)
+        `).bind(
+            admin?.id || null,
+            (merchant as any).id,
+            JSON.stringify({ merchant_id: (merchant as any).id, merchant_username: (merchant as any).username }),
+            c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || '',
+            c.req.header('User-Agent') || '',
+            now
+        ).run();
+
+        return c.json({
+            code: 0,
+            msg: '生成登录链接成功',
+            data: {
+                token,
+                expires_in: 3600,
+                user: {
+                    id: (merchant as any).id,
+                    username: (merchant as any).username,
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Generate merchant login token error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
  * 更新商户信息
  * PUT /api/admin/merchants/:id
  */
