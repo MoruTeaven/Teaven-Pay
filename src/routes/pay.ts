@@ -140,6 +140,7 @@ payRouter.post('/submit', async (c) => {
         const plugin = getPlugin(channel.plugin);
         
         // 调用插件创建支付
+        const channelConfig = JSON.parse(channel.config || '{}');
         const payResult = await plugin.createPayment(
             {
                 tradeNo,
@@ -151,9 +152,10 @@ payRouter.post('/submit', async (c) => {
                 createdAt: now
             },
             {
-                appId: env.ALIPAY_APP_ID || '',
-                appSecret: env.ALIPAY_PRIVATE_KEY || '',
-                ...JSON.parse(channel.config || '{}')
+                appId: channelConfig.appId || '',
+                appSecret: channelConfig.appSecret || '',
+                notifyUrl: channelConfig.notifyUrl || '',
+                ...channelConfig
             }
         );
         
@@ -231,6 +233,7 @@ payRouter.post('/cashier', async (c) => {
 
         const plugin = getPlugin(channel.plugin);
 
+        const channelConfig = JSON.parse(channel.config || '{}');
         const payResult = await plugin.createPayment(
             {
                 tradeNo,
@@ -242,9 +245,10 @@ payRouter.post('/cashier', async (c) => {
                 createdAt: now
             },
             {
-                appId: env.ALIPAY_APP_ID || '',
-                appSecret: env.ALIPAY_PRIVATE_KEY || '',
-                ...JSON.parse(channel.config || '{}')
+                appId: channelConfig.appId || '',
+                appSecret: channelConfig.appSecret || '',
+                notifyUrl: channelConfig.notifyUrl || user.notify_url || '',
+                ...channelConfig
             }
         );
 
