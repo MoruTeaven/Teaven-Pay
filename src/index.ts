@@ -4479,6 +4479,753 @@ app.get('/admin/', (c) => {
     return c.redirect('/admin', 301);
 });
 
+// 用户中心页面
+app.get('/user', async (c) => {
+    return c.html(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teaven Pay - 用户中心</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.9.1/fonts/remixicon.css">
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <style>
+        :root {
+            --primary-50:#fffbeb;--primary-100:#fef3c7;--primary-200:#fde68a;--primary-300:#fcd34d;
+            --primary-400:#fbbf24;--primary-500:#f59e0b;--primary-600:#d97706;--primary-700:#b45309;
+            --success:#10b981;--warning:#f59e0b;--error:#ef4444;--info:#3b82f6;--default:#6b7280;
+            --gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-300:#d1d5db;
+            --gray-400:#9ca3af;--gray-500:#6b7280;--gray-600:#4b5563;--gray-700:#374151;
+            --gray-800:#1f2937;--gray-900:#111827;
+            --bg-primary:#ffffff;--bg-secondary:#f9fafb;--bg-tertiary:#f3f4f6;
+            --text-primary:#111827;--text-secondary:#4b5563;--text-tertiary:#9ca3af;
+            --border-color:#e5e7eb;--shadow-sm:0 1px 2px 0 rgba(0,0,0,0.05);
+            --shadow-md:0 4px 6px -1px rgba(0,0,0,0.1),0 2px 4px -1px rgba(0,0,0,0.06);
+            --sidebar-width:220px;--header-height:52px;
+        }
+        [data-theme="dark"] {
+            --bg-primary:#111827;--bg-secondary:#1f2937;--bg-tertiary:#374151;
+            --text-primary:#f9fafb;--text-secondary:#d1d5db;--text-tertiary:#9ca3af;
+            --border-color:#374151;
+        }
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg-secondary);color:var(--text-primary);}
+        a{color:var(--primary-600);text-decoration:none;}
+        .layout{display:flex;min-height:100vh;width:100%;}
+        .sidebar{width:var(--sidebar-width);background:var(--bg-primary);border-right:1px solid var(--border-color);position:fixed;top:0;left:0;bottom:0;z-index:100;display:flex;flex-direction:column;}
+        .sidebar-header{padding:16px 20px;border-bottom:1px solid var(--border-color);display:flex;align-items:center;gap:10px;}
+        .sidebar-header .logo{font-size:18px;font-weight:700;color:var(--primary-600);}
+        .sidebar-nav{flex:1;padding:12px 8px;overflow-y:auto;}
+        .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;color:var(--text-secondary);cursor:pointer;font-size:14px;transition:all 0.15s;}
+        .nav-item:hover{background:var(--bg-tertiary);color:var(--text-primary);}
+        .nav-item.active{background:var(--primary-50);color:var(--primary-700);font-weight:600;}
+        [data-theme="dark"] .nav-item.active{background:rgba(251,191,36,0.1);color:var(--primary-400);}
+        .nav-item i{font-size:18px;width:20px;text-align:center;}
+        .sidebar-footer{padding:12px 16px;border-top:1px solid var(--border-color);display:flex;align-items:center;gap:10px;font-size:13px;}
+        .sidebar-footer .avatar{width:32px;height:32px;border-radius:50%;background:var(--primary-100);color:var(--primary-700);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;}
+        .main-area{margin-left:var(--sidebar-width);flex:1;display:flex;flex-direction:column;}
+        .header{height:var(--header-height);background:var(--bg-primary);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50;}
+        .header-title{font-size:16px;font-weight:600;}
+        .header-actions{display:flex;align-items:center;gap:12px;}
+        .btn{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all 0.15s;display:inline-flex;align-items:center;gap:6px;}
+        .btn-primary{background:var(--primary-500);color:#fff;}.btn-primary:hover{background:var(--primary-600);}
+        .btn-sm{padding:5px 10px;font-size:12px;}
+        .btn-danger{background:var(--error);color:#fff;}.btn-danger:hover{opacity:0.9;}
+        .btn-ghost{background:transparent;color:var(--text-secondary);border:1px solid var(--border-color);}.btn-ghost:hover{background:var(--bg-tertiary);}
+        .main-content{flex:1;padding:24px;overflow-y:auto;}
+        .card{background:var(--bg-primary);border:1px solid var(--border-color);border-radius:12px;margin-bottom:20px;}
+        .card-header{padding:16px 20px;border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;}
+        .card-title{font-size:15px;font-weight:600;}
+        .card-body{padding:20px;}
+        .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px;}
+        .stat-card{background:var(--bg-primary);border:1px solid var(--border-color);border-radius:12px;padding:18px 20px;}
+        .stat-label{font-size:12px;color:var(--text-tertiary);margin-bottom:6px;}
+        .stat-value{font-size:22px;font-weight:700;color:var(--text-primary);}
+        .stat-sub{font-size:12px;color:var(--text-tertiary);margin-top:4px;}
+        .table-container{overflow-x:auto;}
+        table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+        table.data-table th{text-align:left;padding:10px 14px;background:var(--bg-tertiary);color:var(--text-secondary);font-weight:600;white-space:nowrap;}
+        table.data-table td{padding:10px 14px;border-bottom:1px solid var(--border-color);}
+        table.data-table tr:hover{background:var(--bg-tertiary);}
+        .badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;}
+        .badge-success{background:#d1fae5;color:#065f46;}.badge-warning{background:#fef3c7;color:#92400e;}
+        .badge-error{background:#fee2e2;color:#991b1b;}.badge-default{background:var(--gray-100);color:var(--gray-600);}
+        .badge-info{background:#dbeafe;color:#1e40af;}
+        [data-theme="dark"] .badge-success{background:rgba(16,185,129,0.15);color:#6ee7b7;}
+        [data-theme="dark"] .badge-warning{background:rgba(245,158,11,0.15);color:#fcd34d;}
+        [data-theme="dark"] .badge-error{background:rgba(239,68,68,0.15);color:#fca5a5;}
+        [data-theme="dark"] .badge-default{background:rgba(107,114,128,0.15);color:#9ca3af;}
+        [data-theme="dark"] .badge-info{background:rgba(59,130,246,0.15);color:#93c5fd;}
+        .form-group{margin-bottom:16px;}
+        .form-label{display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:var(--text-secondary);}
+        .form-input{width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;font-size:14px;background:var(--bg-primary);color:var(--text-primary);outline:none;transition:border-color 0.15s;}
+        .form-input:focus{border-color:var(--primary-500);}
+        textarea.form-input{resize:vertical;min-height:80px;}
+        select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");background-repeat:no-repeat;background-position:right 8px center;background-size:12px;}
+        .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+        .form-hint{font-size:12px;color:var(--text-tertiary);margin-top:4px;}
+        .empty-state{text-align:center;padding:40px 20px;color:var(--text-tertiary);}
+        .empty-state i{font-size:36px;margin-bottom:12px;display:block;}
+        .pagination{display:flex;align-items:center;justify-content:space-between;margin-top:16px;font-size:13px;color:var(--text-secondary);}
+        .pagination-btns{display:flex;gap:8px;}
+        .page-container{display:none;}.page-container.active{display:block;}
+        .login-container{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-secondary);}
+        .login-card{background:var(--bg-primary);border:1px solid var(--border-color);border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:var(--shadow-md);}
+        .login-logo{text-align:center;margin-bottom:32px;}.login-logo h1{font-size:24px;font-weight:700;color:var(--primary-600);}
+        .login-logo p{font-size:13px;color:var(--text-tertiary);margin-top:4px;}
+        .login-error{background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none;}
+        .copy-btn{background:none;border:none;cursor:pointer;color:var(--primary-500);font-size:14px;padding:2px 6px;border-radius:4px;}
+        .copy-btn:hover{background:var(--primary-50);}
+        .chart-box{width:100%;height:260px;}
+        .loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text-tertiary);}
+        .toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:8px;font-size:13px;z-index:9999;animation:slideIn 0.3s ease;box-shadow:var(--shadow-md);}
+        .toast-success{background:#d1fae5;color:#065f46;}.toast-error{background:#fee2e2;color:#991b1b;}
+        @keyframes slideIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+        .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:none;align-items:center;justify-content:center;}
+        .modal-overlay.active{display:flex;}
+        .modal{background:var(--bg-primary);border-radius:12px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-md);}
+        .modal-header{padding:16px 20px;border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;}
+        .modal-title{font-size:16px;font-weight:600;}
+        .modal-body{padding:20px;}.modal-footer{padding:12px 20px;border-top:1px solid var(--border-color);display:flex;justify-content:flex-end;gap:8px;}
+        @media(max-width:768px){
+            .sidebar{display:none;}.main-area{margin-left:0;}
+            .stats-grid{grid-template-columns:1fr 1fr;}.form-row{grid-template-columns:1fr;}
+            .header{padding:0 16px;}.main-content{padding:16px;}
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="modalContent"></div>
+    </div>
+    <script>
+    (function() {
+        var token = localStorage.getItem('merchant_token');
+        var currentUser = null;
+        var currentPage = 'dashboard';
+        var app = document.getElementById('app');
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function formatMoney(v) { return (Number(v) || 0).toFixed(2); }
+
+        function formatDate(s) {
+            if (!s) return '-';
+            return s.replace('T', ' ').substring(0, 19);
+        }
+
+        function showToast(msg, type) {
+            var el = document.createElement('div');
+            el.className = 'toast toast-' + (type || 'success');
+            el.textContent = msg;
+            document.body.appendChild(el);
+            setTimeout(function() { el.remove(); }, 3000);
+        }
+
+        function showModal(title, bodyHtml, footerHtml) {
+            document.getElementById('modalContent').innerHTML =
+                '<div class="modal-header"><span class="modal-title">' + title + '</span><button onclick="document.getElementById(\\'modalOverlay\\').classList.remove(\\'active\\')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-tertiary)">&times;</button></div>' +
+                '<div class="modal-body">' + bodyHtml + '</div>' +
+                (footerHtml ? '<div class="modal-footer">' + footerHtml + '</div>' : '');
+            document.getElementById('modalOverlay').classList.add('active');
+        }
+
+        function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+
+        async function api(method, path, body) {
+            var opts = { method: method, headers: { 'Authorization': 'Bearer ' + token } };
+            if (body && !(body instanceof URLSearchParams)) {
+                opts.headers['Content-Type'] = 'application/json';
+                opts.body = JSON.stringify(body);
+            } else if (body) {
+                opts.body = body;
+            }
+            var res = await fetch('/api/merchant' + path, opts);
+            if (res.status === 401 || res.status === 403) {
+                var data = await res.json().catch(function() { return {}; });
+                if (data.code === -2) { logout(); return null; }
+            }
+            return res.json();
+        }
+
+        function getStatusBadge(status, type) {
+            if (type === 'order') {
+                var m = { 0: ['未支付','default'], 1: ['已支付','success'], 2: ['已退款','warning'], 3: ['已关闭','error'] };
+                var s = m[status] || ['未知','default'];
+                return '<span class="badge badge-' + s[1] + '">' + s[0] + '</span>';
+            }
+            if (type === 'settle') {
+                var m2 = { 0: ['待处理','warning'], 1: ['处理中','info'], 2: ['已处理','success'], 3: ['已拒绝','error'] };
+                var s2 = m2[status] || ['未知','default'];
+                return '<span class="badge badge-' + s2[1] + '">' + s2[0] + '</span>';
+            }
+            if (type === 'refund') {
+                var m3 = { 0: ['处理中','warning'], 1: ['成功','success'], 2: ['失败','error'] };
+                var s3 = m3[status] || ['未知','default'];
+                return '<span class="badge badge-' + s3[1] + '">' + s3[0] + '</span>';
+            }
+            return '<span class="badge badge-default">' + status + '</span>';
+        }
+
+        function renderLogin() {
+            app.innerHTML =
+                '<div class="login-container"><div class="login-card">' +
+                '<div class="login-logo"><h1>Teaven Pay</h1><p>商户用户中心</p></div>' +
+                '<div class="login-error" id="loginError"></div>' +
+                '<div class="form-group"><label class="form-label">用户名 / 邮箱</label><input type="text" class="form-input" id="loginUsername" placeholder="请输入用户名或邮箱"></div>' +
+                '<div class="form-group"><label class="form-label">密码</label><input type="password" class="form-input" id="loginPassword" placeholder="请输入密码"></div>' +
+                '<div class="form-group"><button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;" id="loginBtn">登录</button></div>' +
+                '</div></div>';
+            document.getElementById('loginBtn').onclick = doLogin;
+            document.getElementById('loginPassword').onkeydown = function(e) { if (e.key === 'Enter') doLogin(); };
+        }
+
+        async function doLogin() {
+            var username = document.getElementById('loginUsername').value.trim();
+            var password = document.getElementById('loginPassword').value;
+            var errEl = document.getElementById('loginError');
+            if (!username || !password) { errEl.textContent = '请输入用户名和密码'; errEl.style.display = 'block'; return; }
+            errEl.style.display = 'none';
+            document.getElementById('loginBtn').textContent = '登录中...';
+            document.getElementById('loginBtn').disabled = true;
+            try {
+                var body = new URLSearchParams();
+                body.set('username', username);
+                body.set('password', password);
+                var res = await fetch('/api/merchant/login', { method: 'POST', body: body });
+                var data = await res.json();
+                if (data.code === 0) {
+                    token = data.data.token;
+                    localStorage.setItem('merchant_token', token);
+                    currentUser = data.data.user;
+                    renderApp();
+                } else {
+                    errEl.textContent = data.msg || '登录失败';
+                    errEl.style.display = 'block';
+                }
+            } catch (e) {
+                errEl.textContent = '网络错误'; errEl.style.display = 'block';
+            }
+            document.getElementById('loginBtn').textContent = '登录';
+            document.getElementById('loginBtn').disabled = false;
+        }
+
+        function logout() {
+            token = null;
+            currentUser = null;
+            localStorage.removeItem('merchant_token');
+            renderLogin();
+        }
+
+        async function renderApp() {
+            if (!token) { renderLogin(); return; }
+            app.innerHTML =
+                '<div class="layout">' +
+                '<aside class="sidebar">' +
+                '<div class="sidebar-header"><i class="ri-wallet-3-line" style="font-size:22px;color:var(--primary-500)"></i><span class="logo">用户中心</span></div>' +
+                '<nav class="sidebar-nav">' +
+                '<div class="nav-item" data-page="dashboard"><i class="ri-dashboard-line"></i><span>仪表盘</span></div>' +
+                '<div class="nav-item" data-page="orders"><i class="ri-receipt-line"></i><span>订单管理</span></div>' +
+                '<div class="nav-item" data-page="settlements"><i class="ri-wallet-line"></i><span>结算管理</span></div>' +
+                '<div class="nav-item" data-page="refunds"><i class="ri-refund-line"></i><span>退款管理</span></div>' +
+                '<div class="nav-item" data-page="developer"><i class="ri-code-line"></i><span>接口配置</span></div>' +
+                '<div class="nav-item" data-page="domains"><i class="ri-global-line"></i><span>域名白名单</span></div>' +
+                '<div class="nav-item" data-page="settings"><i class="ri-settings-3-line"></i><span>账户设置</span></div>' +
+                '</nav>' +
+                '<div class="sidebar-footer"><div class="avatar" id="userAvatar">-</div><div style="flex:1;min-width:0;"><div id="userName" style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</div><div id="userId" style="font-size:11px;color:var(--text-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</div></div><button class="btn btn-sm btn-ghost" onclick="window._userLogout()" title="退出"><i class="ri-logout-box-r-line"></i></button></div>' +
+                '</aside>' +
+                '<div class="main-area">' +
+                '<header class="header"><span class="header-title" id="pageTitle">仪表盘</span><div class="header-actions"><button class="btn btn-sm btn-ghost" onclick="toggleTheme()" title="切换主题"><i class="ri-moon-line" id="themeIcon"></i></button></div></header>' +
+                '<main class="main-content" id="pageContent"><div class="loading">加载中...</div></main>' +
+                '</div></div>';
+
+            window._userLogout = logout;
+
+            document.querySelectorAll('.nav-item[data-page]').forEach(function(el) {
+                el.onclick = function() { navigateTo(el.getAttribute('data-page')); };
+            });
+
+            await loadProfile();
+            navigateTo('dashboard');
+        }
+
+        async function loadProfile() {
+            var data = await api('GET', '/profile');
+            if (!data || data.code !== 0) return;
+            currentUser = data.data;
+            var avatar = currentUser.username ? currentUser.username.charAt(0).toUpperCase() : '-';
+            document.getElementById('userAvatar').textContent = avatar;
+            document.getElementById('userName').textContent = currentUser.username || '-';
+            document.getElementById('userId').textContent = 'ID: ' + (currentUser.id || '').substring(0, 8) + '...';
+        }
+
+        function navigateTo(page) {
+            currentPage = page;
+            document.querySelectorAll('.nav-item').forEach(function(el) {
+                el.classList.toggle('active', el.getAttribute('data-page') === page);
+            });
+            var titles = { dashboard:'仪表盘', orders:'订单管理', settlements:'结算管理', refunds:'退款管理', developer:'接口配置', domains:'域名白名单', settings:'账户设置' };
+            document.getElementById('pageTitle').textContent = titles[page] || page;
+            var loaders = { dashboard: loadDashboard, orders: loadOrders, settlements: loadSettlements, refunds: loadRefunds, developer: loadDeveloper, domains: loadDomains, settings: loadSettings };
+            if (loaders[page]) loaders[page]();
+        }
+
+        function toggleTheme() {
+            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
+            localStorage.setItem('user_theme', isDark ? '' : 'dark');
+            document.getElementById('themeIcon').className = isDark ? 'ri-moon-line' : 'ri-sun-line';
+        }
+
+        async function loadDashboard() {
+            var content = document.getElementById('pageContent');
+            content.innerHTML = '<div class="loading">加载中...</div>';
+            var data = await api('GET', '/dashboard');
+            if (!data || data.code !== 0) return;
+            var d = data.data;
+
+            var trendHtml = '<div class="card"><div class="card-header"><h3 class="card-title">近7日交易趋势</h3></div><div class="card-body"><div class="chart-box" id="trendChart"></div></div></div>';
+
+            var recentOrdersHtml = '';
+            if (d.recent_orders && d.recent_orders.length > 0) {
+                recentOrdersHtml = '<table class="data-table"><thead><tr><th>订单号</th><th>金额</th><th>状态</th><th>时间</th></tr></thead><tbody>';
+                d.recent_orders.forEach(function(o) {
+                    recentOrdersHtml += '<tr><td><code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;font-size:12px;">' + escapeHtml(o.id ? o.id.substring(0, 12) + '...' : '-') + '</code></td><td>' + formatMoney(o.amount) + '</td><td>' + getStatusBadge(o.status, 'order') + '</td><td style="font-size:12px;">' + formatDate(o.created_at) + '</td></tr>';
+                });
+                recentOrdersHtml += '</tbody></table>';
+            } else {
+                recentOrdersHtml = '<div class="empty-state"><i class="ri-receipt-line"></i><p>暂无订单</p></div>';
+            }
+
+            content.innerHTML =
+                '<div class="stats-grid">' +
+                '<div class="stat-card"><div class="stat-label">可用余额</div><div class="stat-value" style="color:var(--primary-600)">' + formatMoney(d.balance) + '</div></div>' +
+                '<div class="stat-card"><div class="stat-label">冻结余额</div><div class="stat-value">' + formatMoney(d.frozen_balance) + '</div></div>' +
+                '<div class="stat-card"><div class="stat-label">今日订单</div><div class="stat-value">' + (d.today_orders || 0) + '</div><div class="stat-sub">收入 ' + formatMoney(d.today_income) + '</div></div>' +
+                '<div class="stat-card"><div class="stat-label">昨日订单</div><div class="stat-value">' + (d.yesterday_orders || 0) + '</div><div class="stat-sub">收入 ' + formatMoney(d.yesterday_income) + '</div></div>' +
+                '<div class="stat-card"><div class="stat-label">累计订单</div><div class="stat-value">' + (d.total_orders || 0) + '</div></div>' +
+                '<div class="stat-card"><div class="stat-label">累计收入</div><div class="stat-value">' + formatMoney(d.total_income) + '</div></div>' +
+                '</div>' +
+                trendHtml +
+                '<div class="card"><div class="card-header"><h3 class="card-title">最近订单</h3></div><div class="card-body" style="padding:0;"><div class="table-container">' + recentOrdersHtml + '</div></div></div>';
+
+            if (d.trend && d.trend.length > 0 && typeof echarts !== 'undefined') {
+                var chartDom = document.getElementById('trendChart');
+                if (chartDom) {
+                    var chart = echarts.init(chartDom);
+                    chart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        grid: { left: 50, right: 20, top: 20, bottom: 30 },
+                        xAxis: { type: 'category', data: d.trend.map(function(t) { return t.date.substring(5); }), axisLabel: { fontSize: 11 } },
+                        yAxis: { type: 'value', axisLabel: { fontSize: 11 } },
+                        series: [{ data: d.trend.map(function(t) { return t.amount; }), type: 'line', smooth: true, areaStyle: { opacity: 0.15 }, itemStyle: { color: '#f59e0b' } }]
+                    });
+                }
+            }
+        }
+
+        var ordersState = { offset: 0, limit: 20 };
+
+        async function loadOrders() {
+            var content = document.getElementById('pageContent');
+            content.innerHTML = '<div class="loading">加载中...</div>';
+            var params = '?limit=' + ordersState.limit + '&offset=' + ordersState.offset;
+            var status = document.getElementById('orderStatusFilter') ? document.getElementById('orderStatusFilter').value : '';
+            if (status !== '') params += '&status=' + status;
+            var data = await api('GET', '/orders' + params);
+            if (!data || data.code !== 0) return;
+            var d = data.data;
+            var total = d.total || 0;
+            var list = d.list || [];
+
+            var html =
+                '<div class="card"><div class="card-header"><h3 class="card-title">订单列表</h3>' +
+                '<div style="display:flex;gap:8px;align-items:center;">' +
+                '<select class="form-input" style="width:auto;padding:5px 10px;font-size:12px;" id="orderStatusFilter" onchange="window._reloadOrders()">' +
+                '<option value="">全部状态</option><option value="0">未支付</option><option value="1">已支付</option><option value="2">已退款</option><option value="3">已关闭</option>' +
+                '</select></div></div><div class="card-body" style="padding:0;"><div class="table-container"><table class="data-table"><thead><tr>' +
+                '<th>订单号</th><th>商户订单号</th><th>商品</th><th>支付方式</th><th>金额</th><th>状态</th><th>创建时间</th><th>操作</th>' +
+                '</tr></thead><tbody>';
+
+            if (list.length === 0) {
+                html += '<tr><td colspan="8"><div class="empty-state"><i class="ri-receipt-line"></i><p>暂无订单</p></div></td></tr>';
+            } else {
+                list.forEach(function(o) {
+                    var actions = '';
+                    if (o.status === 0) {
+                        actions = '<button class="btn btn-sm btn-ghost" onclick="window._closeOrder(\\'' + o.id + '\\')">关闭</button>';
+                    }
+                    html += '<tr>' +
+                        '<td><code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;font-size:11px;">' + escapeHtml(o.id ? o.id.substring(0, 12) + '...' : '-') + '</code></td>' +
+                        '<td>' + escapeHtml(o.out_trade_no) + '</td>' +
+                        '<td>' + escapeHtml(o.name || '-') + '</td>' +
+                        '<td>' + escapeHtml(o.type_name || o.payment_type) + '</td>' +
+                        '<td>' + formatMoney(o.amount) + '</td>' +
+                        '<td>' + getStatusBadge(o.status, 'order') + '</td>' +
+                        '<td style="font-size:12px;">' + formatDate(o.created_at) + '</td>' +
+                        '<td>' + actions + '</td></tr>';
+                });
+            }
+
+            html += '</tbody></table></div></div>';
+            html += '<div class="pagination" style="padding:12px 20px;"><span>共 ' + total + ' 条</span><div class="pagination-btns">';
+            if (ordersState.offset > 0) {
+                html += '<button class="btn btn-sm btn-ghost" onclick="window._ordersPrev()">上一页</button>';
+            }
+            if (ordersState.offset + ordersState.limit < total) {
+                html += '<button class="btn btn-sm btn-ghost" onclick="window._ordersNext()">下一页</button>';
+            }
+            html += '</div></div></div>';
+
+            content.innerHTML = html;
+            if (status !== '') document.getElementById('orderStatusFilter').value = status;
+
+            window._reloadOrders = function() { ordersState.offset = 0; loadOrders(); };
+            window._ordersPrev = function() { ordersState.offset = Math.max(0, ordersState.offset - ordersState.limit); loadOrders(); };
+            window._ordersNext = function() { ordersState.offset += ordersState.limit; loadOrders(); };
+            window._closeOrder = async function(id) {
+                if (!confirm('确定关闭该订单？')) return;
+                var res = await api('POST', '/orders/' + id + '/close');
+                if (res && res.code === 0) { showToast('订单已关闭'); loadOrders(); }
+                else if (res) showToast(res.msg || '操作失败', 'error');
+            };
+        }
+
+        var settleState = { offset: 0, limit: 10 };
+
+        async function loadSettlements() {
+            var content = document.getElementById('pageContent');
+            content.innerHTML = '<div class="loading">加载中...</div>';
+            var data = await api('GET', '/settle/list?limit=' + settleState.limit + '&offset=' + settleState.offset);
+            if (!data || data.code !== 0) return;
+            var list = data.data || [];
+            var total = data.count || 0;
+
+            var html =
+                '<div class="card"><div class="card-header"><h3 class="card-title">结算记录</h3>' +
+                '<button class="btn btn-sm btn-primary" onclick="window._applySettle()"><i class="ri-add-line"></i>申请结算</button></div>' +
+                '<div class="card-body" style="padding:0;"><div class="table-container"><table class="data-table"><thead><tr>' +
+                '<th>结算ID</th><th>金额</th><th>结算方式</th><th>结算账号</th><th>状态</th><th>申请时间</th><th>处理时间</th>' +
+                '</tr></thead><tbody>';
+
+            if (list.length === 0) {
+                html += '<tr><td colspan="7"><div class="empty-state"><i class="ri-wallet-line"></i><p>暂无结算记录</p></div></td></tr>';
+            } else {
+                list.forEach(function(s) {
+                    html += '<tr>' +
+                        '<td><code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;font-size:11px;">' + escapeHtml(s.id ? s.id.substring(0, 12) + '...' : '-') + '</code></td>' +
+                        '<td>' + formatMoney(s.amount) + '</td>' +
+                        '<td>' + escapeHtml(s.settle_type || '-') + '</td>' +
+                        '<td>' + escapeHtml(s.settle_account || '-') + '</td>' +
+                        '<td>' + getStatusBadge(s.status, 'settle') + '</td>' +
+                        '<td style="font-size:12px;">' + formatDate(s.created_at) + '</td>' +
+                        '<td style="font-size:12px;">' + formatDate(s.processed_at) + '</td></tr>';
+                });
+            }
+
+            html += '</tbody></table></div></div>';
+            html += '<div class="pagination" style="padding:12px 20px;"><span>共 ' + total + ' 条</span><div class="pagination-btns">';
+            if (settleState.offset > 0) html += '<button class="btn btn-sm btn-ghost" onclick="window._settlePrev()">上一页</button>';
+            if (settleState.offset + settleState.limit < total) html += '<button class="btn btn-sm btn-ghost" onclick="window._settleNext()">下一页</button>';
+            html += '</div></div></div>';
+
+            content.innerHTML = html;
+
+            window._settlePrev = function() { settleState.offset = Math.max(0, settleState.offset - settleState.limit); loadSettlements(); };
+            window._settleNext = function() { settleState.offset += settleState.limit; loadSettlements(); };
+            window._applySettle = function() {
+                var body =
+                    '<div class="form-group"><label class="form-label">结算金额</label><input type="number" class="form-input" id="settleAmount" placeholder="请输入结算金额" step="0.01"></div>' +
+                    '<div class="form-group"><label class="form-label">结算账号</label><input type="text" class="form-input" id="settleAccount" placeholder="留空则使用默认账号"></div>' +
+                    '<div class="form-group"><label class="form-label">结算姓名</label><input type="text" class="form-input" id="settleName" placeholder="留空则使用默认姓名"></div>' +
+                    '<div class="form-group"><label class="form-label">银行名称</label><input type="text" class="form-input" id="settleBank" placeholder="银行名称（可选）"></div>';
+                var footer = '<button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="window._submitSettle()">提交申请</button>';
+                showModal('申请结算', body, footer);
+            };
+            window._submitSettle = async function() {
+                var amount = document.getElementById('settleAmount').value;
+                if (!amount || parseFloat(amount) <= 0) { showToast('请输入有效金额', 'error'); return; }
+                var body = new URLSearchParams();
+                body.set('amount', amount);
+                var acc = document.getElementById('settleAccount').value;
+                var name = document.getElementById('settleName').value;
+                var bank = document.getElementById('settleBank').value;
+                if (acc) body.set('settle_account', acc);
+                if (name) body.set('settle_name', name);
+                if (bank) body.set('bank_name', bank);
+                var res = await api('POST', '/settle/apply', body);
+                if (res && res.code === 0) { showToast('结算申请已提交'); closeModal(); loadSettlements(); }
+                else if (res) showToast(res.msg || '操作失败', 'error');
+            };
+        }
+
+        var refundState = { offset: 0, limit: 20 };
+
+        async function loadRefunds() {
+            var content = document.getElementById('pageContent');
+            content.innerHTML = '<div class="loading">加载中...</div>';
+            var data = await api('GET', '/refunds?limit=' + refundState.limit + '&offset=' + refundState.offset);
+            if (!data || data.code !== 0) return;
+            var d = data.data;
+            var total = d.total || 0;
+            var list = d.list || [];
+
+            var html =
+                '<div class="card"><div class="card-header"><h3 class="card-title">退款记录</h3></div>' +
+                '<div class="card-body" style="padding:0;"><div class="table-container"><table class="data-table"><thead><tr>' +
+                '<th>退款单号</th><th>订单号</th><th>商品</th><th>金额</th><th>状态</th><th>原因</th><th>时间</th>' +
+                '</tr></thead><tbody>';
+
+            if (list.length === 0) {
+                html += '<tr><td colspan="7"><div class="empty-state"><i class="ri-refund-line"></i><p>暂无退款记录</p></div></td></tr>';
+            } else {
+                list.forEach(function(r) {
+                    html += '<tr>' +
+                        '<td><code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;font-size:11px;">' + escapeHtml(r.refund_no ? r.refund_no.substring(0, 12) + '...' : '-') + '</code></td>' +
+                        '<td><code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;font-size:11px;">' + escapeHtml(r.order_id ? r.order_id.substring(0, 12) + '...' : '-') + '</code></td>' +
+                        '<td>' + escapeHtml(r.order_name || '-') + '</td>' +
+                        '<td>' + formatMoney(r.amount) + '</td>' +
+                        '<td>' + getStatusBadge(r.status, 'refund') + '</td>' +
+                        '<td>' + escapeHtml(r.reason || '-') + '</td>' +
+                        '<td style="font-size:12px;">' + formatDate(r.created_at) + '</td></tr>';
+                });
+            }
+
+            html += '</tbody></table></div></div>';
+            html += '<div class="pagination" style="padding:12px 20px;"><span>共 ' + total + ' 条</span><div class="pagination-btns">';
+            if (refundState.offset > 0) html += '<button class="btn btn-sm btn-ghost" onclick="window._refundPrev()">上一页</button>';
+            if (refundState.offset + refundState.limit < total) html += '<button class="btn btn-sm btn-ghost" onclick="window._refundNext()">下一页</button>';
+            html += '</div></div></div>';
+
+            content.innerHTML = html;
+            window._refundPrev = function() { refundState.offset = Math.max(0, refundState.offset - refundState.limit); loadRefunds(); };
+            window._refundNext = function() { refundState.offset += refundState.limit; loadRefunds(); };
+        }
+
+        async function loadDeveloper() {
+            var content = document.getElementById('pageContent');
+            content.innerHTML = '<div class="loading">加载中...</div>';
+            var data = await api('GET', '/profile');
+            if (!data || data.code !== 0) return;
+            var u = data.data;
+
+            var maskedKey = u.api_key || '未设置';
+
+            content.innerHTML =
+                '<div class="card"><div class="card-header"><h3 class="card-title">接口信息</h3></div><div class="card-body">' +
+                '<div class="form-group"><label class="form-label">商户 ID (PID)</label><div style="display:flex;align-items:center;gap:8px;"><code style="background:var(--bg-tertiary);padding:6px 12px;border-radius:6px;font-size:14px;flex:1;">' + escapeHtml(u.id) + '</code><button class="copy-btn" onclick="navigator.clipboard.writeText(\\'' + escapeHtml(u.id) + '\\');showToast(\\'已复制\\')"><i class="ri-file-copy-line"></i></button></div></div>' +
+                '<div class="form-group"><label class="form-label">API Key</label><div style="display:flex;align-items:center;gap:8px;"><code style="background:var(--bg-tertiary);padding:6px 12px;border-radius:6px;font-size:14px;flex:1;word-break:break-all;">' + escapeHtml(maskedKey) + '</code><button class="btn btn-sm btn-danger" onclick="window._resetApiKey()"><i class="ri-refresh-line"></i>重置</button></div><div class="form-hint">重置后旧密钥立即失效，请谨慎操作</div></div>' +
+                '</div></div>' +
+
+                '<div class="card"><div class="card-header"><h3 class="card-title">签名配置</h3></div><div class="card-body">' +
+                '<div class="form-group"><label class="form-label">签名方式</label><select class="form-input" id="devSignType" style="max-width:300px;"><option value="hmac-sha256">HMAC-SHA256</option><option value="md5">MD5</option><option value="rsa">RSA</option></select></div>' +
+                '<div class="form-group" id="rsaKeyGroup" style="display:none;"><label class="form-label">RSA 公钥</label><textarea class="form-input" id="devRsaKey" placeholder="-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----">' + escapeHtml(u.rsa_public_key || '') + '</textarea></div>' +
+                '<button class="btn btn-primary" onclick="window._saveSign()"><i class="ri-save-line"></i>保存签名配置</button>' +
+                '</div></div>' +
+
+                '<div class="card"><div class="card-header"><h3 class="card-title">回调配置</h3></div><div class="card-body">' +
+                '<div class="form-group"><label class="form-label">默认异步通知地址 (notify_url)</label><input type="url" class="form-input" id="devNotifyUrl" placeholder="https://your-domain.com/notify" value="' + escapeHtml(u.notify_url || '') + '"></div>' +
+                '<div class="form-group"><label class="form-label">默认同步跳转地址 (return_url)</label><input type="url" class="form-input" id="devReturnUrl" placeholder="https://your-domain.com/return" value="' + escapeHtml(u.return_url || '') + '"></div>' +
+                '<button class="btn btn-primary" onclick="window._saveUrls()"><i class="ri-save-line"></i>保存回调配置</button>' +
+                '</div></div>';
+
+            document.getElementById('devSignType').value = u.api_key_type || 'hmac-sha256';
+            document.getElementById('devSignType').onchange = function() {
+                document.getElementById('rsaKeyGroup').style.display = this.value === 'rsa' ? 'block' : 'none';
+            };
+            if (u.api_key_type === 'rsa') document.getElementById('rsaKeyGroup').style.display = 'block';
+
+            window._saveSign = async function() {
+                var signType = document.getElementById('devSignType').value;
+                var rsaKey = document.getElementById('devRsaKey').value;
+                var body = new URLSearchParams();
+                body.set('api_key_type', signType);
+                if (signType === 'rsa') body.set('rsa_public_key', rsaKey);
+                var res = await api('PUT', '/developer/signature', body);
+                if (res && res.code === 0) showToast('签名配置已保存');
+                else if (res) showToast(res.msg || '保存失败', 'error');
+            };
+            window._saveUrls = async function() {
+                var body = new URLSearchParams();
+                body.set('notify_url', document.getElementById('devNotifyUrl').value);
+                body.set('return_url', document.getElementById('devReturnUrl').value);
+                var res = await api('PUT', '/developer/urls', body);
+                if (res && res.code === 0) showToast('回调配置已保存');
+                else if (res) showToast(res.msg || '保存失败', 'error');
+            };
+            window._resetApiKey = function() {
+                showModal('重置 API Key',
+                    '<p style="margin-bottom:16px;color:var(--error);font-size:13px;">重置后旧密钥将立即失效，所有使用旧密钥的接口调用将无法正常工作。</p>' +
+                    '<div class="form-group"><label class="form-label">请输入当前登录密码确认</label><input type="password" class="form-input" id="resetPwd" placeholder="当前密码"></div>',
+                    '<button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="window._confirmResetApiKey()">确认重置</button>'
+                );
+            };
+            window._confirmResetApiKey = async function() {
+                var pwd = document.getElementById('resetPwd').value;
+                if (!pwd) { showToast('请输入密码', 'error'); return; }
+                var body = new URLSearchParams();
+                body.set('password', pwd);
+                var res = await api('POST', '/developer/api-key/reset', body);
+                if (res && res.code === 0) {
+                    showToast('API Key 已重置，请妥善保管');
+                    closeModal();
+                    loadDeveloper();
+                } else if (res) {
+                    showToast(res.msg || '重置失败', 'error');
+                }
+            };
+        }
+
+        var domainState = { newDomain: '' };
+
+        async function loadDomains() {
+            var content = document.getElementById('pageContent');
+            content.innerHTML = '<div class="loading">加载中...</div>';
+            var data = await api('GET', '/domains');
+            if (!data || data.code !== 0) return;
+            var list = data.data || [];
+
+            var html =
+                '<div class="card"><div class="card-header"><h3 class="card-title">域名白名单</h3>' +
+                '<button class="btn btn-sm btn-primary" onclick="window._addDomain()"><i class="ri-add-line"></i>添加域名</button></div>' +
+                '<div class="card-body">';
+
+            if (list.length === 0) {
+                html += '<div class="empty-state"><i class="ri-global-line"></i><p>暂未添加任何域名</p><p style="font-size:12px;margin-top:4px;">添加域名后，支付请求必须来自白名单域名</p></div>';
+            } else {
+                html += '<div class="table-container"><table class="data-table"><thead><tr><th>域名</th><th>状态</th><th>添加时间</th><th>操作</th></tr></thead><tbody>';
+                list.forEach(function(d) {
+                    html += '<tr>' +
+                        '<td>' + escapeHtml(d.domain) + '</td>' +
+                        '<td>' + (d.status === 1 ? '<span class="badge badge-success">启用</span>' : '<span class="badge badge-default">禁用</span>') + '</td>' +
+                        '<td style="font-size:12px;">' + formatDate(d.created_at) + '</td>' +
+                        '<td><button class="btn btn-sm btn-danger" onclick="window._deleteDomain(' + d.id + ')"><i class="ri-delete-bin-line"></i></button></td></tr>';
+                });
+                html += '</tbody></table></div>';
+            }
+
+            html += '</div></div>';
+            content.innerHTML = html;
+
+            window._addDomain = function() {
+                showModal('添加域名',
+                    '<div class="form-group"><label class="form-label">域名</label><input type="text" class="form-input" id="newDomain" placeholder="example.com（不含协议和路径）"></div>',
+                    '<button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="window._submitDomain()">添加</button>'
+                );
+            };
+            window._submitDomain = async function() {
+                var domain = document.getElementById('newDomain').value.trim();
+                if (!domain) { showToast('请输入域名', 'error'); return; }
+                var body = new URLSearchParams();
+                body.set('domain', domain);
+                var res = await api('POST', '/domains', body);
+                if (res && res.code === 0) { showToast('添加成功'); closeModal(); loadDomains(); }
+                else if (res) showToast(res.msg || '添加失败', 'error');
+            };
+            window._deleteDomain = async function(id) {
+                if (!confirm('确定删除该域名？')) return;
+                var res = await api('DELETE', '/domains/' + id);
+                if (res && res.code === 0) { showToast('删除成功'); loadDomains(); }
+                else if (res) showToast(res.msg || '删除失败', 'error');
+            };
+        }
+
+        async function loadSettings() {
+            var content = document.getElementById('pageContent');
+            content.innerHTML = '<div class="loading">加载中...</div>';
+            var data = await api('GET', '/profile');
+            if (!data || data.code !== 0) return;
+            var u = data.data;
+
+            content.innerHTML =
+                '<div class="card"><div class="card-header"><h3 class="card-title">基本信息</h3></div><div class="card-body">' +
+                '<div class="form-row">' +
+                '<div class="form-group"><label class="form-label">邮箱</label><input type="email" class="form-input" id="setEmail" value="' + escapeHtml(u.email || '') + '"></div>' +
+                '<div class="form-group"><label class="form-label">手机号</label><input type="tel" class="form-input" id="setPhone" value="' + escapeHtml(u.contact_phone || '') + '"></div>' +
+                '</div>' +
+                '<div class="form-row">' +
+                '<div class="form-group"><label class="form-label">联系 QQ</label><input type="text" class="form-input" id="setQQ" value="' + escapeHtml(u.contact_qq || '') + '"></div>' +
+                '<div class="form-group"><label class="form-label">联系微信</label><input type="text" class="form-input" id="setWechat" value="' + escapeHtml(u.contact_wechat || '') + '"></div>' +
+                '</div>' +
+                '<button class="btn btn-primary" onclick="window._saveProfile()"><i class="ri-save-line"></i>保存信息</button>' +
+                '</div></div>' +
+
+                '<div class="card"><div class="card-header"><h3 class="card-title">结算信息</h3></div><div class="card-body">' +
+                '<div class="form-group"><label class="form-label">结算方式</label><select class="form-input" id="setSettleType" style="max-width:300px;"><option value="alipay">支付宝</option><option value="bank">银行卡</option><option value="wechat">微信</option></select></div>' +
+                '<div class="form-row">' +
+                '<div class="form-group"><label class="form-label">结算账号</label><input type="text" class="form-input" id="setSettleAccount" value="' + escapeHtml(u.settle_account || '') + '"></div>' +
+                '<div class="form-group"><label class="form-label">结算姓名</label><input type="text" class="form-input" id="setSettleName" value="' + escapeHtml(u.settle_name || '') + '"></div>' +
+                '</div>' +
+                '<button class="btn btn-primary" onclick="window._saveSettle()"><i class="ri-save-line"></i>保存结算信息</button>' +
+                '</div></div>' +
+
+                '<div class="card"><div class="card-header"><h3 class="card-title">修改密码</h3></div><div class="card-body">' +
+                '<div class="form-group"><label class="form-label">当前密码</label><input type="password" class="form-input" id="setOldPwd" style="max-width:300px;"></div>' +
+                '<div class="form-group"><label class="form-label">新密码</label><input type="password" class="form-input" id="setNewPwd" style="max-width:300px;"><div class="form-hint">不少于 6 位</div></div>' +
+                '<button class="btn btn-primary" onclick="window._changePwd()"><i class="ri-lock-line"></i>修改密码</button>' +
+                '</div></div>' +
+
+                '<div class="card"><div class="card-header"><h3 class="card-title">登录信息</h3></div><div class="card-body">' +
+                '<div class="form-row">' +
+                '<div class="form-group"><label class="form-label">最后登录时间</label><div style="padding:8px 0;font-size:14px;">' + formatDate(u.last_login_at) + '</div></div>' +
+                '<div class="form-group"><label class="form-label">最后登录 IP</label><div style="padding:8px 0;font-size:14px;">' + escapeHtml(u.last_login_ip || '-') + '</div></div>' +
+                '</div></div></div>';
+
+            document.getElementById('setSettleType').value = u.settle_type || 'alipay';
+
+            window._saveProfile = async function() {
+                var body = new URLSearchParams();
+                body.set('email', document.getElementById('setEmail').value);
+                body.set('contact_phone', document.getElementById('setPhone').value);
+                body.set('contact_qq', document.getElementById('setQQ').value);
+                body.set('contact_wechat', document.getElementById('setWechat').value);
+                var res = await api('PUT', '/profile', body);
+                if (res && res.code === 0) showToast('信息已保存');
+                else if (res) showToast(res.msg || '保存失败', 'error');
+            };
+            window._saveSettle = async function() {
+                var body = new URLSearchParams();
+                body.set('settle_type', document.getElementById('setSettleType').value);
+                body.set('settle_account', document.getElementById('setSettleAccount').value);
+                body.set('settle_name', document.getElementById('setSettleName').value);
+                var res = await api('PUT', '/profile', body);
+                if (res && res.code === 0) showToast('结算信息已保存');
+                else if (res) showToast(res.msg || '保存失败', 'error');
+            };
+            window._changePwd = async function() {
+                var oldPwd = document.getElementById('setOldPwd').value;
+                var newPwd = document.getElementById('setNewPwd').value;
+                if (!oldPwd || !newPwd) { showToast('请输入当前密码和新密码', 'error'); return; }
+                if (newPwd.length < 6) { showToast('新密码长度不能少于6位', 'error'); return; }
+                var body = new URLSearchParams();
+                body.set('old_password', oldPwd);
+                body.set('new_password', newPwd);
+                var res = await api('POST', '/password', body);
+                if (res && res.code === 0) {
+                    showToast('密码已修改，请重新登录');
+                    setTimeout(logout, 1500);
+                } else if (res) {
+                    showToast(res.msg || '修改失败', 'error');
+                }
+            };
+        }
+
+        // 初始化主题
+        var savedTheme = localStorage.getItem('user_theme');
+        if (savedTheme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+
+        // 初始化
+        renderApp();
+    })();
+    </script>
+</body>
+</html>`);
+});
+
 // 404 处理
 app.notFound((c) => {
     return c.json({ code: -4, msg: 'Not Found' }, 404);

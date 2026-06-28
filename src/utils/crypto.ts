@@ -12,6 +12,14 @@ export function generateNonce(length: number = 32): string {
 }
 
 /**
+ * 生成 API Key（UUID v7 格式去掉横线）
+ */
+export async function generateApiKey(): Promise<string> {
+    const { generateUUIDv7 } = await import('./uuid');
+    return generateUUIDv7().replace(/-/g, '');
+}
+
+/**
  * MD5 哈希
  * 注意: Cloudflare Workers 不原生支持 MD5，使用简化实现
  */
