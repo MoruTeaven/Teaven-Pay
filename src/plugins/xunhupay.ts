@@ -259,12 +259,14 @@ export class XunhupayPlugin implements PaymentPlugin {
             } else {
                 return {
                     success: false,
+                    method: 'jump',
                     message: data.errmsg || '创建支付失败'
                 };
             }
         } catch (error: any) {
             return {
                 success: false,
+                method: 'jump',
                 message: error.message || '创建支付失败'
             };
         }

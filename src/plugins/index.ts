@@ -42,6 +42,16 @@ export function getRegisteredPlugins(): string[] {
 }
 
 /**
+ * 获取所有插件信息（ID 和名称）
+ */
+export function getPluginList(): Array<{ id: string; name: string }> {
+    return Object.entries(plugins).map(([id, factory]) => {
+        const plugin = factory();
+        return { id, name: plugin.name };
+    });
+}
+
+/**
  * 检查插件是否存在
  */
 export function hasPlugin(pluginId: string): boolean {

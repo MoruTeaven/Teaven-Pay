@@ -1924,6 +1924,21 @@ app.get('/admin', async (c) => {
                 }
             },
 
+            // 获取可用插件列表
+            async getPlugins() {
+                try {
+                    const response = await this.request('/api/admin/plugins');
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { data: data.data };
+                    }
+                    throw new Error(data.msg || '获取插件列表失败');
+                } catch (error) {
+                    console.error('获取插件列表失败:', error);
+                    return { data: [] };
+                }
+            },
+
             // 更新支付方式
             async updatePaymentType(id, paymentTypeData) {
                 try {
@@ -3664,11 +3679,15 @@ app.get('/admin', async (c) => {
                     console.error('获取支付方式失败:', e);
                 }
                 
-                var pluginOptions = [
-                    { value: 'alipay', label: '支付宝' },
-                    { value: 'wxpay', label: '微信支付' },
-                    { value: 'qqpay', label: 'QQ钱包' }
-                ];
+                var pluginOptions = [];
+                try {
+                    var pluginResult = await api.getPlugins();
+                    pluginOptions = (pluginResult.data || []).map(function(p) {
+                        return { value: p.id, label: p.name };
+                    });
+                } catch (e) {
+                    console.error('获取插件列表失败:', e);
+                }
                 
                 var paymentTypeOptions = paymentTypes.map(function(pt) {
                     return '<option value="' + pt.id + '" ' + (channelData.paymentTypeId === pt.id ? 'selected' : '') + '>' + (pt.displayName || pt.name) + '</option>';

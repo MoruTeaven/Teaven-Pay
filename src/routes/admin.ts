@@ -7,6 +7,7 @@ import { Env } from '../types/env';
 import { authMiddleware, adminMiddleware, signJWT } from '../middleware/auth';
 import { generateUUIDv7 } from '../utils/uuid';
 import { hashPassword, verifyPassword } from '../utils/crypto';
+import { getPluginList } from '../plugins';
 
 export const adminRouter = new Hono<{ Bindings: Env }>();
 
@@ -948,6 +949,20 @@ adminRouter.patch('/payment-types/:id/status', async (c) => {
 });
 
 /**
+ * 获取可用插件列表
+ * GET /api/admin/plugins
+ */
+adminRouter.get('/plugins', async (c) => {
+    try {
+        const plugins = getPluginList();
+        return c.json({ code: 1, data: plugins });
+    } catch (error) {
+        console.error('Get plugins error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
  * 支付通道列表
  * GET /api/admin/channels
  */
@@ -1095,16 +1110,16 @@ adminRouter.put('/channels/:id', async (c) => {
             paymentTypeId || null,
             name || null,
             plugin || null,
-            config !== undefined ? JSON.stringify(config) : undefined,
+            config !== undefined ? JSON.stringify(config) : null,
             feeRate !== undefined ? feeRate : null,
             minAmount !== undefined ? minAmount : null,
             maxAmount !== undefined ? maxAmount : null,
             dailyLimit !== undefined ? dailyLimit : null,
-            timeStart !== undefined ? timeStart : undefined,
-            timeStop !== undefined ? timeStop : undefined,
+            timeStart !== undefined ? timeStart : null,
+            timeStop !== undefined ? timeStop : null,
             sortOrder !== undefined ? sortOrder : null,
             status !== undefined ? status : null,
-            description !== undefined ? description : undefined,
+            description !== undefined ? description : null,
             now,
             id
         ).run();
