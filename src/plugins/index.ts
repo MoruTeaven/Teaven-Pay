@@ -42,12 +42,12 @@ export function getRegisteredPlugins(): string[] {
 }
 
 /**
- * 获取所有插件信息（ID 和名称）
+ * 获取所有插件信息（ID、名称和支持的支付方式）
  */
-export function getPluginList(): Array<{ id: string; name: string }> {
+export function getPluginList(): Array<{ id: string; name: string; supportedTypes: string[] }> {
     return Object.entries(plugins).map(([id, factory]) => {
         const plugin = factory();
-        return { id, name: plugin.name };
+        return { id, name: plugin.name, supportedTypes: plugin.supportedTypes };
     });
 }
 

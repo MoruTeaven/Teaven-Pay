@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { Env } from '../types/env';
 import { authMiddleware, merchantMiddleware, signJWT } from '../middleware/auth';
-import { hashPassword, verifyPassword, generateApiKey } from '../utils/crypto';
+import { hashPassword, verifyPassword } from '../utils/crypto';
 import { generateUUIDv7 } from '../utils/uuid';
 
 export const merchantRouter = new Hono<{ Bindings: Env }>();
@@ -99,8 +99,12 @@ merchantRouter.get('/profile', async (c) => {
             return c.json({ code: -2, msg: '用户不存在' }, 401);
         }
 
+        // 获取用户的 API 密钥列表
+        const apiKeysResult = await c.env.DB.prepare(
+            'SELECT id, name, api_key_type, status, last_used_at, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC'
+        ).bind(payload.id).all();
+
         const u = user as any;
-        const apiKeyPreview = u.api_key ? u.api_key.substring(0, 8) + '****' : null;
 
         return c.json({
             code: 0,
@@ -112,9 +116,7 @@ merchantRouter.get('/profile', async (c) => {
                 status: u.status,
                 balance: u.balance,
                 frozen_balance: u.frozen_balance,
-                api_key: apiKeyPreview,
-                api_key_type: u.api_key_type,
-                rsa_public_key: u.rsa_public_key,
+                api_keys: apiKeysResult.results || [],
                 notify_url: u.notify_url,
                 return_url: u.return_url,
                 contact_qq: u.contact_qq,
@@ -716,87 +718,6 @@ merchantRouter.put('/developer/urls', async (c) => {
         return c.json({ code: 0, msg: '更新成功' });
     } catch (error) {
         console.error('Update developer urls error:', error);
-        return c.json({ code: -5, msg: '系统错误' }, 500);
-    }
-});
-
-/**
- * 更新签名配置
- * PUT /api/merchant/developer/signature
- */
-merchantRouter.put('/developer/signature', async (c) => {
-    const payload = c.get('user') as any;
-    const body = await c.req.parseBody();
-
-    const apiKeyType = (body.api_key_type as string || '').trim();
-    const rsaPublicKey = body.rsa_public_key as string;
-
-    const validTypes = ['md5', 'hmac-sha256', 'rsa'];
-    if (!validTypes.includes(apiKeyType)) {
-        return c.json({ code: -1, msg: '签名类型不合法' });
-    }
-
-    if (apiKeyType === 'rsa' && !rsaPublicKey) {
-        return c.json({ code: -1, msg: 'RSA 模式需要提供公钥' });
-    }
-
-    try {
-        await c.env.DB.prepare(
-            "UPDATE users SET api_key_type = ?, rsa_public_key = ?, updated_at = datetime('now') WHERE id = ?"
-        ).bind(apiKeyType, rsaPublicKey || null, payload.id).run();
-
-        return c.json({ code: 0, msg: '更新成功' });
-    } catch (error) {
-        console.error('Update signature config error:', error);
-        return c.json({ code: -5, msg: '系统错误' }, 500);
-    }
-});
-
-/**
- * 重置 API Key
- * POST /api/merchant/developer/api-key/reset
- */
-merchantRouter.post('/developer/api-key/reset', async (c) => {
-    const payload = c.get('user') as any;
-    const body = await c.req.parseBody();
-    const password = body.password as string;
-
-    if (!password) {
-        return c.json({ code: -1, msg: '请输入当前密码' });
-    }
-
-    try {
-        const user = await c.env.DB.prepare(
-            'SELECT * FROM users WHERE id = ? AND role = ?'
-        ).bind(payload.id, 'merchant').first();
-
-        if (!user) {
-            return c.json({ code: -2, msg: '用户不存在' }, 401);
-        }
-
-        const valid = await verifyPassword(password, (user as any).password_hash, (user as any).salt);
-        if (!valid) {
-            return c.json({ code: -1, msg: '密码错误' });
-        }
-
-        const newApiKey = await generateApiKey();
-        await c.env.DB.prepare(
-            "UPDATE users SET api_key = ?, updated_at = datetime('now') WHERE id = ?"
-        ).bind(newApiKey, payload.id).run();
-
-        const now = new Date().toISOString();
-        await c.env.DB.prepare(`
-            INSERT INTO operation_logs (user_id, action, detail, ip, created_at)
-            VALUES (?, 'reset_api_key', ?, ?, ?)
-        `).bind(payload.id, '{}', c.req.header('CF-Connecting-IP') || '', now).run();
-
-        return c.json({
-            code: 0,
-            msg: 'API Key 已重置，请妥善保管',
-            data: { api_key: newApiKey }
-        });
-    } catch (error) {
-        console.error('Reset API key error:', error);
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }
 });

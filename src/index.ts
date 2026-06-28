@@ -14,6 +14,7 @@ import { payRouter } from './routes/pay';
 import { merchantRouter } from './routes/merchant';
 import { adminRouter } from './routes/admin';
 import { notifyRouter } from './routes/notify';
+import { apiKeyRouter } from './routes/api-key';
 
 // 中间件
 import { authMiddleware } from './middleware/auth';
@@ -59,6 +60,7 @@ app.get('/api/health', (c) => {
 // API 路由
 app.route('/api/pay', payRouter);
 app.route('/api/merchant', merchantRouter);
+app.route('/api/merchant/api-keys', apiKeyRouter);
 app.route('/api/admin', adminRouter);
 
 // 兼容易支付标准接口
@@ -173,6 +175,168 @@ app.get('/result/:tradeNo', async (c) => {
         </body>
         </html>
     `);
+});
+
+// 公开收银台页面
+app.get('/pay/:merchantId', async (c) => {
+    const { merchantId } = c.req.param();
+    const env = c.env;
+
+    try {
+        const user = await env.DB.prepare(
+            'SELECT id, username, status FROM users WHERE id = ? AND role = ?'
+        ).bind(merchantId, 'merchant').first();
+
+        if (!user || user.status !== 1) {
+            return c.html(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>收银台</title></head><body style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#6b7280;"><div style="text-align:center;"><h2>商户不存在或已停用</h2></div></body></html>`);
+        }
+
+        const channels = await env.DB.prepare(
+            `SELECT pt.id, pt.name, pt.icon FROM payment_types pt
+             INNER JOIN channels c ON c.payment_type_id = pt.id AND c.status = 1
+             GROUP BY pt.id ORDER BY pt.sort_order`
+        ).all();
+
+        const payTypes = (channels.results || []).map((ch: any) => ({ id: ch.id, name: ch.name, icon: ch.icon || '' }));
+
+        return c.html(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>收银台 - ${user.username || 'Teaven Pay'}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.9.1/fonts/remixicon.css">
+    <style>
+        :root{--primary:#f59e0b;--primary-hover:#d97706;--bg:#f9fafb;--card:#fff;--border:#e5e7eb;--text:#111827;--text2:#4b5563;--text3:#9ca3af;--success:#10b981;--error:#ef4444;--radius:12px;}
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+        .cashier{width:100%;max-width:420px;}
+        .cashier-header{text-align:center;margin-bottom:24px;}
+        .cashier-header h1{font-size:20px;font-weight:700;color:var(--primary);}
+        .cashier-header p{font-size:13px;color:var(--text3);margin-top:4px;}
+        .cashier-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.07);}
+        .form-group{margin-bottom:20px;}
+        .form-label{display:block;font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;}
+        .amount-input{position:relative;}
+        .amount-prefix{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:20px;font-weight:700;color:var(--text);}
+        .amount-input input{width:100%;padding:14px 14px 14px 36px;border:2px solid var(--border);border-radius:10px;font-size:24px;font-weight:700;outline:none;transition:border-color .2s;}
+        .amount-input input:focus{border-color:var(--primary);}
+        .amount-input input::placeholder{color:var(--text3);font-weight:400;font-size:16px;}
+        .pay-types{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;}
+        .pay-type{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 10px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;transition:all .2s;user-select:none;}
+        .pay-type:hover{border-color:var(--primary);background:#fffbeb;}
+        .pay-type.selected{border-color:var(--primary);background:#fffbeb;color:var(--primary-hover);}
+        .pay-type i{font-size:20px;}
+        .submit-btn{width:100%;padding:14px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;transition:background .2s;margin-top:8px;}
+        .submit-btn:hover{background:var(--primary-hover);}
+        .submit-btn:disabled{background:#d1d5db;cursor:not-allowed;}
+        .error-msg{background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none;}
+        .cashier-footer{text-align:center;margin-top:16px;font-size:12px;color:var(--text3);}
+    </style>
+</head>
+<body>
+    <div class="cashier">
+        <div class="cashier-header">
+            <h1><i class="ri-wallet-3-line"></i> 在线收银台</h1>
+            <p>${user.username || 'Teaven Pay'}</p>
+        </div>
+        <div class="cashier-card">
+            <div class="error-msg" id="errorMsg"></div>
+            <div class="form-group">
+                <label class="form-label">付款金额（元）</label>
+                <div class="amount-input">
+                    <span class="amount-prefix">\u00A5</span>
+                    <input type="number" id="amount" placeholder="0.00" min="0.01" step="0.01" autofocus>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">选择支付方式</label>
+                <div class="pay-types" id="payTypes"></div>
+            </div>
+            <button class="submit-btn" id="submitBtn" onclick="submitPay()">立即支付</button>
+        </div>
+        <div class="cashier-footer">Powered by Teaven Pay</div>
+    </div>
+    <script>
+        var payTypes = ${JSON.stringify(payTypes)};
+        var selectedType = '';
+        var merchantId = '${merchantId}';
+        var payTypesEl = document.getElementById('payTypes');
+
+        var iconMap = {alipay:'ri-alipay-line',wxpay:'ri-wechat-pay-line',qqpay:'ri-qq-line'};
+
+        if (payTypes.length === 0) {
+            payTypesEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px;">暂无可用支付方式</div>';
+        } else {
+            payTypes.forEach(function(pt, i) {
+                var icon = iconMap[pt.id] || 'ri-bank-card-line';
+                var div = document.createElement('div');
+                div.className = 'pay-type';
+                div.setAttribute('data-id', pt.id);
+                div.innerHTML = '<i class="' + icon + '"></i><span>' + pt.name + '</span>';
+                div.onclick = function() {
+                    document.querySelectorAll('.pay-type').forEach(function(el){el.classList.remove('selected');});
+                    div.classList.add('selected');
+                    selectedType = pt.id;
+                };
+                payTypesEl.appendChild(div);
+                if (i === 0) { div.classList.add('selected'); selectedType = pt.id; }
+            });
+        }
+
+        function showError(msg) {
+            var el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        async function submitPay() {
+            var amountEl = document.getElementById('amount');
+            var amount = parseFloat(amountEl.value);
+            var errEl = document.getElementById('errorMsg');
+            errEl.style.display = 'none';
+
+            if (!amount || amount <= 0) { showError('请输入有效的付款金额'); return; }
+            if (amount < 0.01) { showError('金额不能小于0.01元'); return; }
+            if (!selectedType) { showError('请选择支付方式'); return; }
+
+            var btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.textContent = '正在创建订单...';
+
+            try {
+                var body = new URLSearchParams();
+                body.set('merchant_id', merchantId);
+                body.set('amount', amount.toFixed(2));
+                body.set('type', selectedType);
+                body.set('name', '在线收银台付款');
+
+                var res = await fetch('/api/pay/cashier', { method: 'POST', body: body });
+                var data = await res.json();
+
+                if (data.code === 1) {
+                    if (data.payurl) {
+                        window.location.href = data.payurl;
+                    } else if (data.qrcode) {
+                        window.location.href = '/cashier/' + data.trade_no;
+                    }
+                } else {
+                    showError(data.msg || '创建订单失败');
+                }
+            } catch (e) {
+                showError('网络错误，请重试');
+            }
+
+            btn.disabled = false;
+            btn.textContent = '立即支付';
+        }
+    </script>
+</body>
+</html>`);
+    } catch (error) {
+        console.error('Cashier page error:', error);
+        return c.html(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>系统错误</body></html>`, 500);
+    }
 });
 
 // 管理后台页面（同时匹配 /admin 和 /admin/）
@@ -3682,19 +3846,21 @@ app.get('/admin', async (c) => {
                 var pluginOptions = [];
                 try {
                     var pluginResult = await api.getPlugins();
-                    pluginOptions = (pluginResult.data || []).map(function(p) {
-                        return { value: p.id, label: p.name };
-                    });
+                    pluginOptions = pluginResult.data || [];
                 } catch (e) {
                     console.error('获取插件列表失败:', e);
                 }
                 
-                var paymentTypeOptions = paymentTypes.map(function(pt) {
-                    return '<option value="' + pt.id + '" ' + (channelData.paymentTypeId === pt.id ? 'selected' : '') + '>' + (pt.displayName || pt.name) + '</option>';
-                }).join('');
+                // 保存到全局变量供联动使用
+                window._pluginOptions = pluginOptions;
+                window._paymentTypes = paymentTypes;
                 
                 var pluginSelectOptions = pluginOptions.map(function(p) {
-                    return '<option value="' + p.value + '" ' + (channelData.plugin === p.value ? 'selected' : '') + '>' + p.label + '</option>';
+                    return '<option value="' + p.id + '" ' + (channelData.plugin === p.id ? 'selected' : '') + '>' + p.name + '</option>';
+                }).join('');
+                
+                var paymentTypeOptions = paymentTypes.map(function(pt) {
+                    return '<option value="' + pt.id + '" ' + (channelData.paymentTypeId === pt.id ? 'selected' : '') + '>' + (pt.displayName || pt.name) + '</option>';
                 }).join('');
                 
                 var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
@@ -3714,14 +3880,14 @@ app.get('/admin', async (c) => {
                     '        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">' +
                     '            <div class="form-group">' +
                     '                <label class="form-label">支付方式 <span style="color: var(--error);">*</span></label>' +
-                    '                <select class="form-input form-select" id="channelPaymentTypeId">' +
+                    '                <select class="form-input form-select" id="channelPaymentTypeId" onchange="onPaymentTypeChange()">' +
                     '                    <option value="">请选择支付方式</option>' +
                     paymentTypeOptions +
                     '                </select>' +
                     '            </div>' +
                     '            <div class="form-group">' +
                     '                <label class="form-label">插件 <span style="color: var(--error);">*</span></label>' +
-                    '                <select class="form-input form-select" id="channelPlugin">' +
+                    '                <select class="form-input form-select" id="channelPlugin" onchange="onPluginChange()">' +
                     '                    <option value="">请选择插件</option>' +
                     pluginSelectOptions +
                     '                </select>' +
@@ -4023,6 +4189,80 @@ app.get('/admin', async (c) => {
             }
         }
 
+        // 插件选择联动
+        function onPluginChange() {
+            var pluginId = document.getElementById('channelPlugin').value;
+            var paymentTypeSelect = document.getElementById('channelPaymentTypeId');
+            var currentPaymentType = paymentTypeSelect.value;
+            
+            // 清空支付方式选择
+            paymentTypeSelect.innerHTML = '<option value="">请选择支付方式</option>';
+            
+            if (!pluginId) {
+                // 如果没有选择插件，显示所有支付方式
+                window._paymentTypes.forEach(function(pt) {
+                    var option = document.createElement('option');
+                    option.value = pt.id;
+                    option.textContent = pt.displayName || pt.name;
+                    if (pt.id === currentPaymentType) option.selected = true;
+                    paymentTypeSelect.appendChild(option);
+                });
+                return;
+            }
+            
+            // 找到选中的插件
+            var selectedPlugin = window._pluginOptions.find(function(p) { return p.id === pluginId; });
+            if (!selectedPlugin || !selectedPlugin.supportedTypes) return;
+            
+            // 根据插件支持的支付方式过滤
+            window._paymentTypes.forEach(function(pt) {
+                if (selectedPlugin.supportedTypes.includes(pt.name)) {
+                    var option = document.createElement('option');
+                    option.value = pt.id;
+                    option.textContent = pt.displayName || pt.name;
+                    if (pt.id === currentPaymentType) option.selected = true;
+                    paymentTypeSelect.appendChild(option);
+                }
+            });
+        }
+        
+        // 支付方式选择联动
+        function onPaymentTypeChange() {
+            var paymentTypeId = document.getElementById('channelPaymentTypeId').value;
+            var pluginSelect = document.getElementById('channelPlugin');
+            var currentPlugin = pluginSelect.value;
+            
+            // 清空插件选择
+            pluginSelect.innerHTML = '<option value="">请选择插件</option>';
+            
+            if (!paymentTypeId) {
+                // 如果没有选择支付方式，显示所有插件
+                window._pluginOptions.forEach(function(p) {
+                    var option = document.createElement('option');
+                    option.value = p.id;
+                    option.textContent = p.name;
+                    if (p.id === currentPlugin) option.selected = true;
+                    pluginSelect.appendChild(option);
+                });
+                return;
+            }
+            
+            // 找到选中的支付方式
+            var selectedPT = window._paymentTypes.find(function(pt) { return pt.id === paymentTypeId; });
+            if (!selectedPT) return;
+            
+            // 根据支付方式过滤支持该方式的插件
+            window._pluginOptions.forEach(function(p) {
+                if (p.supportedTypes && p.supportedTypes.includes(selectedPT.name)) {
+                    var option = document.createElement('option');
+                    option.value = p.id;
+                    option.textContent = p.name;
+                    if (p.id === currentPlugin) option.selected = true;
+                    pluginSelect.appendChild(option);
+                }
+            });
+        }
+        
         // 提交通道表单
         async function submitChannel() {
             var id = document.getElementById('channelId').value;
@@ -4277,6 +4517,21 @@ app.get('/admin', async (c) => {
                         '            <label class="form-label">微信平台公钥</label>' +
                         '            <textarea class="form-input" id="config_wxpayPublicKey" rows="4" placeholder="微信平台公钥">' + (config.wxpayPublicKey || '') + '</textarea>' +
                         '        </div>';
+                } else if (channel.plugin === 'xunhupay') {
+                    configFields =
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">APP ID</label>' +
+                        '            <input type="text" class="form-input" id="config_appId" value="' + (config.appId || '') + '" placeholder="虎皮椒 APP ID">' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">密钥 (APP SECRET)</label>' +
+                        '            <input type="text" class="form-input" id="config_appSecret" value="' + (config.appSecret || '') + '" placeholder="虎皮椒密钥">' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">通知地址</label>' +
+                        '            <input type="text" class="form-input" id="config_notifyUrl" value="' + (config.notifyUrl || '') + '" placeholder="留空使用系统默认">' +
+                        '            <div class="form-hint">留空则使用系统默认通知地址</div>' +
+                        '        </div>';
                 } else {
                     configFields =
                         '        <div class="form-group">' +
@@ -4322,7 +4577,7 @@ app.get('/admin', async (c) => {
             
             var config = {};
             
-            if (plugin === 'alipay' || plugin === 'wxpay') {
+            if (plugin === 'alipay' || plugin === 'wxpay' || plugin === 'xunhupay') {
                 var appId = document.getElementById('config_appId').value;
                 var appSecret = document.getElementById('config_appSecret').value;
                 
@@ -4341,6 +4596,8 @@ app.get('/admin', async (c) => {
                     config.serialNo = document.getElementById('config_serialNo').value;
                     config.privateKey = document.getElementById('config_privateKey').value;
                     config.wxpayPublicKey = document.getElementById('config_wxpayPublicKey').value;
+                } else if (plugin === 'xunhupay') {
+                    config.notifyUrl = document.getElementById('config_notifyUrl').value;
                 }
             } else {
                 var jsonStr = document.getElementById('config_json').value;
@@ -4807,6 +5064,7 @@ app.get('/user', async (c) => {
                 '<div class="nav-item" data-page="refunds"><i class="ri-refund-line"></i><span>退款管理</span></div>' +
                 '<div class="nav-item" data-page="developer"><i class="ri-code-line"></i><span>接口配置</span></div>' +
                 '<div class="nav-item" data-page="domains"><i class="ri-global-line"></i><span>域名白名单</span></div>' +
+                '<div class="nav-item" data-page="cashierlink"><i class="ri-links-line"></i><span>收银台链接</span></div>' +
                 '<div class="nav-item" data-page="settings"><i class="ri-settings-3-line"></i><span>账户设置</span></div>' +
                 '</nav>' +
                 '<div class="sidebar-footer"><div class="avatar" id="userAvatar">-</div><div style="flex:1;min-width:0;"><div id="userName" style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</div><div id="userId" style="font-size:11px;color:var(--text-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</div></div><button class="btn btn-sm btn-ghost" onclick="window._userLogout()" title="退出"><i class="ri-logout-box-r-line"></i></button></div>' +
@@ -4841,9 +5099,9 @@ app.get('/user', async (c) => {
             document.querySelectorAll('.nav-item').forEach(function(el) {
                 el.classList.toggle('active', el.getAttribute('data-page') === page);
             });
-            var titles = { dashboard:'仪表盘', orders:'订单管理', settlements:'结算管理', refunds:'退款管理', developer:'接口配置', domains:'域名白名单', settings:'账户设置' };
+            var titles = { dashboard:'仪表盘', orders:'订单管理', settlements:'结算管理', refunds:'退款管理', developer:'接口配置', domains:'域名白名单', cashierlink:'收银台链接', settings:'账户设置' };
             document.getElementById('pageTitle').textContent = titles[page] || page;
-            var loaders = { dashboard: loadDashboard, orders: loadOrders, settlements: loadSettlements, refunds: loadRefunds, developer: loadDeveloper, domains: loadDomains, settings: loadSettings };
+            var loaders = { dashboard: loadDashboard, orders: loadOrders, settlements: loadSettlements, refunds: loadRefunds, developer: loadDeveloper, domains: loadDomains, cashierlink: loadCashierLink, settings: loadSettings };
             if (loaders[page]) loaders[page]();
         }
 
@@ -5205,6 +5463,32 @@ app.get('/user', async (c) => {
                 if (res && res.code === 0) { showToast('删除成功'); loadDomains(); }
                 else if (res) showToast(res.msg || '删除失败', 'error');
             };
+        }
+
+        async function loadCashierLink() {
+            var content = document.getElementById('pageContent');
+            content.innerHTML = '<div class="loading">加载中...</div>';
+            var data = await api('GET', '/profile');
+            if (!data || data.code !== 0) return;
+            var u = data.data;
+            var baseUrl = window.location.origin;
+            var cashierUrl = baseUrl + '/pay/' + u.id;
+
+            content.innerHTML =
+                '<div class="card"><div class="card-header"><h3 class="card-title">收银台链接</h3></div><div class="card-body">' +
+                '<p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px;">将此链接分享给客户，客户打开后可输入金额并选择支付方式直接付款。</p>' +
+                '<div class="form-group"><label class="form-label">您的收银台链接</label>' +
+                '<div style="display:flex;align-items:center;gap:8px;"><input type="text" class="form-input" id="cashierUrlInput" value="' + escapeHtml(cashierUrl) + '" readonly style="flex:1;font-size:14px;">' +
+                '<button class="btn btn-primary" onclick="navigator.clipboard.writeText(document.getElementById(\\'cashierUrlInput\\').value);showToast(\\'链接已复制\\')"><i class="ri-file-copy-line"></i>复制</button></div></div>' +
+                '<div style="margin-top:16px;padding:16px;background:var(--bg-tertiary);border-radius:8px;">' +
+                '<div style="font-size:13px;font-weight:600;margin-bottom:8px;">使用说明</div>' +
+                '<ul style="font-size:12px;color:var(--text-secondary);padding-left:18px;line-height:2;">' +
+                '<li>客户打开链接后可输入付款金额</li>' +
+                '<li>客户可选择支付宝、微信等支付方式</li>' +
+                '<li>支付成功后资金将进入您的商户余额</li>' +
+                '<li>可在「订单管理」中查看收银台产生的订单</li>' +
+                '</ul></div>' +
+                '</div></div>';
         }
 
         async function loadSettings() {

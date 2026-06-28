@@ -18,7 +18,7 @@ export class XunhupayPlugin implements PaymentPlugin {
     id = 'xunhupay';
     name = '虎皮椒';
     version = '1.0.0';
-    supportedTypes = ['xunhupay'];
+    supportedTypes = ['alipay', 'wxpay'];
     
     private apiBase = 'https://api.xunhupay.com';
     

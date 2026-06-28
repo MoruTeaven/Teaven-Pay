@@ -75,16 +75,30 @@ export async function apiKeyMiddleware(c: Context<{ Bindings: Env }>, next: Next
     try {
         // 查询商户
         const user = await c.env.DB.prepare(
-            'SELECT id, role, status FROM users WHERE id = ? AND api_key = ? AND role = ?'
-        ).bind(pid, apiKey, 'merchant').first();
+            'SELECT id, role, status FROM users WHERE id = ? AND role = ?'
+        ).bind(pid, 'merchant').first();
         
         if (!user) {
-            return c.json({ code: -3, msg: '商户不存在或密钥错误' }, 401);
+            return c.json({ code: -3, msg: '商户不存在' }, 401);
         }
         
         if (user.status !== 1) {
             return c.json({ code: -2, msg: '商户已被封禁' }, 403);
         }
+        
+        // 验证 API 密钥
+        const apiKeyRecord = await c.env.DB.prepare(
+            'SELECT id FROM api_keys WHERE user_id = ? AND api_key = ? AND status = 1'
+        ).bind(pid, apiKey).first();
+        
+        if (!apiKeyRecord) {
+            return c.json({ code: -3, msg: '密钥错误' }, 401);
+        }
+        
+        // 更新最后使用时间
+        await c.env.DB.prepare(
+            "UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?"
+        ).bind((apiKeyRecord as any).id).run();
         
         // 将用户信息添加到上下文
         c.set('user', user);

@@ -54,7 +54,7 @@ payRouter.post('/submit', async (c) => {
     try {
         // 查询商户信息
         const user = await env.DB.prepare(
-            'SELECT id, status, api_key, api_key_type FROM users WHERE id = ? AND role = ?'
+            'SELECT id, status FROM users WHERE id = ? AND role = ?'
         ).bind(pid, 'merchant').first();
         
         if (!user) {
@@ -63,6 +63,15 @@ payRouter.post('/submit', async (c) => {
         
         if (user.status !== 1) {
             return c.json({ code: -2, msg: '商户已被封禁' });
+        }
+        
+        // 查询商户的 API 密钥
+        const apiKeyRecord = await env.DB.prepare(
+            'SELECT api_key, api_key_type FROM api_keys WHERE user_id = ? AND status = 1'
+        ).bind(pid).first();
+        
+        if (!apiKeyRecord) {
+            return c.json({ code: -3, msg: '商户未配置 API 密钥' });
         }
         
         // 验证签名
@@ -76,8 +85,8 @@ payRouter.post('/submit', async (c) => {
             param: param || ''
         };
         
-        const signType = requestedSignType || (user.api_key_type as string) || 'hmac-sha256';
-        const isValidSign = await verifySignAsync(signParams, user.api_key as string, sign, signType);
+        const signType = requestedSignType || (apiKeyRecord as any).api_key_type || 'hmac-sha256';
+        const isValidSign = await verifySignAsync(signParams, (apiKeyRecord as any).api_key, sign, signType);
         if (!isValidSign) {
             return c.json({ code: -2, msg: '签名验证失败' });
         }
@@ -166,6 +175,97 @@ payRouter.post('/submit', async (c) => {
 });
 
 /**
+ * 收银台下单 - 无需签名，供公开收银台页面使用
+ * POST /api/pay/cashier
+ */
+payRouter.post('/cashier', async (c) => {
+    const body = await c.req.parseBody();
+    const env = c.env;
+
+    const merchantId = body.merchant_id as string;
+    const amountStr = body.amount as string;
+    const type = body.type as string;
+    const name = body.name as string || '在线收银台付款';
+
+    if (!merchantId) return c.json({ code: -1, msg: '商户ID不能为空' });
+    if (!amountStr) return c.json({ code: -1, msg: '金额不能为空' });
+    if (!type) return c.json({ code: -1, msg: '支付方式不能为空' });
+
+    const amount = parseFloat(amountStr);
+    if (isNaN(amount) || amount < 0.01) {
+        return c.json({ code: -1, msg: '金额不合法' });
+    }
+
+    try {
+        const user = await env.DB.prepare(
+            'SELECT id, status, notify_url, return_url FROM users WHERE id = ? AND role = ?'
+        ).bind(merchantId, 'merchant').first();
+
+        if (!user) return c.json({ code: -3, msg: '商户不存在' });
+        if (user.status !== 1) return c.json({ code: -2, msg: '商户已被封禁' });
+
+        const channel = await env.DB.prepare(
+            'SELECT * FROM channels WHERE payment_type_id = ? AND status = 1 ORDER BY sort_order LIMIT 1'
+        ).bind(type).first();
+
+        if (!channel) return c.json({ code: -1, msg: '暂不支持该支付方式' });
+
+        const tradeNo = generateUUIDv7();
+        const outTradeNo = 'CASHIER' + Date.now();
+        const now = new Date().toISOString();
+        const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '127.0.0.1';
+
+        await env.DB.prepare(`
+            INSERT INTO orders (
+                id, user_id, out_trade_no, payment_type, channel_id,
+                plugin, amount, status, name, param,
+                notify_url, return_url, buyer_ip, domain, device,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+            tradeNo, merchantId, outTradeNo, type, channel.id,
+            channel.plugin, amount, 0, name, '',
+            user.notify_url || '', user.return_url || '', clientIp, '', 'cashier',
+            now
+        ).run();
+
+        const plugin = getPlugin(channel.plugin);
+
+        const payResult = await plugin.createPayment(
+            {
+                tradeNo,
+                outTradeNo,
+                amount,
+                actualAmount: amount,
+                subject: name,
+                clientIp,
+                createdAt: now
+            },
+            {
+                appId: env.ALIPAY_APP_ID || '',
+                appSecret: env.ALIPAY_PRIVATE_KEY || '',
+                ...JSON.parse(channel.config || '{}')
+            }
+        );
+
+        if (!payResult.success) {
+            return c.json({ code: -1, msg: payResult.message || '创建支付失败' });
+        }
+
+        return c.json({
+            code: 1,
+            msg: '创建订单成功',
+            trade_no: tradeNo,
+            payurl: payResult.payUrl || `${env.SITE_URL || ''}/cashier/${tradeNo}`,
+            qrcode: payResult.qrcode
+        });
+    } catch (error) {
+        console.error('Cashier payment error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
  * 查询订单
  * GET /api/pay/query
  */
@@ -185,11 +285,20 @@ payRouter.get('/query', async (c) => {
     try {
         // 查询商户
         const user = await env.DB.prepare(
-            'SELECT id, api_key, api_key_type FROM users WHERE id = ? AND role = ?'
+            'SELECT id FROM users WHERE id = ? AND role = ?'
         ).bind(pid, 'merchant').first();
         
         if (!user) {
             return c.json({ code: -3, msg: '商户不存在' });
+        }
+        
+        // 查询商户的 API 密钥
+        const apiKeyRecord = await env.DB.prepare(
+            'SELECT api_key, api_key_type FROM api_keys WHERE user_id = ? AND status = 1'
+        ).bind(pid).first();
+        
+        if (!apiKeyRecord) {
+            return c.json({ code: -3, msg: '商户未配置 API 密钥' });
         }
         
         // 验证签名或密钥
@@ -198,13 +307,13 @@ payRouter.get('/query', async (c) => {
             if (tradeNo) signParams.trade_no = tradeNo;
             if (outTradeNo) signParams.out_trade_no = outTradeNo;
             
-            const signType = requestedSignType || (user.api_key_type as string) || 'hmac-sha256';
-            const isValid = await verifySignAsync(signParams, user.api_key as string, sign, signType);
+            const signType = requestedSignType || (apiKeyRecord as any).api_key_type || 'hmac-sha256';
+            const isValid = await verifySignAsync(signParams, (apiKeyRecord as any).api_key, sign, signType);
             if (!isValid) {
                 return c.json({ code: -2, msg: '签名验证失败' });
             }
         } else if (key) {
-            if (key !== user.api_key) {
+            if (key !== (apiKeyRecord as any).api_key) {
                 return c.json({ code: -3, msg: '密钥错误' });
             }
         }
@@ -257,6 +366,7 @@ payRouter.get('/query', async (c) => {
  * GET /api/pay/orders
  */
 payRouter.get('/orders', async (c) => {
+    const env = c.env;
     const pid = c.req.query('pid');
     const key = c.req.query('key');
     const limit = parseInt(c.req.query('limit') || '10');
@@ -269,10 +379,19 @@ payRouter.get('/orders', async (c) => {
     try {
         // 验证商户
         const user = await env.DB.prepare(
-            'SELECT id FROM users WHERE id = ? AND api_key = ?'
-        ).bind(pid, key).first();
+            'SELECT id FROM users WHERE id = ? AND role = ?'
+        ).bind(pid, 'merchant').first();
         
         if (!user) {
+            return c.json({ code: -3, msg: '商户不存在' });
+        }
+        
+        // 验证密钥
+        const apiKeyRecord = await env.DB.prepare(
+            'SELECT id FROM api_keys WHERE user_id = ? AND api_key = ? AND status = 1'
+        ).bind(pid, key).first();
+        
+        if (!apiKeyRecord) {
             return c.json({ code: -3, msg: '商户不存在或密钥错误' });
         }
         
@@ -349,11 +468,20 @@ payRouter.post('/refund', async (c) => {
     try {
         // 验证商户
         const user = await env.DB.prepare(
-            'SELECT id, api_key, api_key_type FROM users WHERE id = ? AND role = ?'
+            'SELECT id FROM users WHERE id = ? AND role = ?'
         ).bind(pid, 'merchant').first();
         
         if (!user) {
             return c.json({ code: -3, msg: '商户不存在' });
+        }
+        
+        // 查询商户的 API 密钥
+        const apiKeyRecord = await env.DB.prepare(
+            'SELECT api_key, api_key_type FROM api_keys WHERE user_id = ? AND status = 1'
+        ).bind(pid).first();
+        
+        if (!apiKeyRecord) {
+            return c.json({ code: -3, msg: '商户未配置 API 密钥' });
         }
         
         // 验证密钥或签名
@@ -361,11 +489,11 @@ payRouter.post('/refund', async (c) => {
             const signParams: Record<string, string> = { pid, money: amount };
             if (tradeNo) signParams.trade_no = tradeNo;
             if (outTradeNo) signParams.out_trade_no = outTradeNo;
-            const signType = (body.sign_type as string) || (user.api_key_type as string) || 'hmac-sha256';
-            const isValid = await verifySignAsync(signParams, user.api_key as string, sign, signType);
+            const signType = (body.sign_type as string) || (apiKeyRecord as any).api_key_type || 'hmac-sha256';
+            const isValid = await verifySignAsync(signParams, (apiKeyRecord as any).api_key, sign, signType);
             if (!isValid) return c.json({ code: -2, msg: '签名验证失败' });
         } else if (key) {
-            if (key !== user.api_key) return c.json({ code: -3, msg: '密钥错误' });
+            if (key !== (apiKeyRecord as any).api_key) return c.json({ code: -3, msg: '密钥错误' });
         }
         
         // 查询订单
@@ -433,6 +561,7 @@ payRouter.post('/refund', async (c) => {
  * GET /api/pay/refund/query
  */
 payRouter.get('/refund/query', async (c) => {
+    const env = c.env;
     const pid = c.req.query('pid');
     const refundNo = c.req.query('refund_no');
     const outTradeNo = c.req.query('out_trade_no');
@@ -497,11 +626,20 @@ payRouter.post('/close', async (c) => {
     try {
         // 验证商户
         const user = await env.DB.prepare(
-            'SELECT id, api_key, api_key_type FROM users WHERE id = ? AND role = ?'
+            'SELECT id FROM users WHERE id = ? AND role = ?'
         ).bind(pid, 'merchant').first();
         
         if (!user) {
             return c.json({ code: -3, msg: '商户不存在' });
+        }
+        
+        // 查询商户的 API 密钥
+        const apiKeyRecord = await env.DB.prepare(
+            'SELECT api_key, api_key_type FROM api_keys WHERE user_id = ? AND status = 1'
+        ).bind(pid).first();
+        
+        if (!apiKeyRecord) {
+            return c.json({ code: -3, msg: '商户未配置 API 密钥' });
         }
         
         // 验证密钥或签名
@@ -509,11 +647,11 @@ payRouter.post('/close', async (c) => {
             const signParams: Record<string, string> = { pid };
             if (tradeNo) signParams.trade_no = tradeNo;
             if (outTradeNo) signParams.out_trade_no = outTradeNo;
-            const signType = (body.sign_type as string) || (user.api_key_type as string) || 'hmac-sha256';
-            const isValid = await verifySignAsync(signParams, user.api_key as string, sign, signType);
+            const signType = (body.sign_type as string) || (apiKeyRecord as any).api_key_type || 'hmac-sha256';
+            const isValid = await verifySignAsync(signParams, (apiKeyRecord as any).api_key, sign, signType);
             if (!isValid) return c.json({ code: -2, msg: '签名验证失败' });
         } else if (key) {
-            if (key !== user.api_key) return c.json({ code: -3, msg: '密钥错误' });
+            if (key !== (apiKeyRecord as any).api_key) return c.json({ code: -3, msg: '密钥错误' });
         }
         
         // 查询订单

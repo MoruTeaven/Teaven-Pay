@@ -47,9 +47,6 @@ export interface UserRow {
     status: number;
     balance: number;
     frozen_balance: number;
-    api_key: string | null;
-    api_key_type: 'md5' | 'hmac-sha256' | 'rsa';
-    rsa_public_key: string | null;
     notify_url: string | null;
     return_url: string | null;
     contact_qq: string | null;
@@ -66,6 +63,19 @@ export interface UserRow {
     total_orders: number;
     last_login_at: string | null;
     last_login_ip: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ApiKeyRow {
+    id: string;
+    user_id: string;
+    api_key: string;
+    name: string;
+    api_key_type: 'md5' | 'hmac-sha256' | 'rsa';
+    rsa_public_key: string | null;
+    status: number;
+    last_used_at: string | null;
     created_at: string;
     updated_at: string;
 }

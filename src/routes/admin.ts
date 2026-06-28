@@ -260,8 +260,6 @@ adminRouter.get('/merchants', async (c) => {
             status: row.status,
             balance: row.balance || 0,
             frozenBalance: row.frozen_balance || 0,
-            apiKey: row.api_key || '',
-            apiKeyType: row.api_key_type || 'hmac-sha256',
             notifyUrl: row.notify_url || '',
             returnUrl: row.return_url || '',
             settleType: row.settle_type || '',
@@ -318,13 +316,20 @@ adminRouter.post('/merchants', async (c) => {
         const userId = generateUUIDv7();
         const { hash, salt } = await hashPassword(password);
         const apiKey = generateUUIDv7().replace(/-/g, '');
+        const apiKeyId = generateUUIDv7();
         
         await c.env.DB.prepare(`
             INSERT INTO users (
                 id, username, email, password_hash, salt, 
-                role, status, api_key, api_key_type, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, 'merchant', 1, ?, 'hmac-sha256', datetime('now'), datetime('now'))
-        `).bind(userId, username, email, hash, salt, apiKey).run();
+                role, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 'merchant', 1, datetime('now'), datetime('now'))
+        `).bind(userId, username, email, hash, salt).run();
+        
+        // 创建默认 API 密钥
+        await c.env.DB.prepare(`
+            INSERT INTO api_keys (id, user_id, api_key, name, api_key_type, status, created_at, updated_at)
+            VALUES (?, ?, ?, '默认密钥', 'hmac-sha256', 1, datetime('now'), datetime('now'))
+        `).bind(apiKeyId, userId, apiKey).run();
         
         return c.json({
             code: 0,
@@ -393,6 +398,14 @@ adminRouter.get('/merchants/:id', async (c) => {
             LIMIT 5
         `).bind(id).all();
         
+        // 获取 API 密钥列表
+        const apiKeys = await c.env.DB.prepare(`
+            SELECT id, name, api_key, api_key_type, status, last_used_at, created_at 
+            FROM api_keys 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC
+        `).bind(id).all();
+        
         const m = merchant as any;
         
         return c.json({
@@ -404,8 +417,7 @@ adminRouter.get('/merchants/:id', async (c) => {
                 status: m.status,
                 balance: m.balance || 0,
                 frozenBalance: m.frozen_balance || 0,
-                apiKey: m.api_key || '',
-                apiKeyType: m.api_key_type || 'hmac-sha256',
+                apiKeys: apiKeys.results || [],
                 notifyUrl: m.notify_url || '',
                 returnUrl: m.return_url || '',
                 contactQq: m.contact_qq || '',
@@ -897,11 +909,11 @@ adminRouter.put('/payment-types/:id', async (c) => {
             WHERE id = ?
         `).bind(
             displayName || null,
-            icon !== undefined ? icon : undefined,
-            description !== undefined ? description : undefined,
+            icon !== undefined ? icon : null,
+            description !== undefined ? description : null,
             sortOrder !== undefined ? sortOrder : null,
             status !== undefined ? status : null,
-            config !== undefined ? (typeof config === 'string' ? config : JSON.stringify(config)) : undefined,
+            config !== undefined ? (typeof config === 'string' ? config : JSON.stringify(config)) : null,
             now,
             id
         ).run();
