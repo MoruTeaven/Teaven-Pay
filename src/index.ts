@@ -4955,7 +4955,7 @@ app.get('/user', async (c) => {
             var content = document.getElementById('pageContent');
             content.innerHTML = '<div class="loading">加载中...</div>';
             var data = await api('GET', '/settle/list?limit=' + settleState.limit + '&offset=' + settleState.offset);
-            if (!data || data.code !== 0) return;
+            if (!data || (data.code !== 0 && data.code !== 1)) return;
             var list = data.data || [];
             var total = data.count || 0;
 
