@@ -2591,7 +2591,7 @@ app.get('/admin', async (c) => {
                 detailItem('邮箱', escapeHtml(merchant.email || '-')) +
                 detailItem('状态', getStatusBadge(merchant.status, 'merchant')) +
                 detailItem('QQ', escapeHtml(merchant.contactQq || '-')) +
-                detailItem('微信', escapeHtml(merchant.contactWechat || '-')) +
+                detailItem('手机', escapeHtml(merchant.contactWechat || '-')) +
                 detailItem('创建时间', formatDate(merchant.createdAt)) +
                 detailItem('最后登录', formatDate(merchant.lastLoginAt)) +
                 '    </div></div></div>' +
@@ -3831,7 +3831,7 @@ app.get('/admin', async (c) => {
                 '    <div class="modal-body">' +
                 '        <div class="form-group"><label class="form-label">邮箱</label><input type="email" class="form-input" id="editMerchantEmail" value="' + escapeHtml(merchant.email || '') + '" placeholder="请输入邮箱"></div>' +
                 '        <div class="form-group"><label class="form-label">QQ</label><input type="text" class="form-input" id="editMerchantContactQq" value="' + escapeHtml(merchant.contactQq || '') + '" placeholder="请输入QQ号"></div>' +
-                '        <div class="form-group"><label class="form-label">微信</label><input type="text" class="form-input" id="editMerchantContactWechat" value="' + escapeHtml(merchant.contactWechat || '') + '" placeholder="请输入微信号"></div>' +
+                '        <div class="form-group"><label class="form-label">手机</label><input type="text" class="form-input" id="editMerchantContactWechat" value="' + escapeHtml(merchant.contactWechat || '') + '" placeholder="请输入手机号"></div>' +
                 '        <div class="form-group"><label class="form-label">异步通知地址</label><input type="url" class="form-input" id="editMerchantNotifyUrl" value="' + escapeHtml(merchant.notifyUrl || '') + '" placeholder="https://example.com/notify"></div>' +
                 '        <div class="form-group"><label class="form-label">同步返回地址</label><input type="url" class="form-input" id="editMerchantReturnUrl" value="' + escapeHtml(merchant.returnUrl || '') + '" placeholder="https://example.com/return"></div>' +
                 '        <div class="form-group"><label class="form-label">分组ID</label><input type="text" class="form-input" id="editMerchantGroupId" value="' + escapeHtml(merchant.groupId || '') + '" placeholder="请输入分组ID"></div>' +

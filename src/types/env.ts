@@ -48,7 +48,7 @@ export interface UserRow {
     balance: number;
     frozen_balance: number;
     api_key: string | null;
-    api_key_type: 'md5' | 'rsa';
+    api_key_type: 'md5' | 'hmac-sha256' | 'rsa';
     rsa_public_key: string | null;
     notify_url: string | null;
     return_url: string | null;

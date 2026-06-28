@@ -157,47 +157,81 @@ export async function rsaVerify(params: any, signature: string, publicKey: strin
     }
 }
 
-/**
- * 生成签名 (MD5)
- * 
- * 签名算法:
- * 1. 将所有请求参数按参数名 ASCII 码从小到大排序
- * 2. 将排序后的参数按照 key=value 的格式拼接
- * 3. 在拼接串首尾加上商户密钥 api_key
- * 4. 对拼接串进行 MD5 加密，转为小写
- */
-export function generateSign(params: Record<string, any>, apiKey: string): string {
+function buildSignString(params: Record<string, any>): string {
     const sortedKeys = Object.keys(params).sort();
-    let signStr = '';
+    const parts: string[] = [];
     
     for (const key of sortedKeys) {
         if (params[key] !== '' && params[key] !== undefined && key !== 'sign' && key !== 'sign_type') {
-            signStr += key + '=' + params[key] + '&';
+            parts.push(key + '=' + params[key]);
         }
     }
-    
-    // 移除最后一个 &
-    signStr = signStr.slice(0, -1);
-    
-    // 首尾加密钥
-    signStr = apiKey + signStr + apiKey;
-    
+
+    return parts.join('&');
+}
+
+function normalizeSignType(signType: string = 'md5'): string {
+    const normalized = signType.toLowerCase().replace(/_/g, '-');
+    if (normalized === 'sha256' || normalized === 'hmacsha256' || normalized === 'hmac-sha256') {
+        return 'hmac-sha256';
+    }
+    return normalized;
+}
+
+/**
+ * 生成 MD5 兼容签名
+ */
+export function generateSign(params: Record<string, any>, apiKey: string): string {
+    const signStr = apiKey + buildSignString(params) + apiKey;
+
     // 注意: 这里使用简化的 MD5 替代
     // 生产环境应使用完整的 MD5 实现
     return simpleHash(signStr).toLowerCase();
 }
 
 /**
- * 验证签名 (MD5)
+ * 生成签名，默认使用 HMAC-SHA256
+ */
+export async function generateSignAsync(params: Record<string, any>, apiKey: string, signType: string = 'hmac-sha256'): Promise<string> {
+    const normalized = normalizeSignType(signType);
+    if (normalized === 'md5') {
+        return generateSign(params, apiKey);
+    }
+    if (normalized === 'hmac-sha256') {
+        return hmacSha256(apiKey, buildSignString(params));
+    }
+    throw new Error('Unsupported sign type');
+}
+
+/**
+ * 验证签名 (MD5 兼容)
  */
 export function verifySign(params: Record<string, any>, apiKey: string, sign: string, signType: string = 'md5'): boolean {
-    if (signType.toUpperCase() === 'RSA') {
+    if (normalizeSignType(signType) !== 'md5') {
         // RSA 签名验证需要异步，这里简化处理
         return false;
     }
     
     const expectedSign = generateSign(params, apiKey);
     return expectedSign === sign.toLowerCase();
+}
+
+/**
+ * 验证签名，支持 HMAC-SHA256 和 MD5 兼容模式
+ */
+export async function verifySignAsync(params: Record<string, any>, apiKey: string, sign: string, signType: string = 'hmac-sha256'): Promise<boolean> {
+    const normalized = normalizeSignType(signType);
+    if (normalized === 'rsa') {
+        return false;
+    }
+
+    try {
+        const expectedSign = await generateSignAsync(params, apiKey, normalized);
+        return expectedSign === sign.toLowerCase();
+    } catch (error) {
+        console.error('Verify sign error:', error);
+        return false;
+    }
 }
 
 /**

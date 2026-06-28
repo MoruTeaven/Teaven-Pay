@@ -260,7 +260,7 @@ adminRouter.get('/merchants', async (c) => {
             balance: row.balance || 0,
             frozenBalance: row.frozen_balance || 0,
             apiKey: row.api_key || '',
-            apiKeyType: row.api_key_type || 'md5',
+            apiKeyType: row.api_key_type || 'hmac-sha256',
             notifyUrl: row.notify_url || '',
             returnUrl: row.return_url || '',
             settleType: row.settle_type || '',
@@ -321,8 +321,8 @@ adminRouter.post('/merchants', async (c) => {
         await c.env.DB.prepare(`
             INSERT INTO users (
                 id, username, email, password_hash, salt, 
-                role, status, api_key, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, 'merchant', 1, ?, datetime('now'), datetime('now'))
+                role, status, api_key, api_key_type, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 'merchant', 1, ?, 'hmac-sha256', datetime('now'), datetime('now'))
         `).bind(userId, username, email, hash, salt, apiKey).run();
         
         return c.json({
@@ -404,7 +404,7 @@ adminRouter.get('/merchants/:id', async (c) => {
                 balance: m.balance || 0,
                 frozenBalance: m.frozen_balance || 0,
                 apiKey: m.api_key || '',
-                apiKeyType: m.api_key_type || 'md5',
+                apiKeyType: m.api_key_type || 'hmac-sha256',
                 notifyUrl: m.notify_url || '',
                 returnUrl: m.return_url || '',
                 contactQq: m.contact_qq || '',

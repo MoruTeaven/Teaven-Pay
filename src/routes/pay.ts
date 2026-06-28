@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { Env } from '../types/env';
 import { generateUUIDv7 } from '../utils/uuid';
-import { generateSign, verifySign } from '../utils/crypto';
+import { verifySignAsync } from '../utils/crypto';
 import { getPlugin } from '../plugins';
 
 export const payRouter = new Hono<{ Bindings: Env }>();
@@ -27,7 +27,7 @@ payRouter.post('/submit', async (c) => {
     const name = body.name as string;
     const money = body.money as string;
     const sign = body.sign as string;
-    const signType = (body.sign_type as string) || 'md5';
+    const requestedSignType = body.sign_type as string;
     const param = body.param as string;
     const clientIp = body.clientip as string;
     const device = body.device as string || 'pc';
@@ -54,7 +54,7 @@ payRouter.post('/submit', async (c) => {
     try {
         // 查询商户信息
         const user = await env.DB.prepare(
-            'SELECT id, status, api_key FROM users WHERE id = ? AND role = ?'
+            'SELECT id, status, api_key, api_key_type FROM users WHERE id = ? AND role = ?'
         ).bind(pid, 'merchant').first();
         
         if (!user) {
@@ -76,7 +76,8 @@ payRouter.post('/submit', async (c) => {
             param: param || ''
         };
         
-        const isValidSign = verifySign(signParams, user.api_key as string, sign, signType);
+        const signType = requestedSignType || (user.api_key_type as string) || 'hmac-sha256';
+        const isValidSign = await verifySignAsync(signParams, user.api_key as string, sign, signType);
         if (!isValidSign) {
             return c.json({ code: -2, msg: '签名验证失败' });
         }
@@ -169,12 +170,13 @@ payRouter.post('/submit', async (c) => {
  * GET /api/pay/query
  */
 payRouter.get('/query', async (c) => {
+    const env = c.env;
     const pid = c.req.query('pid');
     const tradeNo = c.req.query('trade_no');
     const outTradeNo = c.req.query('out_trade_no');
     const key = c.req.query('key');
     const sign = c.req.query('sign');
-    const signType = c.req.query('sign_type') || 'md5';
+    const requestedSignType = c.req.query('sign_type');
     
     if (!pid) return c.json({ code: -1, msg: '商户ID不能为空' });
     if (!tradeNo && !outTradeNo) return c.json({ code: -1, msg: '订单号不能为空' });
@@ -183,7 +185,7 @@ payRouter.get('/query', async (c) => {
     try {
         // 查询商户
         const user = await env.DB.prepare(
-            'SELECT id, api_key FROM users WHERE id = ? AND role = ?'
+            'SELECT id, api_key, api_key_type FROM users WHERE id = ? AND role = ?'
         ).bind(pid, 'merchant').first();
         
         if (!user) {
@@ -196,7 +198,8 @@ payRouter.get('/query', async (c) => {
             if (tradeNo) signParams.trade_no = tradeNo;
             if (outTradeNo) signParams.out_trade_no = outTradeNo;
             
-            const isValid = verifySign(signParams, user.api_key as string, sign, signType);
+            const signType = requestedSignType || (user.api_key_type as string) || 'hmac-sha256';
+            const isValid = await verifySignAsync(signParams, user.api_key as string, sign, signType);
             if (!isValid) {
                 return c.json({ code: -2, msg: '签名验证失败' });
             }
@@ -346,7 +349,7 @@ payRouter.post('/refund', async (c) => {
     try {
         // 验证商户
         const user = await env.DB.prepare(
-            'SELECT id, api_key FROM users WHERE id = ? AND role = ?'
+            'SELECT id, api_key, api_key_type FROM users WHERE id = ? AND role = ?'
         ).bind(pid, 'merchant').first();
         
         if (!user) {
@@ -358,7 +361,8 @@ payRouter.post('/refund', async (c) => {
             const signParams: Record<string, string> = { pid, money: amount };
             if (tradeNo) signParams.trade_no = tradeNo;
             if (outTradeNo) signParams.out_trade_no = outTradeNo;
-            const isValid = verifySign(signParams, user.api_key as string, sign, body.sign_type as string || 'md5');
+            const signType = (body.sign_type as string) || (user.api_key_type as string) || 'hmac-sha256';
+            const isValid = await verifySignAsync(signParams, user.api_key as string, sign, signType);
             if (!isValid) return c.json({ code: -2, msg: '签名验证失败' });
         } else if (key) {
             if (key !== user.api_key) return c.json({ code: -3, msg: '密钥错误' });
@@ -493,7 +497,7 @@ payRouter.post('/close', async (c) => {
     try {
         // 验证商户
         const user = await env.DB.prepare(
-            'SELECT id, api_key FROM users WHERE id = ? AND role = ?'
+            'SELECT id, api_key, api_key_type FROM users WHERE id = ? AND role = ?'
         ).bind(pid, 'merchant').first();
         
         if (!user) {
@@ -505,7 +509,8 @@ payRouter.post('/close', async (c) => {
             const signParams: Record<string, string> = { pid };
             if (tradeNo) signParams.trade_no = tradeNo;
             if (outTradeNo) signParams.out_trade_no = outTradeNo;
-            const isValid = verifySign(signParams, user.api_key as string, sign, body.sign_type as string || 'md5');
+            const signType = (body.sign_type as string) || (user.api_key_type as string) || 'hmac-sha256';
+            const isValid = await verifySignAsync(signParams, user.api_key as string, sign, signType);
             if (!isValid) return c.json({ code: -2, msg: '签名验证失败' });
         } else if (key) {
             if (key !== user.api_key) return c.json({ code: -3, msg: '密钥错误' });

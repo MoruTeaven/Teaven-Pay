@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     balance REAL DEFAULT 0,                           -- 可用余额
     frozen_balance REAL DEFAULT 0,                    -- 冻结余额
     api_key TEXT UNIQUE,                              -- API密钥
-    api_key_type TEXT DEFAULT 'md5',                  -- 密钥类型: md5/rsa
+    api_key_type TEXT DEFAULT 'hmac-sha256',          -- 密钥类型: md5/hmac-sha256/rsa
     rsa_public_key TEXT,                              -- RSA公钥
     notify_url TEXT,                                  -- 默认异步通知地址
     return_url TEXT,                                  -- 默认同步跳转地址

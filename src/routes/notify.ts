@@ -272,9 +272,10 @@ async function sendMerchantNotification(env: Env, order: any) {
         };
         
         // 生成签名
-        const { generateSign } = await import('../utils/crypto');
-        notifyParams.sign = generateSign(notifyParams, (user as any).api_key);
-        notifyParams.sign_type = 'MD5';
+        const { generateSignAsync } = await import('../utils/crypto');
+        const signType = (user as any).api_key_type || 'hmac-sha256';
+        notifyParams.sign = await generateSignAsync(notifyParams, (user as any).api_key, signType);
+        notifyParams.sign_type = signType === 'md5' ? 'MD5' : 'HMAC-SHA256';
         
         // 发送通知
         const response = await fetch(order.notify_url, {
