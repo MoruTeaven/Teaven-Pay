@@ -1447,7 +1447,6 @@ app.get('/admin', async (c) => {
                     <a href="#" class="nav-item" data-page="merchants">
                         <i class="ri-store-2-line"></i>
                         <span>商户管理</span>
-                        <span class="badge">12</span>
                     </a>
                     <a href="#" class="nav-item" data-page="orders">
                         <i class="ri-file-list-3-line"></i>
@@ -1456,7 +1455,6 @@ app.get('/admin', async (c) => {
                     <a href="#" class="nav-item" data-page="settlements">
                         <i class="ri-money-cny-circle-line"></i>
                         <span>结算管理</span>
-                        <span class="badge">5</span>
                     </a>
                 </div>
                 <div class="nav-section">
@@ -1560,6 +1558,7 @@ app.get('/admin', async (c) => {
             orders: [],
             settlements: [],
             logs: [],
+            currentMerchant: null,
             token: localStorage.getItem('admin_token') || null,
             user: JSON.parse(localStorage.getItem('admin_user') || 'null')
         };
@@ -1723,6 +1722,42 @@ app.get('/admin', async (c) => {
                 } catch (error) {
                     console.error('获取商户列表失败:', error);
                     throw error;
+                }
+            },
+
+            // 获取商户详情
+            async getMerchantDetail(id) {
+                try {
+                    const response = await this.request('/api/admin/merchants/' + id);
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { success: true, data: data.data };
+                    }
+                    throw new Error(data.msg || '获取商户详情失败');
+                } catch (error) {
+                    console.error('获取商户详情失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
+            // 更新商户信息
+            async updateMerchant(id, merchantData) {
+                try {
+                    const response = await this.request('/api/admin/merchants/' + id, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams(merchantData)
+                    });
+                    const data = await response.json();
+                    if (data.code === 0) {
+                        return { success: true, message: data.msg };
+                    }
+                    throw new Error(data.msg || '更新商户信息失败');
+                } catch (error) {
+                    console.error('更新商户信息失败:', error);
+                    return { success: false, message: error.message };
                 }
             },
 
@@ -2025,6 +2060,15 @@ app.get('/admin', async (c) => {
         function formatDate(dateStr) {
             if (!dateStr) return '-';
             return dateStr;
+        }
+
+        function escapeHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         function getStatusBadge(status, type) {
@@ -2480,11 +2524,8 @@ app.get('/admin', async (c) => {
                         '<td>' + formatDate(merchant.createdAt) + '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'查看详情\\', \\'商户详情页面开发中\\')">' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="navigateToMerchantDetail(\\'' + merchant.id + '\\')" title="查看详情">' +
                         '            <i class="ri-eye-line"></i>' +
-                        '        </button>' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'success\\', \\'操作成功\\', \\'API Key 已重置\\')">' +
-                        '            <i class="ri-refresh-line"></i>' +
                         '        </button>' +
                         '    </div>' +
                         '</td>' +
@@ -2497,6 +2538,82 @@ app.get('/admin', async (c) => {
                 console.error('加载商户数据失败:', error);
                 showToast('error', '加载失败', '无法获取商户数据');
             }
+        }
+
+        function renderMerchantDetail(merchant) {
+            state.currentMerchant = merchant;
+
+            var recentOrders = merchant.recentOrders || [];
+            var recentSettlements = merchant.recentSettlements || [];
+            var statusButton = merchant.status === 1
+                ? '<button class="btn btn-danger" onclick="handleMerchantStatus(\\'' + merchant.id + '\\', 0)"><i class="ri-forbid-line"></i>禁用</button>'
+                : '<button class="btn btn-primary" onclick="handleMerchantStatus(\\'' + merchant.id + '\\', 1)"><i class="ri-checkbox-circle-line"></i>启用</button>';
+
+            var ordersHtml = recentOrders.length > 0 ? recentOrders.map(function(order) {
+                return '<tr>' +
+                    '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">' + escapeHtml(order.order_no || order.id || '') + '</code></td>' +
+                    '<td>' + formatMoney(order.amount || 0) + '</td>' +
+                    '<td>' + getStatusBadge(order.status, 'order') + '</td>' +
+                    '<td style="font-size: 12px;">' + formatDate(order.created_at) + '</td>' +
+                    '</tr>';
+            }).join('') : '<tr><td colspan="4" style="text-align: center; color: var(--text-tertiary); padding: 24px;">暂无订单</td></tr>';
+
+            var settlementsHtml = recentSettlements.length > 0 ? recentSettlements.map(function(settle) {
+                var settleId = settle.id || '';
+                return '<tr>' +
+                    '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">' + escapeHtml(settleId ? settleId.substring(0, 8) + '...' : '-') + '</code></td>' +
+                    '<td>' + formatMoney(settle.amount || 0) + '</td>' +
+                    '<td>' + getStatusBadge(settle.status, 'settlement') + '</td>' +
+                    '<td style="font-size: 12px;">' + formatDate(settle.created_at) + '</td>' +
+                    '</tr>';
+            }).join('') : '<tr><td colspan="4" style="text-align: center; color: var(--text-tertiary); padding: 24px;">暂无结算</td></tr>';
+
+            return '<div class="page-header">' +
+                '    <div style="display: flex; align-items: center; gap: 16px;">' +
+                '        <button class="btn btn-secondary" onclick="navigateTo(\\'merchants\\')"><i class="ri-arrow-left-line"></i>返回</button>' +
+                '        <h1 class="page-title">商户详情 - ' + escapeHtml(merchant.username) + '</h1>' +
+                '    </div>' +
+                '    <div class="page-actions">' +
+                '        <button class="btn btn-secondary" onclick="showEditMerchantModal()"><i class="ri-edit-line"></i>编辑</button>' +
+                statusButton +
+                '    </div>' +
+                '</div>' +
+                '<div class="stats-grid fade-in">' +
+                '    <div class="stat-card"><div class="stat-header"><span class="stat-label">今日收入</span><div class="stat-icon green"><i class="ri-money-cny-circle-line"></i></div></div><div class="stat-value">' + formatMoney(merchant.todayIncome || 0) + '</div><div class="stat-change up"><span>今日订单: ' + (merchant.todayOrders || 0) + '</span></div></div>' +
+                '    <div class="stat-card"><div class="stat-header"><span class="stat-label">昨日收入</span><div class="stat-icon blue"><i class="ri-line-chart-line"></i></div></div><div class="stat-value">' + formatMoney(merchant.yesterdayIncome || 0) + '</div><div class="stat-change"><span>昨日订单: ' + (merchant.yesterdayOrders || 0) + '</span></div></div>' +
+                '    <div class="stat-card"><div class="stat-header"><span class="stat-label">总余额</span><div class="stat-icon yellow"><i class="ri-wallet-line"></i></div></div><div class="stat-value">' + formatMoney(merchant.balance || 0) + '</div><div class="stat-change"><span>冻结: ' + formatMoney(merchant.frozenBalance || 0) + '</span></div></div>' +
+                '    <div class="stat-card"><div class="stat-header"><span class="stat-label">总收入</span><div class="stat-icon purple"><i class="ri-bar-chart-line"></i></div></div><div class="stat-value">' + formatMoney(merchant.totalIncome || 0) + '</div><div class="stat-change"><span>总订单: ' + (merchant.totalOrders || 0) + '</span></div></div>' +
+                '</div>' +
+                '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">' +
+                '    <div class="card fade-in"><div class="card-header"><h3 class="card-title">基本信息</h3></div><div class="card-body"><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">' +
+                detailItem('商户ID', '<code>' + escapeHtml(merchant.id) + '</code>') +
+                detailItem('用户名', escapeHtml(merchant.username)) +
+                detailItem('邮箱', escapeHtml(merchant.email || '-')) +
+                detailItem('状态', getStatusBadge(merchant.status, 'merchant')) +
+                detailItem('QQ', escapeHtml(merchant.contactQq || '-')) +
+                detailItem('微信', escapeHtml(merchant.contactWechat || '-')) +
+                detailItem('创建时间', formatDate(merchant.createdAt)) +
+                detailItem('最后登录', formatDate(merchant.lastLoginAt)) +
+                '    </div></div></div>' +
+                '    <div class="card fade-in"><div class="card-header"><h3 class="card-title">API 配置</h3></div><div class="card-body">' +
+                detailItem('API Key', '<code style="word-break: break-all;">' + escapeHtml(merchant.apiKey || '-') + '</code>') +
+                detailItem('签名方式', merchant.apiKeyType === 'md5' ? 'MD5' : 'HMAC-SHA256') +
+                detailItem('异步通知地址', escapeHtml(merchant.notifyUrl || '-')) +
+                detailItem('同步返回地址', escapeHtml(merchant.returnUrl || '-')) +
+                detailItem('分组ID', escapeHtml(merchant.groupId || '-')) +
+                '    </div></div>' +
+                '</div>' +
+                '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">' +
+                '    <div class="card fade-in"><div class="card-header"><h3 class="card-title">最近订单</h3></div><div class="card-body" style="padding: 0;"><div class="table-container"><table class="data-table"><thead><tr><th>订单号</th><th>金额</th><th>状态</th><th>时间</th></tr></thead><tbody>' + ordersHtml + '</tbody></table></div></div></div>' +
+                '    <div class="card fade-in"><div class="card-header"><h3 class="card-title">最近结算</h3></div><div class="card-body" style="padding: 0;"><div class="table-container"><table class="data-table"><thead><tr><th>结算ID</th><th>金额</th><th>状态</th><th>时间</th></tr></thead><tbody>' + settlementsHtml + '</tbody></table></div></div></div>' +
+                '</div>';
+        }
+
+        function detailItem(label, value) {
+            return '<div class="form-group">' +
+                '<label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">' + label + '</label>' +
+                '<div style="padding: 8px; word-break: break-all;">' + value + '</div>' +
+                '</div>';
         }
 
         function renderOrders() {
@@ -3151,6 +3268,47 @@ app.get('/admin', async (c) => {
             logs: loadLogsData
         };
 
+        // 导航到商户详情页面
+        async function navigateToMerchantDetail(merchantId) {
+            state.currentPage = 'merchantDetail';
+
+            document.querySelectorAll('.nav-item').forEach(function(item) {
+                item.classList.remove('active');
+                if (item.dataset.page === 'merchants') {
+                    item.classList.add('active');
+                }
+            });
+
+            var breadcrumb = document.getElementById('breadcrumbCurrent');
+            if (breadcrumb) breadcrumb.textContent = '商户详情';
+
+            var mainContent = document.getElementById('mainContent');
+            if (mainContent) {
+                mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            }
+
+            try {
+                var result = await api.getMerchantDetail(merchantId);
+                if (!result.success) {
+                    showToast('error', '获取失败', result.message || '商户详情加载失败');
+                    navigateTo('merchants');
+                    return;
+                }
+
+                if (mainContent) {
+                    mainContent.innerHTML = renderMerchantDetail(result.data);
+                }
+            } catch (error) {
+                console.error('获取商户详情失败:', error);
+                showToast('error', '获取失败', '系统错误');
+                navigateTo('merchants');
+            }
+
+            if (window.innerWidth <= 1024) {
+                closeSidebar();
+            }
+        }
+
         // 导航到指定页面
         function navigateTo(page) {
             state.currentPage = page;
@@ -3654,6 +3812,102 @@ app.get('/admin', async (c) => {
                 overlay.classList.remove('active');
                 setTimeout(function() { overlay.remove(); }, 300);
             }
+        }
+
+        // 显示商户编辑弹窗
+        function showEditMerchantModal() {
+            var merchant = state.currentMerchant;
+            if (!merchant) {
+                showToast('error', '操作失败', '商户信息未加载');
+                return;
+            }
+
+            var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
+                '<div class="modal">' +
+                '    <div class="modal-header">' +
+                '        <span class="modal-title">编辑商户信息</span>' +
+                '        <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>' +
+                '    </div>' +
+                '    <div class="modal-body">' +
+                '        <div class="form-group"><label class="form-label">邮箱</label><input type="email" class="form-input" id="editMerchantEmail" value="' + escapeHtml(merchant.email || '') + '" placeholder="请输入邮箱"></div>' +
+                '        <div class="form-group"><label class="form-label">QQ</label><input type="text" class="form-input" id="editMerchantContactQq" value="' + escapeHtml(merchant.contactQq || '') + '" placeholder="请输入QQ号"></div>' +
+                '        <div class="form-group"><label class="form-label">微信</label><input type="text" class="form-input" id="editMerchantContactWechat" value="' + escapeHtml(merchant.contactWechat || '') + '" placeholder="请输入微信号"></div>' +
+                '        <div class="form-group"><label class="form-label">异步通知地址</label><input type="url" class="form-input" id="editMerchantNotifyUrl" value="' + escapeHtml(merchant.notifyUrl || '') + '" placeholder="https://example.com/notify"></div>' +
+                '        <div class="form-group"><label class="form-label">同步返回地址</label><input type="url" class="form-input" id="editMerchantReturnUrl" value="' + escapeHtml(merchant.returnUrl || '') + '" placeholder="https://example.com/return"></div>' +
+                '        <div class="form-group"><label class="form-label">分组ID</label><input type="text" class="form-input" id="editMerchantGroupId" value="' + escapeHtml(merchant.groupId || '') + '" placeholder="请输入分组ID"></div>' +
+                '    </div>' +
+                '    <div class="modal-footer">' +
+                '        <button class="btn btn-secondary" onclick="closeModal()">取消</button>' +
+                '        <button class="btn btn-primary" id="editMerchantSubmitBtn" onclick="submitMerchantEdit()">保存</button>' +
+                '    </div>' +
+                '</div>' +
+                '</div>';
+
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            setTimeout(function() {
+                var overlay = document.getElementById('modalOverlay');
+                if (overlay) overlay.classList.add('active');
+            }, 10);
+        }
+
+        // 提交商户编辑
+        async function submitMerchantEdit() {
+            var merchant = state.currentMerchant;
+            if (!merchant) {
+                showToast('error', '保存失败', '商户信息未加载');
+                return;
+            }
+
+            var submitBtn = document.getElementById('editMerchantSubmitBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '保存中...';
+            }
+
+            var merchantData = {
+                email: document.getElementById('editMerchantEmail').value || '',
+                contactQq: document.getElementById('editMerchantContactQq').value || '',
+                contactWechat: document.getElementById('editMerchantContactWechat').value || '',
+                notifyUrl: document.getElementById('editMerchantNotifyUrl').value || '',
+                returnUrl: document.getElementById('editMerchantReturnUrl').value || '',
+                groupId: document.getElementById('editMerchantGroupId').value || ''
+            };
+
+            try {
+                var result = await api.updateMerchant(merchant.id, merchantData);
+                if (result.success) {
+                    showToast('success', '保存成功', result.message || '商户信息已更新');
+                    closeModal();
+                    navigateToMerchantDetail(merchant.id);
+                } else {
+                    showToast('error', '保存失败', result.message);
+                }
+            } catch (error) {
+                showToast('error', '保存失败', '网络错误，请重试');
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '保存';
+                }
+            }
+        }
+
+        // 切换商户状态
+        function handleMerchantStatus(id, status) {
+            var actionText = status === 1 ? '启用' : '禁用';
+            showConfirm('确认' + actionText + '商户', '确定要' + actionText + '该商户吗？', async function() {
+                try {
+                    var result = await api.updateMerchantStatus(id, status);
+                    if (result.success) {
+                        showToast('success', '操作成功', '商户已' + actionText);
+                        navigateToMerchantDetail(id);
+                    } else {
+                        showToast('error', '操作失败', result.message);
+                    }
+                } catch (error) {
+                    showToast('error', '操作失败', '网络错误，请重试');
+                }
+            });
         }
 
         // 提交商户表单
