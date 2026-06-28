@@ -366,7 +366,6 @@ payRouter.get('/query', async (c) => {
  * GET /api/pay/orders
  */
 payRouter.get('/orders', async (c) => {
-    const env = c.env;
     const pid = c.req.query('pid');
     const key = c.req.query('key');
     const limit = parseInt(c.req.query('limit') || '10');
@@ -561,7 +560,6 @@ payRouter.post('/refund', async (c) => {
  * GET /api/pay/refund/query
  */
 payRouter.get('/refund/query', async (c) => {
-    const env = c.env;
     const pid = c.req.query('pid');
     const refundNo = c.req.query('refund_no');
     const outTradeNo = c.req.query('out_trade_no');
