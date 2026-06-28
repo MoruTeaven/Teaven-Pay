@@ -434,6 +434,60 @@ adminRouter.get('/merchants/:id', async (c) => {
 });
 
 /**
+ * 更新商户信息
+ * PUT /api/admin/merchants/:id
+ */
+adminRouter.put('/merchants/:id', async (c) => {
+    const { id } = c.req.param();
+    const body = await c.req.parseBody();
+    
+    const email = body.email as string;
+    const contactQq = body.contactQq as string;
+    const contactWechat = body.contactWechat as string;
+    const notifyUrl = body.notifyUrl as string;
+    const returnUrl = body.returnUrl as string;
+    const groupId = body.groupId as string;
+    
+    try {
+        const merchant = await c.env.DB.prepare(
+            'SELECT id FROM users WHERE id = ? AND role = ?'
+        ).bind(id, 'merchant').first();
+        
+        if (!merchant) {
+            return c.json({ code: -1, msg: '商户不存在' });
+        }
+        
+        await c.env.DB.prepare(`
+            UPDATE users SET 
+                email = COALESCE(?, email),
+                contact_qq = COALESCE(?, contact_qq),
+                contact_wechat = COALESCE(?, contact_wechat),
+                notify_url = COALESCE(?, notify_url),
+                return_url = COALESCE(?, return_url),
+                group_id = COALESCE(?, group_id),
+                updated_at = datetime('now')
+            WHERE id = ? AND role = 'merchant'
+        `).bind(
+            email !== undefined ? email : null,
+            contactQq !== undefined ? contactQq : null,
+            contactWechat !== undefined ? contactWechat : null,
+            notifyUrl !== undefined ? notifyUrl : null,
+            returnUrl !== undefined ? returnUrl : null,
+            groupId !== undefined ? groupId : null,
+            id
+        ).run();
+        
+        return c.json({
+            code: 0,
+            msg: '商户信息更新成功'
+        });
+    } catch (error) {
+        console.error('Update merchant error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
  * 更新商户状态
  * PUT /api/admin/merchants/:id/status
  */

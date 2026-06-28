@@ -1330,6 +1330,7 @@
             orders: [],
             settlements: [],
             logs: [],
+            currentMerchant: null,
             token: localStorage.getItem('admin_token') || null,
             user: JSON.parse(localStorage.getItem('admin_user') || 'null')
         };
@@ -1507,6 +1508,27 @@
                     throw new Error(data.msg || '获取商户详情失败');
                 } catch (error) {
                     console.error('获取商户详情失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
+            // 更新商户信息
+            async updateMerchant(id, merchantData) {
+                try {
+                    const response = await this.request(`/api/admin/merchants/${id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams(merchantData)
+                    });
+                    const data = await response.json();
+                    if (data.code === 0) {
+                        return { success: true, message: data.msg };
+                    }
+                    throw new Error(data.msg || '更新商户信息失败');
+                } catch (error) {
+                    console.error('更新商户信息失败:', error);
                     return { success: false, message: error.message };
                 }
             },
@@ -1698,6 +1720,15 @@
         function formatDate(dateStr) {
             if (!dateStr) return '-';
             return dateStr;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         function copyToClipboard(text) {
@@ -2113,9 +2144,6 @@
                                                     <button class="btn btn-sm btn-secondary" onclick="navigateToMerchantDetail('${merchant.id}')">
                                                         <i class="ri-eye-line"></i>
                                                     </button>
-                                                    <button class="btn btn-sm btn-secondary" onclick="showToast('success', '操作成功', 'API Key 已重置')">
-                                                        <i class="ri-refresh-line"></i>
-                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -2160,6 +2188,8 @@
                 return '';
             }
 
+            state.currentMerchant = merchant;
+
             return `
                 <div class="page-header">
                     <div style="display: flex; align-items: center; gap: 16px;">
@@ -2170,10 +2200,21 @@
                         <h1 class="page-title">商户详情 - ${merchant.username}</h1>
                     </div>
                     <div class="page-actions">
-                        <button class="btn btn-secondary" onclick="showToast('info', '提示', '编辑功能开发中')">
+                        <button class="btn btn-secondary" onclick="showEditMerchantModal()">
                             <i class="ri-edit-line"></i>
                             编辑
                         </button>
+                        ${merchant.status === 1 ? `
+                            <button class="btn btn-danger" onclick="handleMerchantStatus('${merchant.id}', 0)">
+                                <i class="ri-forbid-line"></i>
+                                禁用
+                            </button>
+                        ` : `
+                            <button class="btn btn-primary" onclick="handleMerchantStatus('${merchant.id}', 1)">
+                                <i class="ri-checkbox-circle-line"></i>
+                                启用
+                            </button>
+                        `}
                     </div>
                 </div>
 
@@ -2830,6 +2871,124 @@
             } catch (error) {
                 showToast('error', '保存失败', '网络错误，请重试');
             }
+        }
+
+        // 显示商户编辑弹窗
+        function showEditMerchantModal() {
+            const merchant = state.currentMerchant;
+            if (!merchant) {
+                showToast('error', '操作失败', '商户信息未加载');
+                return;
+            }
+
+            const modalHTML = `
+                <div class="modal-overlay" id="modalOverlay">
+                    <div class="modal">
+                        <div class="modal-header">
+                            <span class="modal-title">编辑商户信息</span>
+                            <button class="modal-close" onclick="closeModal()">
+                                <i class="ri-close-line"></i>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-group">
+                                <label class="form-label">邮箱</label>
+                                <input type="email" class="form-input" id="editMerchantEmail" value="${escapeHtml(merchant.email)}" placeholder="请输入邮箱">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">QQ</label>
+                                <input type="text" class="form-input" id="editMerchantContactQq" value="${escapeHtml(merchant.contactQq)}" placeholder="请输入QQ号">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">微信</label>
+                                <input type="text" class="form-input" id="editMerchantContactWechat" value="${escapeHtml(merchant.contactWechat)}" placeholder="请输入微信号">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">异步通知地址</label>
+                                <input type="url" class="form-input" id="editMerchantNotifyUrl" value="${escapeHtml(merchant.notifyUrl)}" placeholder="https://example.com/notify">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">同步返回地址</label>
+                                <input type="url" class="form-input" id="editMerchantReturnUrl" value="${escapeHtml(merchant.returnUrl)}" placeholder="https://example.com/return">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">分组ID</label>
+                                <input type="text" class="form-input" id="editMerchantGroupId" value="${escapeHtml(merchant.groupId)}" placeholder="请输入分组ID">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+                            <button class="btn btn-primary" id="editMerchantSubmitBtn" onclick="submitMerchantEdit()">保存</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            setTimeout(() => {
+                const overlay = document.getElementById('modalOverlay');
+                if (overlay) overlay.classList.add('active');
+            }, 10);
+        }
+
+        // 提交商户编辑
+        async function submitMerchantEdit() {
+            const merchant = state.currentMerchant;
+            if (!merchant) {
+                showToast('error', '保存失败', '商户信息未加载');
+                return;
+            }
+
+            const submitBtn = document.getElementById('editMerchantSubmitBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '保存中...';
+            }
+
+            const merchantData = {
+                email: document.getElementById('editMerchantEmail')?.value || '',
+                contactQq: document.getElementById('editMerchantContactQq')?.value || '',
+                contactWechat: document.getElementById('editMerchantContactWechat')?.value || '',
+                notifyUrl: document.getElementById('editMerchantNotifyUrl')?.value || '',
+                returnUrl: document.getElementById('editMerchantReturnUrl')?.value || '',
+                groupId: document.getElementById('editMerchantGroupId')?.value || ''
+            };
+
+            try {
+                const result = await api.updateMerchant(merchant.id, merchantData);
+                if (result.success) {
+                    showToast('success', '保存成功', result.message || '商户信息已更新');
+                    closeModal();
+                    navigateToMerchantDetail(merchant.id);
+                } else {
+                    showToast('error', '保存失败', result.message);
+                }
+            } catch (error) {
+                showToast('error', '保存失败', '网络错误，请重试');
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '保存';
+                }
+            }
+        }
+
+        // 切换商户状态
+        function handleMerchantStatus(id, status) {
+            const actionText = status === 1 ? '启用' : '禁用';
+            showConfirm(`确认${actionText}商户`, `确定要${actionText}该商户吗？`, async () => {
+                try {
+                    const result = await api.updateMerchantStatus(id, status);
+                    if (result.success) {
+                        showToast('success', '操作成功', `商户已${actionText}`);
+                        navigateToMerchantDetail(id);
+                    } else {
+                        showToast('error', '操作失败', result.message);
+                    }
+                } catch (error) {
+                    showToast('error', '操作失败', '网络错误，请重试');
+                }
+            });
         }
 
         async function renderLogs() {

@@ -175,7 +175,7 @@ app.get('/result/:tradeNo', async (c) => {
     `);
 });
 
-// 管理后台页面
+// 管理后台页面（同时匹配 /admin 和 /admin/）
 app.get('/admin', async (c) => {
     return c.html(`<!DOCTYPE html>
 <html lang="zh-CN">
@@ -2289,7 +2289,7 @@ app.get('/admin', async (c) => {
                 '<div class="card fade-in">' +
                 '    <div class="card-header">' +
                 '        <span class="card-title">最近订单</span>' +
-                '        <a href="#" class="btn btn-sm btn-secondary" onclick="event.preventDefault(); navigateTo(\'orders\')">查看全部</a>' +
+                '        <a href="#" class="btn btn-sm btn-secondary" onclick="event.preventDefault(); navigateTo(\\'orders\\')">查看全部</a>' +
                 '    </div>' +
                 '    <div class="card-body" style="padding: 0;">' +
                 '        <div class="table-container">' +
@@ -2403,7 +2403,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">商户管理</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-primary" onclick="showModal(\'createMerchant\')">' +
+                '        <button class="btn btn-primary" onclick="showModal(\\'createMerchant\\')">' +
                 '            <i class="ri-add-line"></i>' +
                 '            创建商户' +
                 '        </button>' +
@@ -2480,10 +2480,10 @@ app.get('/admin', async (c) => {
                         '<td>' + formatDate(merchant.createdAt) + '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'查看详情\', \'商户详情页面开发中\')">' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'查看详情\\', \\'商户详情页面开发中\\')">' +
                         '            <i class="ri-eye-line"></i>' +
                         '        </button>' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\'success\', \'操作成功\', \'API Key 已重置\')">' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showToast(\\'success\\', \\'操作成功\\', \\'API Key 已重置\\')">' +
                         '            <i class="ri-refresh-line"></i>' +
                         '        </button>' +
                         '    </div>' +
@@ -2503,7 +2503,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">订单管理</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-secondary" onclick="showToast(\'success\', \'导出成功\', \'订单数据已导出\')">' +
+                '        <button class="btn btn-secondary" onclick="showToast(\\'success\\', \\'导出成功\\', \\'订单数据已导出\\')">' +
                 '            <i class="ri-download-2-line"></i>' +
                 '            导出订单' +
                 '        </button>' +
@@ -2588,7 +2588,7 @@ app.get('/admin', async (c) => {
                         '<td>' + formatDate(order.createdAt) + '</td>' +
                         '<td>' + formatDate(order.paidAt) + '</td>' +
                         '<td>' +
-                        '    <button class="btn btn-sm btn-secondary" onclick="showToast(\'info\', \'查看详情\', \'订单详情页面开发中\')">' +
+                        '    <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'查看详情\\', \\'订单详情页面开发中\\')">' +
                         '        <i class="ri-eye-line"></i>' +
                         '    </button>' +
                         '</td>' +
@@ -2666,8 +2666,8 @@ app.get('/admin', async (c) => {
                     var actionHtml = '-';
                     if (settlement.status === 0) {
                         actionHtml = '<div style="display: flex; gap: 8px;">' +
-                            '<button class="btn btn-sm btn-primary" onclick="handleSettlement(\'' + settlement.id + '\', \'approve\')">批准</button>' +
-                            '<button class="btn btn-sm btn-danger" onclick="handleSettlement(\'' + settlement.id + '\', \'reject\')">拒绝</button>' +
+                            '<button class="btn btn-sm btn-primary" onclick="handleSettlement(\\'' + settlement.id + '\\', \\'approve\\')">批准</button>' +
+                            '<button class="btn btn-sm btn-danger" onclick="handleSettlement(\\'' + settlement.id + '\\', \\'reject\\')">拒绝</button>' +
                             '</div>';
                     }
                     
@@ -2769,8 +2769,8 @@ app.get('/admin', async (c) => {
                         '<td>' + (item.status === 1 ? '<span class="badge success">启用</span>' : '<span class="badge error">禁用</span>') + '</td>' +
                         '<td>' + (item.sortOrder || 0) + '</td>' +
                         '<td>' +
-                        '    <button class="btn btn-sm btn-secondary" onclick="editPaymentType(\'' + item.id + '\')" title="编辑"><i class="ri-edit-line"></i></button>' +
-                        '    <button class="btn btn-sm ' + (item.status === 1 ? 'btn-warning' : 'btn-success') + '" onclick="togglePaymentTypeStatus(\'' + item.id + '\', ' + (item.status === 1 ? 0 : 1) + ')" title="' + (item.status === 1 ? '禁用' : '启用') + '">' +
+                        '    <button class="btn btn-sm btn-secondary" onclick="editPaymentType(\\'' + item.id + '\\')" title="编辑"><i class="ri-edit-line"></i></button>' +
+                        '    <button class="btn btn-sm ' + (item.status === 1 ? 'btn-warning' : 'btn-success') + '" onclick="togglePaymentTypeStatus(\\'' + item.id + '\\', ' + (item.status === 1 ? 0 : 1) + ')" title="' + (item.status === 1 ? '禁用' : '启用') + '">' +
                         '        <i class="' + (item.status === 1 ? 'ri-pause-circle-line' : 'ri-play-circle-line') + '"></i>' +
                         '    </button>' +
                         '</td>' +
@@ -2788,7 +2788,7 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">支付通道</h1>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-primary" onclick="showModal(\'createChannel\')">' +
+                '        <button class="btn btn-primary" onclick="showModal(\\'createChannel\\')">' +
                 '            <i class="ri-add-line"></i>' +
                 '            添加通道' +
                 '        </button>' +
@@ -2848,15 +2848,15 @@ app.get('/admin', async (c) => {
                         '<td>' + minStr + ' - ' + maxStr + '</td>' +
                         '<td>' +
                         '    <label class="toggle-switch" style="display: inline-flex;">' +
-                        '        <input type="checkbox" ' + (channel.status === 1 ? 'checked' : '') + ' onchange="toggleChannelStatus(\'' + channel.id + '\', this.checked ? 1 : 0)">' +
+                        '        <input type="checkbox" ' + (channel.status === 1 ? 'checked' : '') + ' onchange="toggleChannelStatus(\\'' + channel.id + '\\', this.checked ? 1 : 0)">' +
                         '        <span class="toggle-slider"></span>' +
                         '    </label>' +
                         '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="editChannel(\'' + channel.id + '\')" title="编辑"><i class="ri-edit-line"></i></button>' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showChannelConfig(\'' + channel.id + '\')" title="配置"><i class="ri-settings-3-line"></i></button>' +
-                        '        <button class="btn btn-sm btn-danger" onclick="deleteChannel(\'' + channel.id + '\', \'' + (channel.name || '') + '\')" title="删除"><i class="ri-delete-bin-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="editChannel(\\'' + channel.id + '\\')" title="编辑"><i class="ri-edit-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showChannelConfig(\\'' + channel.id + '\\')" title="配置"><i class="ri-settings-3-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-danger" onclick="deleteChannel(\\'' + channel.id + '\\', \\'' + (channel.name || '') + '\\')" title="删除"><i class="ri-delete-bin-line"></i></button>' +
                         '    </div>' +
                         '</td>' +
                         '</tr>';
@@ -3059,7 +3059,7 @@ app.get('/admin', async (c) => {
                 '                <i class="ri-search-line"></i>' +
                 '                搜索' +
                 '            </button>' +
-                '            <button class="btn btn-secondary" onclick="document.getElementById(\'logsKeyword\').value=\'\';loadLogsData()">' +
+                '            <button class="btn btn-secondary" onclick="document.getElementById(\\'logsKeyword\\').value=\\'\\';loadLogsData()">' +
                 '                <i class="ri-refresh-line"></i>' +
                 '                重置' +
                 '            </button>' +
@@ -4175,20 +4175,35 @@ app.get('/admin', async (c) => {
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
-            // 先注册事件监听器
-            setupEventListeners();
+            try {
+                // 先注册事件监听器
+                setupEventListeners();
 
-            // 检查登录状态
-            if (!isLoggedIn()) {
-                navigateTo('login');
-                return;
+                // 检查登录状态
+                if (!isLoggedIn()) {
+                    navigateTo('login');
+                    return;
+                }
+
+                // 更新用户信息显示
+                updateUserDisplay();
+
+                // 渲染默认页面
+                navigateTo('dashboard');
+            } catch (e) {
+                console.error('页面初始化失败:', e);
+                // 如果初始化失败，至少显示登录页面
+                try {
+                    navigateTo('login');
+                } catch (e2) {
+                    document.getElementById('mainContent').innerHTML =
+                        '<div style="text-align:center;padding:60px;">' +
+                        '<h2 style="color:var(--error);">页面加载失败</h2>' +
+                        '<p style="color:var(--text-secondary);margin-top:12px;">请打开浏览器控制台 (F12) 查看错误详情</p>' +
+                        '<p style="color:var(--text-tertiary);margin-top:8px;font-size:12px;">' + (e.message || e) + '</p>' +
+                        '</div>';
+                }
             }
-
-            // 更新用户信息显示
-            updateUserDisplay();
-
-            // 渲染默认页面
-            navigateTo('dashboard');
         });
 
         // 更新用户信息显示
@@ -4203,6 +4218,11 @@ app.get('/admin', async (c) => {
     </script>
 </body>
 </html>`);
+});
+
+// /admin/ 重定向到 /admin
+app.get('/admin/', (c) => {
+    return c.redirect('/admin', 301);
 });
 
 // 404 处理
