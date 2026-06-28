@@ -192,12 +192,12 @@ app.get('/pay/:merchantId', async (c) => {
         }
 
         const channels = await env.DB.prepare(
-            `SELECT pt.id, pt.name, pt.icon FROM payment_types pt
+            `SELECT pt.id, pt.name, pt.display_name, pt.icon FROM payment_types pt
              INNER JOIN channels c ON c.payment_type_id = pt.id AND c.status = 1
              GROUP BY pt.id ORDER BY pt.sort_order`
         ).all();
 
-        const payTypes = (channels.results || []).map((ch: any) => ({ id: ch.id, name: ch.name, icon: ch.icon || '' }));
+        const payTypes = (channels.results || []).map((ch: any) => ({ id: ch.id, name: ch.display_name, icon: ch.icon || '' }));
 
         return c.html(`<!DOCTYPE html>
 <html lang="zh-CN">

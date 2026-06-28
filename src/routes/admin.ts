@@ -994,6 +994,7 @@ adminRouter.get('/channels', async (c) => {
             paymentTypeDisplay: row.payment_type_display || '',
             name: row.name,
             plugin: row.plugin,
+            config: row.config || '{}',
             feeRate: row.fee_rate || 0,
             minAmount: row.min_amount || 0,
             maxAmount: row.max_amount || 0,
