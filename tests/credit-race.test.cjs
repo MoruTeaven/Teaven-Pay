@@ -222,15 +222,20 @@ test("实付金额与订单金额不一致：拒绝入账、订单不变、留�
     } finally { db.close(); fs.rmSync(file, { force: true }); }
 });
 
-test("渠道未返回实付金额：无法核对，一律拒绝入账", async () => {
+test("渠道未回传实付金额：无法核对 → 放行入账但留 warning 流水（决策 2026-09-29）", async () => {
     const { db, file } = freshDb();
     try {
-        const r1 = await creditOrder({ DB: makeD1(db) }, readOrder(db), notifyParams({ paidAmount: undefined }), CREDIT_SOURCE.CHANNEL_NOTIFY);
-        const r2 = await creditOrder({ DB: makeD1(db) }, readOrder(db), notifyParams({ paidAmount: null }), CREDIT_SOURCE.STATUS_POLL);
-        assert.strictEqual(r1.outcome, CREDIT_OUTCOME.AMOUNT_MISMATCH);
-        assert.strictEqual(r2.outcome, CREDIT_OUTCOME.AMOUNT_MISMATCH);
-        assert.strictEqual(readUser(db).balance, 0);
-        assert.strictEqual(readOrder(db).status, 0);
+        const d1 = makeD1(db);
+        const r1 = await creditOrder({ DB: d1 }, readOrder(db), notifyParams({ paidAmount: undefined }), CREDIT_SOURCE.CHANNEL_NOTIFY);
+        assert.strictEqual(r1.outcome, CREDIT_OUTCOME.CREDITED, "缺金额不得阻断入账");
+        assert.strictEqual(readOrder(db).status, 1);
+        assert.strictEqual(readUser(db).balance, PROFIT, "仍按订单额入账");
+        assert.ok(Math.abs(readOrder(db).actual_amount - AMOUNT) < 1e-9, "未核实时 actual_amount 记订单额，不编造实付");
+        const warn = db.prepare("SELECT * FROM payment_logs WHERE status = " + Q + "warning" + Q).get();
+        assert.ok(warn, "必须留下未核对的 warning 流水");
+        assert.strictEqual(JSON.parse(warn.response_data).amount_verified, false);
+        assert.strictEqual(JSON.parse(warn.response_data).paid_cents, null, "没有实付就不得伪造 paid_cents");
+        assert.strictEqual(countWhere(db, "payment_logs", "status = " + Q + "success" + Q), 1);
     } finally { db.close(); fs.rmSync(file, { force: true }); }
 });
 
@@ -245,6 +250,13 @@ test("金额核对容差 ±0.70 元：边界内放行、超出即拒", () => {
     assert.strictEqual(w.diffCents, 70, "差额要按分报出");
     assert.ok(w.warning && /容差内放行/.test(w.warning), "容差内差额必须带 warning");
     assert.strictEqual(matchOrderAmount(77.77, 77.77).warning, undefined, "零差额不该有 warning");
+    assert.strictEqual(matchOrderAmount(77.77, 77.77).verified, true, "比对通过要标 verified");
+    assert.strictEqual(matchOrderAmount(77.77, 77.07).verified, true, "容差内放行同样是已核对");
+    const missing = matchOrderAmount(77.77, undefined);
+    assert.strictEqual(missing.ok, true, "渠道未回传金额改为放行");
+    assert.strictEqual(missing.verified, false, "放行但未核对要标出来");
+    assert.ok(/无法核对/.test(missing.warning || ""), "缺金额必须带 warning 文案");
+    assert.strictEqual(matchOrderAmount(77.77, null).ok, true, "null 同样视为未回传");
     assert.strictEqual(matchOrderAmount(0.1, 0.1).ok, true, "浮点表示误差不得误伤合法金额");
     assert.strictEqual(matchOrderAmount(1234.56, "1234.56").ok, true, "字符串金额同样可核对");
 });

@@ -71,6 +71,7 @@ export interface CreditResult {
  * 渠道侧的四舍五入/优惠分摊留的余量，而不是为了修浮点。
  * ±0.70 元由抹露茶柒指定（2026-09-29）；若要恢复零容忍，把此常量改成 0 即可。
  * 超出容差（例如付 0.01 想让 77.77 的订单记为已支付）一律拒绝入账。
+ * 渠道压根没回传金额时不参与容差判断——直接按订单额放行并记 warning（见 matchOrderAmount）。
  */
 export const AMOUNT_TOLERANCE_CENTS = 70;
 
@@ -88,6 +89,8 @@ export interface AmountMatchResult {
     diffCents?: number;
     /** 容差内但存在差额时的提示，入账仍继续 */
     warning?: string;
+    /** 是否真的拿到渠道实付金额并完成了比对；false 表示本次入账未经金额核对 */
+    verified: boolean;
 }
 
 /**
@@ -99,21 +102,32 @@ export function matchOrderAmount(
 ): AmountMatchResult {
     const expectedCents = toCents(Number(orderAmount));
     if (!Number.isFinite(expectedCents)) {
-        return { ok: false, reason: `订单金额不合法: ${orderAmount}` };
+        return { ok: false, verified: false, reason: `订单金额不合法: ${orderAmount}` };
     }
     if (paidAmount === undefined || paidAmount === null) {
-        // 渠道没给实付金额就无法核对，资金安全优先，拒绝入账
-        return { ok: false, reason: '回调未提供实付金额，无法核对', expectedCents };
+        // 渠道没回传实付金额：无法核对，但不阻断入账（抹露茶柒 2026-09-29 决策）。
+        // 虎皮椒通道下单即锁定金额、买家不能自定义输入支付额，现网不会出现改价，
+        // 所以这里按订单额放行，并留 warning 流水——日后若接入允许改价的易支付类渠道，
+        // 应把该分支改回拒绝，或只对该 plugin 放行。
+        return {
+            ok: true,
+            verified: false,
+            expectedCents,
+            paidCents: expectedCents,
+            diffCents: 0,
+            warning: '渠道未回传实付金额，无法核对，已按订单额放行入账',
+        };
     }
     const paid = Number(paidAmount);
     if (!Number.isFinite(paid) || paid <= 0) {
-        return { ok: false, reason: `回调实付金额不合法: ${paidAmount}`, expectedCents };
+        return { ok: false, verified: false, reason: `回调实付金额不合法: ${paidAmount}`, expectedCents };
     }
     const paidCents = toCents(paid);
     const diffCents = expectedCents - paidCents;
     if (Math.abs(diffCents) > AMOUNT_TOLERANCE_CENTS) {
         return {
             ok: false,
+            verified: true,
             reason: `金额超出容差：订单 ${expectedCents} 分，实付 ${paidCents} 分，差额 ${diffCents} 分（允许 ±${AMOUNT_TOLERANCE_CENTS} 分）`,
             expectedCents,
             paidCents,
@@ -123,13 +137,14 @@ export function matchOrderAmount(
     if (diffCents !== 0) {
         return {
             ok: true,
+            verified: true,
             expectedCents,
             paidCents,
             diffCents,
             warning: `实付与订单金额相差 ${diffCents} 分，在 ±${AMOUNT_TOLERANCE_CENTS} 分容差内放行`,
         };
     }
-    return { ok: true, expectedCents, paidCents, diffCents };
+    return { ok: true, verified: true, expectedCents, paidCents, diffCents };
 }
 
 /**
@@ -211,9 +226,10 @@ export async function creditOrder(
                 order_amount: order.amount,
                 paid_amount: params.paidAmount ?? null,
                 expected_cents: amountCheck.expectedCents ?? null,
-                paid_cents: amountCheck.paidCents ?? null,
-                diff_cents: amountCheck.diffCents ?? null,
+                paid_cents: amountCheck.verified ? (amountCheck.paidCents ?? null) : null,
+                diff_cents: amountCheck.verified ? (amountCheck.diffCents ?? null) : null,
                 tolerance_cents: AMOUNT_TOLERANCE_CENTS,
+                amount_verified: amountCheck.verified,
             },
             errorMessage: amountCheck.warning,
         }).run().catch((error) => {
@@ -222,8 +238,9 @@ export async function creditOrder(
     }
 
     const paidAt = params.paidAt || new Date().toISOString();
-    const paidAmountCents = amountCheck.paidCents as number;
-    const paidAmount = paidAmountCents / 100;
+    // 未核对（渠道没回传金额）时，actual_amount 记订单额本身，
+    // 并已在上面的 warning 流水里写明"未核对"，避免用编造的实付数字
+    const paidAmount = amountCheck.verified ? (amountCheck.paidCents as number) / 100 : order.amount;
 
     // ===== 2. 状态翻转 CAS：只有把 0 改成 1 的那次才允许入账（DoD 1）=====
     let flip: D1Result | null = null;
