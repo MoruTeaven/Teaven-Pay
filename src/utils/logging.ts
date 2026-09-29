@@ -96,55 +96,72 @@ export function headersToLogObject(headers: Headers): Record<string, string> {
     return result;
 }
 
+/**
+ * 构建订单流水写入语句（不执行）
+ *
+ * 供 env.DB.batch() 复用：入账等资金操作可以把「余额变更 + 审计流水」
+ * 放进同一个事务，避免日志写入与资金变更脱节。
+ */
+export function buildOrderLogStatement(env: Env, input: OrderLogInput): D1PreparedStatement {
+    return env.DB.prepare(`
+        INSERT INTO order_logs (
+            id, order_id, user_id, out_trade_no, action, from_status, to_status,
+            amount, detail, ip, user_agent, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+        generateUUIDv7(),
+        input.orderId,
+        input.userId || null,
+        input.outTradeNo || null,
+        input.action,
+        input.fromStatus ?? null,
+        input.toStatus ?? null,
+        input.amount ?? null,
+        toLogText(input.detail),
+        input.ip || null,
+        input.userAgent || null,
+        new Date().toISOString()
+    );
+}
+
 export async function logOrderEvent(env: Env, input: OrderLogInput): Promise<void> {
     try {
-        await env.DB.prepare(`
-            INSERT INTO order_logs (
-                id, order_id, user_id, out_trade_no, action, from_status, to_status,
-                amount, detail, ip, user_agent, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-            generateUUIDv7(),
-            input.orderId,
-            input.userId || null,
-            input.outTradeNo || null,
-            input.action,
-            input.fromStatus ?? null,
-            input.toStatus ?? null,
-            input.amount ?? null,
-            toLogText(input.detail),
-            input.ip || null,
-            input.userAgent || null,
-            new Date().toISOString()
-        ).run();
+        await buildOrderLogStatement(env, input).run();
     } catch (error) {
         console.error('Failed to write order log:', error);
     }
 }
 
+/**
+ * 构建支付流水写入语句（不执行），用途同 buildOrderLogStatement
+ */
+export function buildPaymentLogStatement(env: Env, input: PaymentLogInput): D1PreparedStatement {
+    return env.DB.prepare(`
+        INSERT INTO payment_logs (
+            id, order_id, user_id, channel_id, plugin, direction, action, status,
+            amount, third_party_trade_no, request_data, response_data, error_message, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+        generateUUIDv7(),
+        input.orderId || null,
+        input.userId || null,
+        input.channelId || null,
+        input.plugin || null,
+        input.direction,
+        input.action,
+        input.status,
+        input.amount ?? null,
+        input.thirdPartyTradeNo || null,
+        toLogText(input.requestData),
+        toLogText(input.responseData),
+        input.errorMessage ? truncate(input.errorMessage, MAX_STRING_LENGTH) : null,
+        new Date().toISOString()
+    );
+}
+
 export async function logPaymentEvent(env: Env, input: PaymentLogInput): Promise<void> {
     try {
-        await env.DB.prepare(`
-            INSERT INTO payment_logs (
-                id, order_id, user_id, channel_id, plugin, direction, action, status,
-                amount, third_party_trade_no, request_data, response_data, error_message, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-            generateUUIDv7(),
-            input.orderId || null,
-            input.userId || null,
-            input.channelId || null,
-            input.plugin || null,
-            input.direction,
-            input.action,
-            input.status,
-            input.amount ?? null,
-            input.thirdPartyTradeNo || null,
-            toLogText(input.requestData),
-            toLogText(input.responseData),
-            input.errorMessage ? truncate(input.errorMessage, MAX_STRING_LENGTH) : null,
-            new Date().toISOString()
-        ).run();
+        await buildPaymentLogStatement(env, input).run();
     } catch (error) {
         console.error('Failed to write payment log:', error);
     }

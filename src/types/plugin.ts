@@ -117,6 +117,13 @@ export interface NotifyResult {
     /** 支付状态 */
     status: 'success' | 'failed' | 'pending';
     
+    /**
+     * 渠道回传的实付金额（元）。
+     * 入账前必须与订单金额比对（容差 0），缺失或不一致都不允许入账，
+     * 防止易支付类渠道改价后用 0.01 把全额订单标记为已支付。
+     */
+    paidAmount?: number;
+    
     /** 买家信息 */
     buyer?: string;
     
@@ -142,6 +149,11 @@ export interface OrderStatus {
     
     /** 第三方交易号 */
     thirdPartyTradeNo?: string;
+    
+    /**
+     * 渠道查询返回的实付金额（元），同样要在入账前与订单金额比对
+     */
+    paidAmount?: number;
     
     /** 买家信息 */
     buyer?: string;

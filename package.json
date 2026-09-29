@@ -15,7 +15,8 @@
     "db:reset": "wrangler d1 execute teaven-pay-db --file=./migrations/0001_initial.sql --force",
     "db:console": "wrangler d1 execute teaven-pay-db --command 'SELECT * FROM users LIMIT 10'",
     "tail": "wrangler tail",
-    "secret:put": "wrangler secret put"
+    "secret:put": "wrangler secret put",
+    "test:credit": "node --experimental-sqlite tests/credit-race.test.cjs"
   },
   "dependencies": {
     "@cloudflare/workers-types": "^4.20240117.0",

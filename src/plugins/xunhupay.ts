@@ -314,6 +314,8 @@ export class XunhupayPlugin implements PaymentPlugin {
                 tradeNo: payload.trade_order_id || '',
                 outTradeNo: payload.trade_order_id || '',
                 thirdPartyTradeNo: payload.transaction_id || payload.open_order_id,
+                // 虎皮椒 pay_amount 为实付、total_amount 为订单金额，优先取实付用于改价检测
+                paidAmount: (Number.isFinite(Number(payload.pay_amount ?? payload.total_amount)) ? Number(payload.pay_amount ?? payload.total_amount) : undefined),
                 status: paymentStatus,
                 paidAt: payload.time ? new Date(parseInt(payload.time) * 1000).toISOString() : undefined,
                 response: 'success'
@@ -370,6 +372,7 @@ export class XunhupayPlugin implements PaymentPlugin {
                 return {
                     status: orderStatus,
                     thirdPartyTradeNo: data.data.open_order_id,
+                    paidAmount: (Number.isFinite(Number(data.data.pay_amount ?? data.data.total_amount)) ? Number(data.data.pay_amount ?? data.data.total_amount) : undefined),
                     paidAt: data.data.payment_time ? new Date(parseInt(data.data.payment_time) * 1000).toISOString() : undefined
                 };
             }

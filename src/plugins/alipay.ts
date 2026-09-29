@@ -107,6 +107,8 @@ export class AlipayPlugin implements PaymentPlugin {
                 outTradeNo: payload.out_trade_no || '',
                 thirdPartyTradeNo: payload.trade_no,
                 status: payload.trade_status === 'TRADE_SUCCESS' ? 'success' : 'pending',
+                // 实付金额（元）：支付宝 total_amount 为字符串，取不到时留空，由入账层按「无法核对」拒绝
+                paidAmount: (Number.isFinite(Number(payload.total_amount)) ? Number(payload.total_amount) : undefined),
                 buyer: payload.buyer_id,
                 paidAt: payload.gmt_payment,
                 response: 'success'
@@ -161,6 +163,7 @@ export class AlipayPlugin implements PaymentPlugin {
             return {
                 status,
                 thirdPartyTradeNo: data.alipay_trade_query_response?.trade_no,
+                paidAmount: (Number.isFinite(Number(data.alipay_trade_query_response?.total_amount)) ? Number(data.alipay_trade_query_response?.total_amount) : undefined),
                 buyer: data.alipay_trade_query_response?.buyer_user_id,
                 paidAt: data.alipay_trade_query_response?.send_pay_date
             };
