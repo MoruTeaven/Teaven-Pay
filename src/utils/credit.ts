@@ -10,7 +10,7 @@
  *     易支付类渠道允许改价时付 0.01 也能让全额订单记为已支付。
  *
  * 现在统一的不变式：
- *  - 先做金额核对（容差 0），不一致直接拒绝入账并记日志；
+ *  - 先做金额核对（按分比对，容差 ±0.70 元），超出容差或渠道未给出金额都拒绝入账并记日志；
  *  - 用带 AND status=0 守卫的 UPDATE 做「状态翻转 CAS」，只有 meta.changes>0 的那一次才继续；
  *  - 余额、统计、审计流水放在同一个 D1 batch（单事务）里，保证要么全成要么全无；
  *  - 入账失败会把订单回退为未支付（只回退自己刚翻转的那次），让渠道重试而不是丢单。
@@ -64,18 +64,39 @@ export interface CreditResult {
     reason?: string;
 }
 
-/** 金额统一按「分」比较，避免浮点误差；容差 0 */
+/**
+ * 金额核对容差（单位：分）
+ *
+ * 比对本身是按「分」取整做的，纯浮点误差不可能出现，所以这里的容差是给
+ * 渠道侧的四舍五入/优惠分摊留的余量，而不是为了修浮点。
+ * ±0.70 元由抹露茶柒指定（2026-09-29）；若要恢复零容忍，把此常量改成 0 即可。
+ * 超出容差（例如付 0.01 想让 77.77 的订单记为已支付）一律拒绝入账。
+ */
+export const AMOUNT_TOLERANCE_CENTS = 70;
+
+/** 金额统一按「分」比较，避免浮点误差 */
 function toCents(value: number): number {
     return Math.round(value * 100);
 }
 
+export interface AmountMatchResult {
+    ok: boolean;
+    reason?: string;
+    expectedCents?: number;
+    paidCents?: number;
+    /** expectedCents - paidCents，容差内的非零差额会同时带 warning */
+    diffCents?: number;
+    /** 容差内但存在差额时的提示，入账仍继续 */
+    warning?: string;
+}
+
 /**
- * 回调金额核对：实付金额必须与订单金额一分不差
+ * 回调金额核对：实付金额与订单金额的偏差必须落在 AMOUNT_TOLERANCE_CENTS 内
  */
 export function matchOrderAmount(
     orderAmount: number,
     paidAmount: number | null | undefined
-): { ok: boolean; reason?: string; expectedCents?: number; paidCents?: number } {
+): AmountMatchResult {
     const expectedCents = toCents(Number(orderAmount));
     if (!Number.isFinite(expectedCents)) {
         return { ok: false, reason: `订单金额不合法: ${orderAmount}` };
@@ -89,15 +110,26 @@ export function matchOrderAmount(
         return { ok: false, reason: `回调实付金额不合法: ${paidAmount}`, expectedCents };
     }
     const paidCents = toCents(paid);
-    if (paidCents !== expectedCents) {
+    const diffCents = expectedCents - paidCents;
+    if (Math.abs(diffCents) > AMOUNT_TOLERANCE_CENTS) {
         return {
             ok: false,
-            reason: `金额不一致：订单 ${expectedCents} 分，实付 ${paidCents} 分，差额 ${expectedCents - paidCents} 分`,
+            reason: `金额超出容差：订单 ${expectedCents} 分，实付 ${paidCents} 分，差额 ${diffCents} 分（允许 ±${AMOUNT_TOLERANCE_CENTS} 分）`,
             expectedCents,
             paidCents,
+            diffCents,
         };
     }
-    return { ok: true, expectedCents, paidCents };
+    if (diffCents !== 0) {
+        return {
+            ok: true,
+            expectedCents,
+            paidCents,
+            diffCents,
+            warning: `实付与订单金额相差 ${diffCents} 分，在 ±${AMOUNT_TOLERANCE_CENTS} 分容差内放行`,
+        };
+    }
+    return { ok: true, expectedCents, paidCents, diffCents };
 }
 
 /**
@@ -115,7 +147,7 @@ export async function creditOrder(
 ): Promise<CreditResult> {
     const orderId = params.tradeNo || order.id;
 
-    // ===== 1. 回调金额核对（DoD 3）=====
+    // ===== 1. 回调金额核对（容差 ±0.70 元，超出即拒绝入账）=====
     const amountCheck = matchOrderAmount(order.amount, params.paidAmount);
     if (!amountCheck.ok) {
         const reason = amountCheck.reason || '金额核对失败';
@@ -160,6 +192,33 @@ export async function creditOrder(
             console.error(`[Credit/${source}] 金额不一致日志写入失败:`, error);
         });
         return { outcome: CREDIT_OUTCOME.AMOUNT_MISMATCH, reason };
+    }
+
+    // 容差内的差额不阻断入账，但一定留痕：渠道口径若长期偏差，靠这条被发现
+    if (amountCheck.warning) {
+        console.warn(`[Credit/${source}] ${orderId}: ${amountCheck.warning}`);
+        await buildPaymentLogStatement(env, {
+            orderId,
+            userId: order.user_id,
+            channelId: order.channel_id,
+            plugin: order.plugin,
+            direction: 'internal',
+            action: `${source}_amount_verify`,
+            status: 'warning',
+            amount: order.amount,
+            thirdPartyTradeNo: params.thirdPartyTradeNo || null,
+            responseData: {
+                order_amount: order.amount,
+                paid_amount: params.paidAmount ?? null,
+                expected_cents: amountCheck.expectedCents ?? null,
+                paid_cents: amountCheck.paidCents ?? null,
+                diff_cents: amountCheck.diffCents ?? null,
+                tolerance_cents: AMOUNT_TOLERANCE_CENTS,
+            },
+            errorMessage: amountCheck.warning,
+        }).run().catch((error) => {
+            console.error(`[Credit/${source}] 容差告警日志写入失败:`, error);
+        });
     }
 
     const paidAt = params.paidAt || new Date().toISOString();

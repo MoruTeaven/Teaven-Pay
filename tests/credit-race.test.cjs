@@ -218,7 +218,7 @@ test("实付金额与订单金额不一致：拒绝入账、订单不变、留�
         assert.strictEqual(countWhere(db, "order_logs", "action = " + Q + "credit_rejected" + Q), 1);
         assert.strictEqual(countWhere(db, "payment_logs", "status = " + Q + "rejected" + Q), 1);
         const msg = db.prepare("SELECT error_message FROM payment_logs WHERE status = " + Q + "rejected" + Q).get().error_message;
-        assert.ok(/金额不一致/.test(msg), "日志需说明金额不一致: " + msg);
+        assert.ok(/金额超出容差/.test(msg), "日志需说明超出容差: " + msg);
     } finally { db.close(); fs.rmSync(file, { force: true }); }
 });
 
@@ -234,12 +234,32 @@ test("渠道未返回实付金额：无法核对，一律拒绝入账", async ()
     } finally { db.close(); fs.rmSync(file, { force: true }); }
 });
 
-test("金额核对容差为 0：一分之差也拒绝", () => {
-    assert.strictEqual(matchOrderAmount(77.77, 77.77).ok, true);
-    assert.strictEqual(matchOrderAmount(77.77, 77.78).ok, false);
-    assert.strictEqual(matchOrderAmount(77.77, 77.76).ok, false);
+test("金额核对容差 ±0.70 元：边界内放行、超出即拒", () => {
+    assert.strictEqual(matchOrderAmount(77.77, 77.77).ok, true, "完全相等必须通过");
+    assert.strictEqual(matchOrderAmount(77.77, 77.07).ok, true, "少付 0.70 元(70 分)在容差内");
+    assert.strictEqual(matchOrderAmount(77.77, 78.47).ok, true, "多付 0.70 元(70 分)在容差内");
+    assert.strictEqual(matchOrderAmount(77.77, 77.06).ok, false, "少付 0.71 元(71 分)必须拒绝");
+    assert.strictEqual(matchOrderAmount(77.77, 78.48).ok, false, "多付 0.71 元(71 分)必须拒绝");
+    assert.strictEqual(matchOrderAmount(77.77, 0.01).ok, false, "付 0.01 顶全额订单必须拒绝");
+    const w = matchOrderAmount(77.77, 77.07);
+    assert.strictEqual(w.diffCents, 70, "差额要按分报出");
+    assert.ok(w.warning && /容差内放行/.test(w.warning), "容差内差额必须带 warning");
+    assert.strictEqual(matchOrderAmount(77.77, 77.77).warning, undefined, "零差额不该有 warning");
     assert.strictEqual(matchOrderAmount(0.1, 0.1).ok, true, "浮点表示误差不得误伤合法金额");
     assert.strictEqual(matchOrderAmount(1234.56, "1234.56").ok, true, "字符串金额同样可核对");
+});
+
+test("容差内差额：照常入账，但写 warning 流水、actual_amount 落实付", async () => {
+    const { db, file } = freshDb();
+    try {
+        const result = await creditOrder({ DB: makeD1(db) }, readOrder(db), notifyParams({ paidAmount: 77.07 }), CREDIT_SOURCE.CHANNEL_NOTIFY);
+        assert.strictEqual(result.outcome, CREDIT_OUTCOME.CREDITED, "容差内必须放行入账");
+        assert.strictEqual(readUser(db).balance, PROFIT, "入账仍按订单额计算净额");
+        assert.strictEqual(readOrder(db).status, 1);
+        assert.ok(Math.abs(readOrder(db).actual_amount - 77.07) < 1e-9, "actual_amount 记录渠道实付");
+        assert.strictEqual(countWhere(db, "payment_logs", "status = " + Q + "warning" + Q), 1, "容差放行要留 warning 流水");
+        assert.strictEqual(countWhere(db, "payment_logs", "status = " + Q + "rejected" + Q), 0, "容差内不得记成拒绝");
+    } finally { db.close(); fs.rmSync(file, { force: true }); }
 });
 
 test("入账事务中途失败：余额与流水都不留痕，订单回退以便重试", async () => {
