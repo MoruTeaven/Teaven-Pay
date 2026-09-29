@@ -1,6 +1,7 @@
 name = "teaven-pay"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
+account_id = "40c5cdd4a50968b4e395ec7a001b9f3f"
 compatibility_flags = ["nodejs_compat"]
 
 # 本地开发配置
@@ -20,43 +21,13 @@ ENABLE_CORS = "true"
 binding = "DB"
 database_name = "teaven-pay"
 database_id = "7de39fde-b84c-46bd-bb0c-01004b6f5200"
-# preview_database_id = "16625207-21df-40f6-b5c2-445a90e01c58"
+# preview_database_id = "16625207-21df-40f6-b5c0-01004b6f5200"
 
 # KV 命名空间配置 (用于缓存) - 暂时禁用
 # [[kv_namespaces]]
 # binding = "CACHE"
 # id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 # preview_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-
-# 定时触发器 (可选)
-# [triggers]
-# crons = ["0 2 * * *"]  # 每天凌晨2点执行
-
-# 环境配置: 开发环境
-# [env.development]
-# vars = { ENVIRONMENT = "development", LOG_LEVEL = "debug" }
-# [[env.development.d1_databases]]
-# binding = "DB"
-# database_name = "teaven-pay-db-dev"
-# database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-
-# 环境配置: 生产环境
-# [env.production]
-# vars = { ENVIRONMENT = "production", LOG_LEVEL = "info" }
-# [[env.production.d1_databases]]
-# binding = "DB"
-# database_name = "teaven-pay-db"
-# database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-
-# 构建配置 - 跳过构建，直接部署 TypeScript
-# [build]
-# command = "npm run build"
-# watch_dir = "src"
-
-# 分析配置
-# [inspect]
-# ip = "localhost"
-# port = 9229
 
 # Observability 配置
 [observability]

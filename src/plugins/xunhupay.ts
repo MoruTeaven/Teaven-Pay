@@ -13,6 +13,7 @@ import {
     RefundStatus
 } from '../types/plugin';
 import { generateNonce } from '../utils/crypto';
+import md5 from 'md5';
 
 export class XunhupayPlugin implements PaymentPlugin {
     id = 'xunhupay';

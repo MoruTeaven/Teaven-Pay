@@ -138,22 +138,128 @@ app.all('/api.php', async (c) => {
 // 收银台页面
 app.get('/cashier/:tradeNo', async (c) => {
     const { tradeNo } = c.req.param();
-    // TODO: 返回收银台页面
-    return c.html(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>收银台 - Teaven Pay</title>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-        </head>
-        <body>
-            <h1>收银台</h1>
-            <p>订单号: ${tradeNo}</p>
-            <!-- TODO: 实现收银台页面 -->
-        </body>
-        </html>
-    `);
+    const env = c.env;
+
+    let orderInfo: any = null;
+    try {
+        orderInfo = await env.DB.prepare(
+            'SELECT o.*, pt.display_name as type_name FROM orders o LEFT JOIN payment_types pt ON o.payment_type = pt.name WHERE o.id = ?'
+        ).bind(tradeNo).first() as any;
+    } catch {}
+
+    const amount = orderInfo ? Number(orderInfo.amount).toFixed(2) : '0.00';
+    const name = orderInfo ? (orderInfo.name || '在线支付') : '订单';
+    const typeName = orderInfo ? (orderInfo.type_name || orderInfo.payment_type) : '';
+    const returnUrl = orderInfo ? (orderInfo.return_url || '') : '';
+
+    return c.html(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>收银台 - ${name}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.9.1/fonts/remixicon.css">
+    <style>
+        :root{--primary:#f59e0b;--bg:#f9fafb;--card:#fff;--border:#e5e7eb;--text:#111827;--text2:#4b5563;--text3:#9ca3af;--success:#10b981;--error:#ef4444;--radius:12px;}
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+        .cashier{width:100%;max-width:420px;}
+        .cashier-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px 24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.07);text-align:center;}
+        .status-icon{width:72px;height:72px;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:36px;}
+        .status-pending{background:#fef3c7;color:#f59e0b;}
+        .status-success{background:#d1fae5;color:#10b981;}
+        .status-failed{background:#fee2e2;color:#ef4444;}
+        .status-title{font-size:20px;font-weight:700;margin-bottom:8px;}
+        .status-desc{font-size:14px;color:var(--text3);margin-bottom:24px;}
+        .amount{font-size:36px;font-weight:700;color:var(--text);margin-bottom:8px;}
+        .amount small{font-size:18px;font-weight:400;color:var(--text3);}
+        .order-info{background:#f9fafb;border-radius:8px;padding:12px 16px;font-size:13px;color:var(--text2);text-align:left;margin-bottom:16px;}
+        .order-info div{display:flex;justify-content:space-between;padding:4px 0;align-items:center;}
+        .order-info span{color:var(--text3);}
+        .btn{display:inline-block;padding:10px 24px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;}
+        .btn:hover{background:#d97706;}
+    </style>
+</head>
+<body>
+    <div class="cashier">
+        <div class="cashier-card">
+            <div class="status-icon status-pending" id="statusIcon">
+                <i class="ri-time-line"></i>
+            </div>
+            <div class="status-title" id="statusTitle">等待支付</div>
+            <div class="status-desc" id="statusDesc">请尽快完成支付</div>
+            <div class="amount"><small>¥</small><span id="amount">${amount}</span></div>
+            <div class="order-info">
+                <div><span>订单名称</span><strong>${name}</strong></div>
+                <div><span>支付方式</span><strong>${typeName}</strong></div>
+                <div><span>订单号</span><strong style="font-size:12px;word-break:break-all;">${tradeNo}</strong></div>
+            </div>
+            <div id="actionArea"></div>
+        </div>
+    </div>
+    <script>
+        var tradeNo = '${tradeNo}';
+        var returnUrl = '${returnUrl}';
+        var pollCount = 0;
+        var maxPolls = 120;
+
+        function updateUI(status) {
+            var icon = document.getElementById('statusIcon');
+            var title = document.getElementById('statusTitle');
+            var desc = document.getElementById('statusDesc');
+            var action = document.getElementById('actionArea');
+
+            if (status === 1) {
+                icon.className = 'status-icon status-success';
+                icon.innerHTML = '<i class="ri-check-line"></i>';
+                title.textContent = '支付成功';
+                desc.textContent = '支付已完成';
+                if (returnUrl) {
+                    action.innerHTML = '<a href="' + returnUrl + '" class="btn">返回</a>';
+                }
+            } else if (status === 2) {
+                icon.className = 'status-icon status-failed';
+                icon.innerHTML = '<i class="ri-refund-line"></i>';
+                title.textContent = '已退款';
+                desc.textContent = '订单已退款';
+            } else if (status === 3) {
+                icon.className = 'status-icon status-failed';
+                icon.innerHTML = '<i class="ri-close-line"></i>';
+                title.textContent = '订单已关闭';
+                desc.textContent = '订单已关闭';
+            } else {
+                icon.className = 'status-icon status-pending';
+                icon.innerHTML = '<i class="ri-time-line"></i>';
+                title.textContent = '等待支付';
+                desc.textContent = '请尽快完成支付';
+            }
+        }
+
+        async function checkStatus() {
+            pollCount++;
+            if (pollCount > maxPolls) return;
+
+            try {
+                var res = await fetch('/api/pay/status/' + tradeNo);
+                var data = await res.json();
+
+                if (data.code === 1) {
+                    updateUI(data.status);
+                    if (data.status !== 1 && data.status !== 2 && data.status !== 3) {
+                        setTimeout(checkStatus, 3000);
+                    }
+                } else {
+                    setTimeout(checkStatus, 5000);
+                }
+            } catch (e) {
+                setTimeout(checkStatus, 5000);
+            }
+        }
+
+        checkStatus();
+    </script>
+</body>
+</html>`);
 });
 
 // 支付结果页面
@@ -232,6 +338,29 @@ app.get('/pay/:merchantId', async (c) => {
         .submit-btn:disabled{background:#d1d5db;cursor:not-allowed;}
         .error-msg{background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none;}
         .cashier-footer{text-align:center;margin-top:16px;font-size:12px;color:var(--text3);}
+
+        /* 内嵌数字键盘 */
+        .keypad-toggle{display:none;width:100%;padding:10px;background:var(--card);color:var(--text2);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;margin-top:10px;transition:all .2s;align-items:center;justify-content:center;gap:6px;}
+        .keypad-toggle:hover{border-color:var(--primary);color:var(--primary-hover);background:#fffbeb;}
+        .keypad-toggle i{font-size:16px;}
+        .keypad{display:none;margin-top:14px;}
+        .keypad.show{display:block;}
+        .keypad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+        .key{padding:16px 0;background:var(--card);border:1px solid var(--border);border-radius:10px;font-size:20px;font-weight:600;color:var(--text);cursor:pointer;transition:all .12s;user-select:none;text-align:center;line-height:1;-webkit-tap-highlight-color:transparent;}
+        .key:hover{background:var(--bg);border-color:var(--primary);}
+        .key:active{transform:scale(0.95);background:#fffbeb;border-color:var(--primary);}
+        .key.key-backspace{color:var(--error);font-size:22px;}
+        .key.key-clear{color:var(--text3);font-size:14px;}
+        .key.key-action{background:var(--primary);color:#fff;border-color:var(--primary);font-size:15px;}
+        .key.key-action:hover{background:var(--primary-hover);border-color:var(--primary-hover);color:#fff;}
+        .key.disabled{opacity:.4;cursor:not-allowed;}
+        .key.disabled:hover{background:var(--card);border-color:var(--border);}
+
+        /* 桌面端:键盘并排显示更紧凑 */
+        @media (min-width:640px){
+            .keypad-grid{grid-template-columns:repeat(4,1fr);max-width:380px;margin:0 auto;}
+            .key{padding:14px 0;font-size:18px;}
+        }
     </style>
 </head>
 <body>
@@ -246,7 +375,28 @@ app.get('/pay/:merchantId', async (c) => {
                 <label class="form-label">付款金额（元）</label>
                 <div class="amount-input">
                     <span class="amount-prefix">\u00A5</span>
-                    <input type="number" id="amount" placeholder="0.00" min="0.01" step="0.01" autofocus>
+                    <input type="text" id="amount" placeholder="0.00" inputmode="none" autocomplete="off" value="" autofocus>
+                </div>
+                <button type="button" class="keypad-toggle" id="keypadToggle">
+                    <i class="ri-keyboard-box-line"></i><span id="keypadToggleText">调起数字键盘</span>
+                </button>
+                <div class="keypad" id="keypad">
+                    <div class="keypad-grid">
+                        <div class="key" data-key="1">1</div>
+                        <div class="key" data-key="2">2</div>
+                        <div class="key" data-key="3">3</div>
+                        <div class="key" data-key="4">4</div>
+                        <div class="key" data-key="5">5</div>
+                        <div class="key" data-key="6">6</div>
+                        <div class="key" data-key="7">7</div>
+                        <div class="key" data-key="8">8</div>
+                        <div class="key" data-key="9">9</div>
+                        <div class="key" data-key=".">.</div>
+                        <div class="key" data-key="0">0</div>
+                        <div class="key key-backspace" data-key="backspace"><i class="ri-delete-back-2-line"></i></div>
+                        <div class="key key-clear" data-key="clear">清空</div>
+                        <div class="key key-action" data-key="confirm">确认支付</div>
+                    </div>
                 </div>
             </div>
             <div class="form-group">
@@ -263,7 +413,173 @@ app.get('/pay/:merchantId', async (c) => {
         var merchantId = '${merchantId}';
         var payTypesEl = document.getElementById('payTypes');
 
+        function escapeHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
         var iconMap = {alipay:'ri-alipay-line',wxpay:'ri-wechat-pay-line',qqpay:'ri-qq-line'};
+
+        /* ===== 内嵌数字键盘 ===== */
+        var amountInput = document.getElementById('amount');
+        var keypadEl = document.getElementById('keypad');
+        var keypadToggle = document.getElementById('keypadToggle');
+        var keypadToggleText = document.getElementById('keypadToggleText');
+
+        // 移动端检测(触摸设备 + UA 双重判定)
+        var isMobile = (function(){
+            var ua = navigator.userAgent || '';
+            var uaMobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone|Silk|Kindle/i.test(ua);
+            var touch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            return uaMobile && touch;
+        })();
+
+        // 所有设备:input 设为只读,统一通过内嵌键盘或物理键盘(keydown)输入
+        // 这样可避免浏览器默认输入导致的格式错乱和光标跳转问题
+        amountInput.setAttribute('readonly', 'readonly');
+
+        // 移动端默认显示内嵌键盘,桌面端可选调起
+        if (isMobile) {
+            keypadEl.classList.add('show');
+            keypadToggle.style.display = 'none';
+        } else {
+            keypadToggle.style.display = 'flex';
+        }
+
+        function setAmountValue(val) {
+            amountInput.value = val;
+        }
+
+        function inputDigit(d) {
+            var val = amountInput.value;
+            // 不允许以 0 开头(除非后面跟 .)
+            if (val === '0' && d !== '.') {
+                setAmountValue(d);
+                return;
+            }
+            // 不允许重复小数点
+            if (d === '.' && val.indexOf('.') !== -1) return;
+            // 小数点后最多两位
+            if (val.indexOf('.') !== -1) {
+                var parts = val.split('.');
+                if (parts[1] && parts[1].length >= 2) return;
+            }
+            // 首位输入小数点时补 0
+            if (d === '.' && val === '') {
+                setAmountValue('0.');
+                return;
+            }
+            setAmountValue(val + d);
+        }
+
+        function inputBackspace() {
+            var val = amountInput.value;
+            if (val.length === 0) return;
+            setAmountValue(val.slice(0, -1));
+        }
+
+        function inputClear() {
+            setAmountValue('');
+        }
+
+        function toggleKeypad() {
+            if (keypadEl.classList.contains('show')) {
+                keypadEl.classList.remove('show');
+                keypadToggleText.textContent = '调起数字键盘';
+                amountInput.blur();
+            } else {
+                keypadEl.classList.add('show');
+                keypadToggleText.textContent = '收起数字键盘';
+                amountInput.focus();
+            }
+        }
+
+        keypadToggle.addEventListener('click', toggleKeypad);
+
+        // 数字键盘按钮点击
+        keypadEl.addEventListener('click', function(e) {
+            var key = e.target.closest('.key');
+            if (!key) return;
+            var action = key.getAttribute('data-key');
+            if (key.classList.contains('disabled')) return;
+
+            if (action === 'backspace') {
+                inputBackspace();
+            } else if (action === 'clear') {
+                inputClear();
+            } else if (action === 'confirm') {
+                submitPay();
+            } else {
+                inputDigit(action);
+            }
+        });
+
+        // 物理键盘(外接键盘)支持 - 所有设备统一处理
+        // 通过 inputDigit/inputBackspace/inputClear 控制输入,保证格式一致
+        amountInput.addEventListener('keydown', function(e) {
+            var k = e.key;
+
+            // 允许快捷键(Ctrl/Cmd + A/C/V/X 等)
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+            // Enter 提交
+            if (k === 'Enter') {
+                e.preventDefault();
+                submitPay();
+                return;
+            }
+
+            // 数字 0-9
+            if (k >= '0' && k <= '9') {
+                inputDigit(k);
+                e.preventDefault();
+                return;
+            }
+
+            // 小数点(兼容中文输入法下的句号)
+            if (k === '.' || k === '。') {
+                inputDigit('.');
+                e.preventDefault();
+                return;
+            }
+
+            // 退格
+            if (k === 'Backspace') {
+                inputBackspace();
+                e.preventDefault();
+                return;
+            }
+
+            // Delete 清空
+            if (k === 'Delete') {
+                inputClear();
+                e.preventDefault();
+                return;
+            }
+
+            // Escape 清空
+            if (k === 'Escape') {
+                inputClear();
+                e.preventDefault();
+                return;
+            }
+
+            // 允许功能键(方向键、Tab、Home、End 等)
+            if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','Home','End'].indexOf(k) !== -1) return;
+
+            // 其他字符拦截
+            e.preventDefault();
+        });
+
+        // 移动端:点击 input 也尝试调起内嵌键盘(防止用户误以为可输入)
+        amountInput.addEventListener('focus', function() {
+            if (isMobile && !keypadEl.classList.contains('show')) {
+                keypadEl.classList.add('show');
+            }
+        });
 
         if (payTypes.length === 0) {
             payTypesEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px;">暂无可用支付方式</div>';
@@ -273,7 +589,7 @@ app.get('/pay/:merchantId', async (c) => {
                 var div = document.createElement('div');
                 div.className = 'pay-type';
                 div.setAttribute('data-id', pt.id);
-                div.innerHTML = '<i class="' + icon + '"></i><span>' + pt.name + '</span>';
+                div.innerHTML = '<i class="' + escapeHtml(icon) + '"></i><span>' + escapeHtml(pt.name) + '</span>';
                 div.onclick = function() {
                     document.querySelectorAll('.pay-type').forEach(function(el){el.classList.remove('selected');});
                     div.classList.add('selected');
@@ -286,21 +602,24 @@ app.get('/pay/:merchantId', async (c) => {
 
         function showError(msg) {
             var el = document.getElementById('errorMsg');
+            if (!el) return;
             el.textContent = msg;
             el.style.display = 'block';
         }
 
         async function submitPay() {
             var amountEl = document.getElementById('amount');
+            if (!amountEl) return;
             var amount = parseFloat(amountEl.value);
             var errEl = document.getElementById('errorMsg');
-            errEl.style.display = 'none';
+            if (errEl) errEl.style.display = 'none';
 
             if (!amount || amount <= 0) { showError('请输入有效的付款金额'); return; }
             if (amount < 0.01) { showError('金额不能小于0.01元'); return; }
             if (!selectedType) { showError('请选择支付方式'); return; }
 
             var btn = document.getElementById('submitBtn');
+            if (!btn) return;
             btn.disabled = true;
             btn.textContent = '正在创建订单...';
 
@@ -422,6 +741,13 @@ app.get('/admin', async (c) => {
             box-sizing: border-box;
         }
 
+        html,
+        body {
+            width: 100%;
+            min-width: 0;
+            overflow-x: hidden;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
             background-color: var(--bg-secondary);
@@ -434,6 +760,8 @@ app.get('/admin', async (c) => {
         .layout {
             display: flex;
             min-height: 100vh;
+            width: 100%;
+            overflow-x: hidden;
         }
 
         /* 侧边栏 */
@@ -563,6 +891,8 @@ app.get('/admin', async (c) => {
         .main-content {
             flex: 1;
             margin-left: var(--sidebar-width);
+            width: calc(100% - var(--sidebar-width));
+            min-width: 0;
             transition: margin-left 0.3s ease;
             display: flex;
             flex-direction: column;
@@ -571,11 +901,14 @@ app.get('/admin', async (c) => {
 
         .sidebar.collapsed ~ .main-content {
             margin-left: var(--sidebar-collapsed-width);
+            width: calc(100% - var(--sidebar-collapsed-width));
         }
 
         /* 头部 */
         .header {
             height: var(--header-height);
+            width: 100%;
+            min-width: 0;
             background-color: var(--bg-primary);
             border-bottom: 1px solid var(--border-color);
             position: sticky;
@@ -724,7 +1057,11 @@ app.get('/admin', async (c) => {
         /* 内容区 */
         .content {
             flex: 1;
+            width: 100%;
+            max-width: none;
+            min-width: 0;
             padding: 24px;
+            overflow-x: hidden;
         }
 
         .page-header {
@@ -751,6 +1088,9 @@ app.get('/admin', async (c) => {
             border-radius: 8px;
             border: 1px solid var(--border-color);
             box-shadow: var(--shadow-sm);
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
             overflow: hidden;
         }
 
@@ -770,6 +1110,7 @@ app.get('/admin', async (c) => {
 
         .card-body {
             padding: 20px;
+            min-width: 0;
         }
 
         .card-footer {
@@ -781,9 +1122,14 @@ app.get('/admin', async (c) => {
         /* 统计卡片 */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 16px;
             margin-bottom: 24px;
+        }
+
+        .stats-grid > *,
+        .content [style*="grid-template-columns"] > * {
+            min-width: 0;
         }
 
         .stat-card {
@@ -860,11 +1206,16 @@ app.get('/admin', async (c) => {
 
         /* 表格 */
         .table-container {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
             overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .data-table {
             width: 100%;
+            min-width: max-content;
             border-collapse: collapse;
         }
 
@@ -1119,6 +1470,33 @@ app.get('/admin', async (c) => {
             color: var(--error);
         }
 
+        /* 订单自动刷新：新行高亮 */
+        @keyframes rowHighlight {
+            0% { background-color: rgba(245, 158, 11, 0.28); }
+            100% { background-color: transparent; }
+        }
+        .data-table tbody tr.row-new {
+            animation: rowHighlight 3.5s ease-out;
+        }
+        .auto-refresh-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-secondary);
+            user-select: none;
+            background: var(--bg-primary);
+            transition: border-color .15s, color .15s;
+        }
+        .auto-refresh-toggle:hover { border-color: var(--primary-500); color: var(--text-primary); }
+        .auto-refresh-toggle input { width: 14px; height: 14px; cursor: pointer; accent-color: var(--primary-500); margin: 0; }
+        .auto-refresh-toggle .auto-refresh-status { font-size: 12px; color: var(--primary-600); }
+        .auto-refresh-toggle i { font-size: 14px; }
+
         /* 筛选栏 */
         .filter-bar {
             display: flex;
@@ -1274,6 +1652,61 @@ app.get('/admin', async (c) => {
             display: flex;
             justify-content: flex-end;
             gap: 12px;
+        }
+
+        /* 订单详情弹窗 */
+        .order-detail-tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .order-tab {
+            padding: 8px 14px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .order-tab:hover { color: var(--text-primary); }
+        .order-tab.active {
+            color: var(--primary-600);
+            border-bottom-color: var(--primary-500);
+            font-weight: 600;
+        }
+        .order-tab .tab-badge {
+            display: inline-block;
+            min-width: 18px;
+            padding: 0 6px;
+            height: 18px;
+            line-height: 18px;
+            text-align: center;
+            background: var(--primary-100);
+            color: var(--primary-700);
+            border-radius: 9px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .order-detail-panel { display: none; }
+        .order-detail-panel.active { display: block; }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 24px;
+            font-size: 13px;
+        }
+        .detail-row { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .detail-label { color: var(--text-tertiary); font-size: 12px; }
+        .detail-value { color: var(--text-primary); }
+        @media (max-width: 600px) {
+            .detail-grid { grid-template-columns: 1fr; }
         }
 
         /* Toast */
@@ -1461,7 +1894,7 @@ app.get('/admin', async (c) => {
         /* 响应式 */
         @media (max-width: 1024px) {
             .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
             .sidebar {
@@ -1474,10 +1907,12 @@ app.get('/admin', async (c) => {
 
             .main-content {
                 margin-left: 0;
+                width: 100%;
             }
 
             .sidebar.collapsed ~ .main-content {
                 margin-left: 0;
+                width: 100%;
             }
 
             .filter-bar {
@@ -1519,6 +1954,10 @@ app.get('/admin', async (c) => {
 
             .breadcrumb {
                 display: none;
+            }
+
+            .content [style*="grid-template-columns"] {
+                grid-template-columns: 1fr !important;
             }
         }
 
@@ -1724,7 +2163,16 @@ app.get('/admin', async (c) => {
             logs: [],
             currentMerchant: null,
             token: localStorage.getItem('admin_token') || null,
-            user: JSON.parse(localStorage.getItem('admin_user') || 'null')
+            user: JSON.parse(localStorage.getItem('admin_user') || 'null'),
+            // 订单自动刷新
+            ordersAutoRefresh: true,
+            ordersRefreshTimer: null,
+            ordersRefreshInterval: 10000,
+            knownOrderIds: new Set(),
+            ordersLastRefresh: null,
+            pageCache: {},
+            pageLoading: {},
+            lastAutoRefreshAt: Date.now()
         };
 
         // Token 管理
@@ -1996,6 +2444,21 @@ app.get('/admin', async (c) => {
                     throw new Error(data.msg || '获取订单列表失败');
                 } catch (error) {
                     console.error('获取订单列表失败:', error);
+                    throw error;
+                }
+            },
+
+            // 获取订单详情
+            async getOrderDetail(id) {
+                try {
+                    const response = await this.request('/api/admin/orders/' + encodeURIComponent(id));
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { data: data.data };
+                    }
+                    throw new Error(data.msg || '获取订单详情失败');
+                } catch (error) {
+                    console.error('获取订单详情失败:', error);
                     throw error;
                 }
             },
@@ -2309,6 +2772,59 @@ app.get('/admin', async (c) => {
             return names[type] || type;
         }
 
+        function getPaymentTypeDisplayName(displayName, type) {
+            if (displayName) return displayName;
+            const names = {
+                alipay: '支付宝',
+                wxpay: '微信支付',
+                qqpay: 'QQ钱包'
+            };
+            return names[type] || '未知支付方式';
+        }
+
+        function getOperationActionName(action) {
+            const names = {
+                admin_login: '管理员登录',
+                admin_create_merchant: '创建商户',
+                admin_login_merchant: '管理员登录商户',
+                admin_update_merchant: '更新商户',
+                admin_update_merchant_status: '更新商户状态',
+                admin_approve_settlement: '审核通过结算',
+                admin_reject_settlement: '拒绝结算',
+                admin_update_config: '更新系统配置',
+                admin_update_payment_type: '更新支付方式',
+                admin_toggle_payment_type: '切换支付方式状态',
+                admin_create_channel: '创建支付通道',
+                admin_update_channel: '更新支付通道',
+                admin_delete_channel: '删除支付通道',
+                admin_toggle_channel: '切换通道状态',
+                admin_run_reconciliation: '执行对账',
+                merchant_login: '商户登录',
+                merchant_update_profile: '更新商户资料',
+                merchant_close_order: '商户关闭订单',
+                merchant_add_domain: '添加域名白名单',
+                merchant_delete_domain: '删除域名白名单',
+                merchant_update_callback_urls: '更新回调地址',
+                change_password: '修改密码',
+                create_payment: '创建支付订单',
+                query_order: '查询订单',
+                refund: '发起退款',
+                settle_apply: '申请结算',
+                notify_payment_success: '支付成功通知',
+                reconcile_query_order: '对账查询订单',
+                created: '创建订单',
+                paid: '订单支付成功',
+                closed: '关闭订单',
+                refund_requested: '申请退款',
+                create_api_key: '创建 API 密钥',
+                update_api_key: '更新 API 密钥',
+                delete_api_key: '删除 API 密钥',
+                reset_api_key: '重置 API 密钥',
+                error: '系统错误'
+            };
+            return names[action] || action || '-';
+        }
+
         // Toast 通知
         function showToast(type, title, message) {
             const container = document.getElementById('toastContainer');
@@ -2364,7 +2880,8 @@ app.get('/admin', async (c) => {
 
             document.body.insertAdjacentHTML('beforeend', confirmHTML);
             setTimeout(function() {
-                document.getElementById('confirmOverlay').classList.add('active');
+                var overlay = document.getElementById('confirmOverlay');
+                if (overlay) overlay.classList.add('active');
             }, 10);
 
             // 存储回调函数
@@ -2411,8 +2928,10 @@ app.get('/admin', async (c) => {
 
             document.body.insertAdjacentHTML('beforeend', drawerHTML);
             setTimeout(function() {
-                document.getElementById('drawerOverlay').classList.add('active');
-                document.querySelector('.drawer').style.transform = 'translateX(0)';
+                var overlay = document.getElementById('drawerOverlay');
+                var drawer = document.querySelector('.drawer');
+                if (overlay) overlay.classList.add('active');
+                if (drawer) drawer.style.transform = 'translateX(0)';
             }, 10);
         }
 
@@ -2619,9 +3138,9 @@ app.get('/admin', async (c) => {
                             var html = '';
                             recentOrders.forEach(function(order) {
                                 html += '<tr>' +
-                                    '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + (order.tradeNo || '') + '</code></td>' +
-                                    '<td>' + (order.merchant || '-') + '</td>' +
-                                    '<td><i class="' + getPaymentTypeIcon(order.paymentType) + '" style="margin-right: 4px;"></i>' + getPaymentTypeName(order.paymentType) + '</td>' +
+                                    '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + escapeHtml(order.tradeNo || '') + '</code></td>' +
+                                    '<td>' + escapeHtml(order.merchant || '-') + '</td>' +
+                                    '<td><i class="' + getPaymentTypeIcon(order.paymentType) + '" style="margin-right: 4px;"></i>' + escapeHtml(getPaymentTypeDisplayName(order.paymentTypeName, order.paymentType)) + '</td>' +
                                     '<td>' + formatMoney(order.amount || 0) + '</td>' +
                                     '<td>' + getStatusBadge(order.status, 'order') + '</td>' +
                                     '<td>' + formatDate(order.createdAt) + '</td>' +
@@ -2711,19 +3230,19 @@ app.get('/admin', async (c) => {
                 var html = '';
                 result.data.forEach(function(merchant) {
                     html += '<tr>' +
-                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + merchant.id + '</code></td>' +
-                        '<td>' + merchant.username + '</td>' +
-                        '<td>' + merchant.email + '</td>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + escapeHtml(merchant.id) + '</code></td>' +
+                        '<td>' + escapeHtml(merchant.username) + '</td>' +
+                        '<td>' + escapeHtml(merchant.email) + '</td>' +
                         '<td>' + getStatusBadge(merchant.status, 'merchant') + '</td>' +
                         '<td>' + formatMoney(merchant.balance) + '</td>' +
-                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">' + merchant.apiKey.substring(0, 12) + '...</code></td>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">' + (merchant.apiKey ? escapeHtml(merchant.apiKey.substring(0, 12)) + '...' : '-') + '</code></td>' +
                         '<td>' + formatDate(merchant.createdAt) + '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="navigateToMerchantDetail(\\'' + merchant.id + '\\')" title="查看详情">' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="navigateToMerchantDetail(\\'' + escapeHtml(merchant.id) + '\\')" title="查看详情">' +
                         '            <i class="ri-eye-line"></i>' +
                         '        </button>' +
-                        '        <button class="btn btn-sm btn-primary" onclick="loginAsMerchant(\\'' + merchant.id + '\\')" title="一键登录用户中心">' +
+                        '        <button class="btn btn-sm btn-primary" onclick="loginAsMerchant(\\'' + escapeHtml(merchant.id) + '\\')" title="一键登录用户中心">' +
                         '            <i class="ri-login-box-line"></i>' +
                         '        </button>' +
                         '    </div>' +
@@ -2733,6 +3252,7 @@ app.get('/admin', async (c) => {
                 
                 tbody.innerHTML = html;
                 if (countEl) countEl.textContent = '共 ' + result.count + ' 条记录';
+                cacheCurrentPage('merchants');
             } catch (error) {
                 console.error('加载商户数据失败:', error);
                 showToast('error', '加载失败', '无法获取商户数据');
@@ -2745,8 +3265,8 @@ app.get('/admin', async (c) => {
             var recentOrders = merchant.recentOrders || [];
             var recentSettlements = merchant.recentSettlements || [];
             var statusButton = merchant.status === 1
-                ? '<button class="btn btn-danger" onclick="handleMerchantStatus(\\'' + merchant.id + '\\', 0)"><i class="ri-forbid-line"></i>禁用</button>'
-                : '<button class="btn btn-primary" onclick="handleMerchantStatus(\\'' + merchant.id + '\\', 1)"><i class="ri-checkbox-circle-line"></i>启用</button>';
+                ? '<button class="btn btn-danger" onclick="handleMerchantStatus(\\'' + escapeHtml(merchant.id) + '\\', 0)"><i class="ri-forbid-line"></i>禁用</button>'
+                : '<button class="btn btn-primary" onclick="handleMerchantStatus(\\'' + escapeHtml(merchant.id) + '\\', 1)"><i class="ri-checkbox-circle-line"></i>启用</button>';
 
             var ordersHtml = recentOrders.length > 0 ? recentOrders.map(function(order) {
                 return '<tr>' +
@@ -2773,7 +3293,7 @@ app.get('/admin', async (c) => {
                 '        <h1 class="page-title">商户详情 - ' + escapeHtml(merchant.username) + '</h1>' +
                 '    </div>' +
                 '    <div class="page-actions">' +
-                '        <button class="btn btn-primary" onclick="loginAsMerchant(\\'' + merchant.id + '\\')"><i class="ri-login-box-line"></i>登录用户中心</button>' +
+                '        <button class="btn btn-primary" onclick="loginAsMerchant(\\'' + escapeHtml(merchant.id) + '\\')"><i class="ri-login-box-line"></i>登录用户中心</button>' +
                 '        <button class="btn btn-secondary" onclick="showEditMerchantModal()"><i class="ri-edit-line"></i>编辑</button>' +
                 statusButton +
                 '    </div>' +
@@ -2820,6 +3340,12 @@ app.get('/admin', async (c) => {
             return '<div class="page-header">' +
                 '    <h1 class="page-title">订单管理</h1>' +
                 '    <div class="page-actions">' +
+                '        <label class="auto-refresh-toggle" title="开启后新订单将自动出现在列表顶部，无需手动刷新">' +
+                '            <input type="checkbox" id="ordersAutoRefreshToggle" ' + (state.ordersAutoRefresh ? 'checked' : '') + ' onchange="onOrdersAutoRefreshToggle()">' +
+                '            <i class="ri-refresh-line"></i>' +
+                '            <span>自动刷新</span>' +
+                '            <span class="auto-refresh-status" id="ordersAutoRefreshStatus">' + (state.ordersAutoRefresh ? '每 10 秒自动刷新' : '已关闭') + '</span>' +
+                '        </label>' +
                 '        <button class="btn btn-secondary" onclick="showToast(\\'success\\', \\'导出成功\\', \\'订单数据已导出\\')">' +
                 '            <i class="ri-download-2-line"></i>' +
                 '            导出订单' +
@@ -2884,28 +3410,45 @@ app.get('/admin', async (c) => {
                 '</div>';
         }
 
-        // 加载订单数据
-        async function loadOrdersData() {
+        // 加载订单数据（silent=true 时为自动刷新：静默更新，检测新订单并高亮）
+        async function loadOrdersData(silent) {
             try {
                 var result = await api.getOrders();
                 var tbody = document.getElementById('ordersTableBody');
                 var countEl = document.getElementById('ordersCount');
                 
                 if (!tbody) return;
+
+                // 静默刷新时检测新订单
+                var newIds = [];
+                if (silent && state.knownOrderIds && state.knownOrderIds.size > 0) {
+                    result.data.forEach(function(order) {
+                        var id = order.id || order.tradeNo;
+                        if (id && !state.knownOrderIds.has(id)) newIds.push(id);
+                    });
+                }
+                // 更新已知订单集合
+                state.knownOrderIds = new Set();
+                result.data.forEach(function(order) {
+                    var id = order.id || order.tradeNo;
+                    if (id) state.knownOrderIds.add(id);
+                });
                 
                 var html = '';
                 result.data.forEach(function(order) {
-                    html += '<tr>' +
-                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + order.tradeNo + '</code></td>' +
-                        '<td>' + order.outTradeNo + '</td>' +
-                        '<td>' + order.merchant + '</td>' +
-                        '<td><i class="' + getPaymentTypeIcon(order.paymentType) + '" style="margin-right: 4px;"></i>' + getPaymentTypeName(order.paymentType) + '</td>' +
+                    var id = order.id || order.tradeNo;
+                    var isNew = newIds.indexOf(id) !== -1;
+                    html += '<tr' + (isNew ? ' class="row-new"' : '') + '>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + escapeHtml(order.tradeNo) + '</code></td>' +
+                        '<td>' + escapeHtml(order.outTradeNo) + '</td>' +
+                        '<td>' + escapeHtml(order.merchant) + '</td>' +
+                        '<td><i class="' + getPaymentTypeIcon(order.paymentType) + '" style="margin-right: 4px;"></i>' + escapeHtml(getPaymentTypeDisplayName(order.paymentTypeName, order.paymentType)) + '</td>' +
                         '<td>' + formatMoney(order.amount) + '</td>' +
                         '<td>' + getStatusBadge(order.status, 'order') + '</td>' +
                         '<td>' + formatDate(order.createdAt) + '</td>' +
                         '<td>' + formatDate(order.paidAt) + '</td>' +
                         '<td>' +
-                        '    <button class="btn btn-sm btn-secondary" onclick="showToast(\\'info\\', \\'查看详情\\', \\'订单详情页面开发中\\')">' +
+                        '    <button class="btn btn-sm btn-secondary" onclick="showOrderDetailModal(\\'' + escapeHtml(order.id || order.tradeNo) + '\\')">' +
                         '        <i class="ri-eye-line"></i>' +
                         '    </button>' +
                         '</td>' +
@@ -2914,10 +3457,210 @@ app.get('/admin', async (c) => {
                 
                 tbody.innerHTML = html;
                 if (countEl) countEl.textContent = '共 ' + result.data.length + ' 条记录';
+                state.ordersLastRefresh = new Date();
+                cacheCurrentPage('orders');
+                if (silent && newIds.length > 0) {
+                    showToast('info', '新订单', '检测到 ' + newIds.length + ' 笔新订单');
+                }
             } catch (error) {
                 console.error('加载订单数据失败:', error);
-                showToast('error', '加载失败', '无法获取订单数据');
+                if (!silent) showToast('error', '加载失败', '无法获取订单数据');
             }
+        }
+
+        // 订单自动刷新控制
+        function onOrdersAutoRefreshToggle() {
+            var toggle = document.getElementById('ordersAutoRefreshToggle');
+            state.ordersAutoRefresh = toggle ? toggle.checked : true;
+            if (state.ordersAutoRefresh) {
+                startOrdersAutoRefresh();
+            } else {
+                stopOrdersAutoRefresh();
+            }
+            updateOrdersRefreshStatus();
+        }
+
+        function startOrdersAutoRefresh() {
+            stopOrdersAutoRefresh();
+            if (!state.ordersAutoRefresh) return;
+            state.ordersRefreshTimer = setInterval(function() {
+                if (state.currentPage !== 'orders') { stopOrdersAutoRefresh(); return; }
+                // 有弹窗/确认框打开时跳过本次刷新，避免打断操作
+                if (document.getElementById('modalOverlay') || document.getElementById('confirmOverlay')) return;
+                loadOrdersData(true);
+            }, state.ordersRefreshInterval);
+        }
+
+        function stopOrdersAutoRefresh() {
+            if (state.ordersRefreshTimer) {
+                clearInterval(state.ordersRefreshTimer);
+                state.ordersRefreshTimer = null;
+            }
+        }
+
+        function updateOrdersRefreshStatus() {
+            var el = document.getElementById('ordersAutoRefreshStatus');
+            if (!el) return;
+            el.textContent = state.ordersAutoRefresh ? '每 10 秒自动刷新' : '已关闭';
+        }
+
+        // 订单详情弹窗
+        async function showOrderDetailModal(orderId) {
+            // 先打开骨架弹窗
+            var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
+                '<div class="modal" style="max-width: 720px;">' +
+                '    <div class="modal-header">' +
+                '        <span class="modal-title">订单详情</span>' +
+                '        <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>' +
+                '    </div>' +
+                '    <div class="modal-body" style="padding: 24px; text-align: center; color: var(--text-tertiary);">' +
+                '        <i class="ri-loader-4-line" style="font-size: 24px; animation: spin 1s linear infinite;"></i>' +
+                '        <div style="margin-top: 8px;">加载中...</div>' +
+                '    </div>' +
+                '</div>' +
+                '</div>';
+
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            setTimeout(function() {
+                var overlay = document.getElementById('modalOverlay');
+                if (overlay) overlay.classList.add('active');
+            }, 10);
+
+            try {
+                var result = await api.getOrderDetail(orderId);
+                renderOrderDetailContent(result.data);
+            } catch (error) {
+                var body = document.querySelector('#modalOverlay .modal-body');
+                if (body) {
+                    body.style.textAlign = 'center';
+                    body.style.color = 'var(--error)';
+                    body.innerHTML = '<i class="ri-error-warning-line" style="font-size: 32px;"></i>' +
+                        '<div style="margin-top: 8px;">' + (error.message || '加载失败') + '</div>';
+                }
+            }
+        }
+
+        function renderOrderDetailContent(o) {
+            var body = document.querySelector('#modalOverlay .modal-body');
+            if (!body) return;
+
+            var infoRow = function(label, value, isCode) {
+                if (value === null || value === undefined || value === '') value = '-';
+                var v = isCode
+                    ? '<code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px; word-break: break-all;">' + escapeHtml(value) + '</code>'
+                    : '<span style="word-break: break-all;">' + escapeHtml(value) + '</span>';
+                return '<div class="detail-row">' +
+                    '<div class="detail-label">' + label + '</div>' +
+                    '<div class="detail-value">' + v + '</div>' +
+                    '</div>';
+            };
+
+            var refundsHtml = '';
+            if (o.refunds && o.refunds.length) {
+                refundsHtml = '<div style="margin-top: 8px;">';
+                o.refunds.forEach(function(r) {
+                    refundsHtml += '<div style="padding: 8px 12px; background: var(--bg-tertiary); border-radius: 6px; margin-bottom: 6px; font-size: 12px;">' +
+                        '<div><strong>退款单号:</strong> <code style="background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">' + escapeHtml(r.refund_no || '') + '</code></div>' +
+                        '<div style="margin-top: 4px;"><strong>金额:</strong> ' + formatMoney(r.amount) + ' &nbsp; <strong>状态:</strong> ' + getRefundStatusBadge(r.status) + '</div>' +
+                        (r.reason ? '<div style="margin-top: 4px;"><strong>原因:</strong> ' + escapeHtml(r.reason) + '</div>' : '') +
+                        '<div style="margin-top: 4px; color: var(--text-tertiary);">' + formatDate(r.created_at) + '</div>' +
+                        '</div>';
+                });
+                refundsHtml += '</div>';
+            } else {
+                refundsHtml = '<div style="color: var(--text-tertiary); font-size: 12px;">暂无退款记录</div>';
+            }
+
+            var logsHtml = '';
+            if (o.logs && o.logs.length) {
+                logsHtml = '<div style="margin-top: 8px;">';
+                o.logs.forEach(function(l) {
+                    logsHtml += '<div style="padding: 6px 12px; border-left: 2px solid var(--border-color); margin-bottom: 6px; font-size: 12px;">' +
+                        '<div><strong>' + escapeHtml(getOperationActionName(l.action)) + '</strong> &nbsp; <span style="color: var(--text-tertiary);">' + escapeHtml(l.username || '系统') + '</span></div>' +
+                        '<div style="color: var(--text-tertiary); margin-top: 2px;">' + formatDate(l.created_at) + ' &nbsp; IP: ' + escapeHtml(l.ip || '-') + '</div>' +
+                        '</div>';
+                });
+                logsHtml += '</div>';
+            } else {
+                logsHtml = '<div style="color: var(--text-tertiary); font-size: 12px;">暂无相关日志</div>';
+            }
+
+            var notifyStatusBadge = (function(s) {
+                var m = { 0: ['未通知', 'default'], 1: ['已通知', 'success'], 2: ['通知失败', 'error'] };
+                var v = m[s] || ['未知', 'default'];
+                return '<span class="badge ' + v[1] + '">' + v[0] + '</span>';
+            })(o.notifyStatus);
+
+            body.style.textAlign = '';
+            body.style.color = '';
+            body.innerHTML =
+                '<div class="order-detail-tabs">' +
+                '  <button class="order-tab active" data-tab="basic">基本信息</button>' +
+                '  <button class="order-tab" data-tab="payment">支付与通知</button>' +
+                '  <button class="order-tab" data-tab="refunds">退款记录' + (o.refunds && o.refunds.length ? '<span class="tab-badge">' + o.refunds.length + '</span>' : '') + '</button>' +
+                '  <button class="order-tab" data-tab="logs">操作日志</button>' +
+                '</div>' +
+                '<div class="order-detail-panel active" data-panel="basic">' +
+                    '<div class="detail-grid">' +
+                        infoRow('平台订单号', o.id, true) +
+                        infoRow('商户订单号', o.outTradeNo, true) +
+                        infoRow('商户', o.merchant) +
+                        infoRow('商品名称', o.name) +
+                        infoRow('商品描述', o.body) +
+                        infoRow('自定义参数', o.param, true) +
+                        infoRow('订单金额', formatMoney(o.amount)) +
+                        infoRow('实际支付', formatMoney(o.actualAmount)) +
+                        infoRow('手续费', formatMoney(o.fee)) +
+                        infoRow('利润', formatMoney(o.profit)) +
+                        infoRow('状态', '', false).replace('<span style="word-break: break-all;"></span>', getStatusBadge(o.status, 'order')) +
+                        infoRow('创建时间', formatDate(o.createdAt)) +
+                        infoRow('支付时间', formatDate(o.paidAt)) +
+                        infoRow('关闭时间', formatDate(o.closedAt)) +
+                    '</div>' +
+                '</div>' +
+                '<div class="order-detail-panel" data-panel="payment">' +
+                    '<div class="detail-grid">' +
+                        infoRow('支付方式', getPaymentTypeDisplayName(o.paymentTypeName, o.paymentType)) +
+                        infoRow('支付通道', o.channelName || o.channelId || '-') +
+                        infoRow('插件标识', o.plugin) +
+                        infoRow('第三方交易号', o.apiTradeNo, true) +
+                        infoRow('来源域名', o.domain) +
+                        infoRow('设备类型', o.device) +
+                        infoRow('买家信息', o.buyer) +
+                        infoRow('买家IP', o.buyerIp) +
+                        infoRow('异步通知地址', o.notifyUrl, true) +
+                        infoRow('同步跳转地址', o.returnUrl, true) +
+                        infoRow('通知状态', '', false).replace('<span style="word-break: break-all;"></span>', notifyStatusBadge) +
+                        infoRow('通知次数', o.notifyCount) +
+                        infoRow('最后通知时间', formatDate(o.lastNotifyAt)) +
+                        infoRow('已退款金额', formatMoney(o.refundAmount)) +
+                    '</div>' +
+                '</div>' +
+                '<div class="order-detail-panel" data-panel="refunds">' +
+                    refundsHtml +
+                '</div>' +
+                '<div class="order-detail-panel" data-panel="logs">' +
+                    logsHtml +
+                '</div>';
+
+            // 切换 Tab
+            var tabs = body.querySelectorAll('.order-tab');
+            tabs.forEach(function(tab) {
+                tab.onclick = function() {
+                    tabs.forEach(function(t) { t.classList.remove('active'); });
+                    tab.classList.add('active');
+                    var key = tab.getAttribute('data-tab');
+                    body.querySelectorAll('.order-detail-panel').forEach(function(p) {
+                        p.classList.toggle('active', p.getAttribute('data-panel') === key);
+                    });
+                };
+            });
+        }
+
+        function getRefundStatusBadge(status) {
+            var m = { 0: ['处理中', 'warning'], 1: ['成功', 'success'], 2: ['失败', 'error'] };
+            var v = m[status] || ['未知', 'default'];
+            return '<span class="badge ' + v[1] + '">' + v[0] + '</span>';
         }
 
         function renderSettlements() {
@@ -2983,17 +3726,17 @@ app.get('/admin', async (c) => {
                     var actionHtml = '-';
                     if (settlement.status === 0) {
                         actionHtml = '<div style="display: flex; gap: 8px;">' +
-                            '<button class="btn btn-sm btn-primary" onclick="handleSettlement(\\'' + settlement.id + '\\', \\'approve\\')">批准</button>' +
-                            '<button class="btn btn-sm btn-danger" onclick="handleSettlement(\\'' + settlement.id + '\\', \\'reject\\')">拒绝</button>' +
+                            '<button class="btn btn-sm btn-primary" onclick="handleSettlement(\\'' + escapeHtml(settlement.id) + '\\', \\'approve\\')">批准</button>' +
+                            '<button class="btn btn-sm btn-danger" onclick="handleSettlement(\\'' + escapeHtml(settlement.id) + '\\', \\'reject\\')">拒绝</button>' +
                             '</div>';
                     }
                     
                     html += '<tr>' +
-                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + settlement.id + '</code></td>' +
-                        '<td>' + settlement.merchant + '</td>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + escapeHtml(settlement.id) + '</code></td>' +
+                        '<td>' + escapeHtml(settlement.merchant) + '</td>' +
                         '<td>' + formatMoney(settlement.amount) + '</td>' +
                         '<td>' + getStatusBadge(settlement.status, 'settlement') + '</td>' +
-                        '<td>' + settlement.bankInfo + '</td>' +
+                        '<td>' + escapeHtml(settlement.bankInfo) + '</td>' +
                         '<td>' + formatDate(settlement.createdAt) + '</td>' +
                         '<td>' + formatDate(settlement.processedAt) + '</td>' +
                         '<td>' + actionHtml + '</td>' +
@@ -3002,6 +3745,7 @@ app.get('/admin', async (c) => {
                 
                 tbody.innerHTML = html;
                 if (countEl) countEl.textContent = '共 ' + result.data.length + ' 条记录';
+                cacheCurrentPage('settlements');
             } catch (error) {
                 console.error('加载结算数据失败:', error);
                 showToast('error', '加载失败', '无法获取结算数据');
@@ -3021,6 +3765,7 @@ app.get('/admin', async (c) => {
                     var result = await api.processSettlement(id, action, reason);
                     if (result.success) {
                         showToast('success', '操作成功', result.message);
+                        invalidatePage('settlements');
                         // 刷新页面数据
                         navigateTo('settlements');
                     } else {
@@ -3080,14 +3825,14 @@ app.get('/admin', async (c) => {
                 var html = '';
                 list.forEach(function(item) {
                     html += '<tr>' +
-                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + (item.name || '') + '</code></td>' +
-                        '<td>' + (item.displayName || '') + '</td>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + escapeHtml(item.name || '') + '</code></td>' +
+                        '<td>' + escapeHtml(item.displayName || '') + '</td>' +
                         '<td><i class="' + (item.icon || 'ri-bank-card-line') + '" style="font-size: 24px;"></i></td>' +
                         '<td>' + (item.status === 1 ? '<span class="badge success">启用</span>' : '<span class="badge error">禁用</span>') + '</td>' +
                         '<td>' + (item.sortOrder || 0) + '</td>' +
                         '<td>' +
-                        '    <button class="btn btn-sm btn-secondary" onclick="editPaymentType(\\'' + item.id + '\\')" title="编辑"><i class="ri-edit-line"></i></button>' +
-                        '    <button class="btn btn-sm ' + (item.status === 1 ? 'btn-warning' : 'btn-success') + '" onclick="togglePaymentTypeStatus(\\'' + item.id + '\\', ' + (item.status === 1 ? 0 : 1) + ')" title="' + (item.status === 1 ? '禁用' : '启用') + '">' +
+                        '    <button class="btn btn-sm btn-secondary" onclick="editPaymentType(\\'' + escapeHtml(item.id) + '\\')" title="编辑"><i class="ri-edit-line"></i></button>' +
+                        '    <button class="btn btn-sm ' + (item.status === 1 ? 'btn-warning' : 'btn-success') + '" onclick="togglePaymentTypeStatus(\\'' + escapeHtml(item.id) + '\\', ' + (item.status === 1 ? 0 : 1) + ')" title="' + (item.status === 1 ? '禁用' : '启用') + '">' +
                         '        <i class="' + (item.status === 1 ? 'ri-pause-circle-line' : 'ri-play-circle-line') + '"></i>' +
                         '    </button>' +
                         '</td>' +
@@ -3095,6 +3840,7 @@ app.get('/admin', async (c) => {
                 });
                 tbody.innerHTML = html;
                 if (countEl) countEl.textContent = '共 ' + list.length + ' 条记录';
+                cacheCurrentPage('payment-types');
             } catch (error) {
                 console.error('加载支付方式失败:', error);
                 showToast('error', '加载失败', '无法获取支付方式数据');
@@ -3158,28 +3904,29 @@ app.get('/admin', async (c) => {
                     var minStr = channel.minAmount ? formatMoney(channel.minAmount) : '不限';
                     var maxStr = channel.maxAmount ? formatMoney(channel.maxAmount) : '不限';
                     html += '<tr>' +
-                        '<td>' + (channel.name || '') + '</td>' +
-                        '<td><i class="' + getPaymentTypeIcon(channel.paymentType) + '" style="margin-right: 4px;"></i>' + (channel.paymentTypeDisplay || getPaymentTypeName(channel.paymentType)) + '</td>' +
-                        '<td>' + (channel.plugin || '') + '</td>' +
+                        '<td>' + escapeHtml(channel.name || '') + '</td>' +
+                        '<td><i class="' + getPaymentTypeIcon(channel.paymentType) + '" style="margin-right: 4px;"></i>' + escapeHtml(channel.paymentTypeDisplay || getPaymentTypeName(channel.paymentType)) + '</td>' +
+                        '<td>' + escapeHtml(channel.plugin || '') + '</td>' +
                         '<td>' + ((channel.feeRate || 0) * 100).toFixed(2) + '%</td>' +
                         '<td>' + minStr + ' - ' + maxStr + '</td>' +
                         '<td>' +
                         '    <label class="toggle-switch" style="display: inline-flex;">' +
-                        '        <input type="checkbox" ' + (channel.status === 1 ? 'checked' : '') + ' onchange="toggleChannelStatus(\\'' + channel.id + '\\', this.checked ? 1 : 0)">' +
+                        '        <input type="checkbox" ' + (channel.status === 1 ? 'checked' : '') + ' onchange="toggleChannelStatus(\\'' + escapeHtml(channel.id) + '\\', this.checked ? 1 : 0)">' +
                         '        <span class="toggle-slider"></span>' +
                         '    </label>' +
                         '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="editChannel(\\'' + channel.id + '\\')" title="编辑"><i class="ri-edit-line"></i></button>' +
-                        '        <button class="btn btn-sm btn-secondary" onclick="showChannelConfig(\\'' + channel.id + '\\')" title="配置"><i class="ri-settings-3-line"></i></button>' +
-                        '        <button class="btn btn-sm btn-danger" onclick="deleteChannel(\\'' + channel.id + '\\', \\'' + (channel.name || '') + '\\')" title="删除"><i class="ri-delete-bin-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="editChannel(\\'' + escapeHtml(channel.id) + '\\')" title="编辑"><i class="ri-edit-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-secondary" onclick="showChannelConfig(\\'' + escapeHtml(channel.id) + '\\')" title="配置"><i class="ri-settings-3-line"></i></button>' +
+                        '        <button class="btn btn-sm btn-danger" onclick="deleteChannel(\\'' + escapeHtml(channel.id) + '\\', \\'' + escapeHtml(channel.name || '') + '\\')" title="删除"><i class="ri-delete-bin-line"></i></button>' +
                         '    </div>' +
                         '</td>' +
                         '</tr>';
                 });
                 tbody.innerHTML = html;
                 if (countEl) countEl.textContent = '共 ' + list.length + ' 条记录';
+                cacheCurrentPage('channels');
             } catch (error) {
                 console.error('加载支付通道失败:', error);
                 showToast('error', '加载失败', '无法获取支付通道数据');
@@ -3207,8 +3954,9 @@ app.get('/admin', async (c) => {
                 '                <input type="text" class="form-input" id="config_site_name" data-config-key="site_name" placeholder="加载中...">' +
                 '            </div>' +
                 '            <div class="form-group">' +
-                '                <label class="form-label">系统URL</label>' +
-                '                <input type="text" class="form-input" id="config_site_url" data-config-key="site_url" placeholder="加载中...">' +
+                '                <label class="form-label">站点域名</label>' +
+                '                <input type="text" class="form-input" id="config_site_url" data-config-key="site_url" placeholder="例如：https://teaven-pay.moruteaven.workers.dev">' +
+                '                <div class="form-hint">留空则自动从请求获取当前域名</div>' +
                 '            </div>' +
                 '            <div class="form-group">' +
                 '                <label class="form-label">是否开启注册</label>' +
@@ -3337,6 +4085,7 @@ app.get('/admin', async (c) => {
                         el.value = val;
                     }
                 });
+                cacheCurrentPage('settings');
             } catch (error) {
                 console.error('加载系统配置失败:', error);
                 showToast('error', '加载失败', '无法获取系统配置');
@@ -3356,6 +4105,7 @@ app.get('/admin', async (c) => {
                 var result = await api.updateConfig(configData);
                 if (result.success) {
                     showToast('success', '保存成功', '系统配置已更新');
+                    cacheCurrentPage('settings');
                 } else {
                     showToast('error', '保存失败', result.message);
                 }
@@ -3388,9 +4138,9 @@ app.get('/admin', async (c) => {
                 '                        <th>日志ID</th>' +
                 '                        <th>操作用户</th>' +
                 '                        <th>操作类型</th>' +
-                '                        <th>操作详情</th>' +
                 '                        <th>IP地址</th>' +
                 '                        <th>操作时间</th>' +
+                '                        <th>操作</th>' +
                 '                    </tr>' +
                 '                </thead>' +
                 '                <tbody id="logsTableBody">' +
@@ -3419,6 +4169,7 @@ app.get('/admin', async (c) => {
                 if (!tbody) return;
 
                 var list = result.data || [];
+                state.logs = list;
                 if (list.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-tertiary);">暂无操作日志</td></tr>';
                     if (countEl) countEl.textContent = '共 0 条记录';
@@ -3427,22 +4178,79 @@ app.get('/admin', async (c) => {
 
                 var html = '';
                 list.forEach(function(log) {
+                    var logId = String(log.id || '');
                     html += '<tr>' +
-                        '<td>' + (log.id || '') + '</td>' +
-                        '<td>' + (log.user || '系统') + '</td>' +
-                        '<td><span class="badge info">' + (log.action || '') + '</span></td>' +
-                        '<td>' + (log.detail || (log.target ? '目标: ' + log.target : '-')) + '</td>' +
-                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + (log.ip || '-') + '</code></td>' +
-                        '<td>' + formatDate(log.createdAt) + '</td>' +
+                        '<td>' + escapeHtml(logId) + '</td>' +
+                        '<td>' + escapeHtml(log.user || '系统') + '</td>' +
+                        '<td><span class="badge info">' + escapeHtml(getOperationActionName(log.action)) + '</span></td>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">' + escapeHtml(log.ip || '-') + '</code></td>' +
+                        '<td>' + escapeHtml(formatDate(log.createdAt)) + '</td>' +
+                        '<td><button class="btn btn-sm btn-secondary" data-log-id="' + escapeHtml(logId) + '" onclick="showLogDetailModal(this.dataset.logId)"><i class="ri-eye-line"></i>详情</button></td>' +
                         '</tr>';
                 });
                 tbody.innerHTML = html;
                 if (countEl) countEl.textContent = '共 ' + list.length + ' 条记录';
+                cacheCurrentPage('logs');
             } catch (error) {
                 console.error('加载操作日志失败:', error);
                 showToast('error', '加载失败', '无法获取操作日志数据');
             }
         }
+
+        function showLogDetailModal(logId) {
+            var log = (state.logs || []).find(function(item) {
+                return String(item.id || '') === String(logId || '');
+            });
+
+            if (!log) {
+                showToast('error', '查看失败', '未找到该日志记录');
+                return;
+            }
+
+            var existing = document.getElementById('modalOverlay');
+            if (existing) existing.remove();
+
+            var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
+                '<div class="modal" style="max-width: 680px;">' +
+                '    <div class="modal-header">' +
+                '        <span class="modal-title">操作日志详情</span>' +
+                '        <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>' +
+                '    </div>' +
+                '    <div class="modal-body">' +
+                '        <div class="detail-grid">' +
+                '            <div class="detail-row"><span class="detail-label">日志ID</span><span class="detail-value">' + escapeHtml(log.id || '-') + '</span></div>' +
+                '            <div class="detail-row"><span class="detail-label">操作用户</span><span class="detail-value">' + escapeHtml(log.user || '系统') + '</span></div>' +
+                '            <div class="detail-row"><span class="detail-label">操作类型</span><span class="detail-value">' + escapeHtml(getOperationActionName(log.action)) + '</span></div>' +
+                '            <div class="detail-row"><span class="detail-label">操作目标</span><span class="detail-value">' + escapeHtml(log.target || '-') + '</span></div>' +
+                '            <div class="detail-row"><span class="detail-label">IP地址</span><span class="detail-value">' + escapeHtml(log.ip || '-') + '</span></div>' +
+                '            <div class="detail-row"><span class="detail-label">操作时间</span><span class="detail-value">' + escapeHtml(formatDate(log.createdAt)) + '</span></div>' +
+                '            <div class="detail-row" style="grid-column: 1 / -1;"><span class="detail-label">User-Agent</span><span class="detail-value" style="word-break: break-all;">' + escapeHtml(log.userAgent || '-') + '</span></div>' +
+                '            <div class="detail-row" style="grid-column: 1 / -1;"><span class="detail-label">详细内容</span><pre style="margin: 0; white-space: pre-wrap; word-break: break-word; background: var(--bg-tertiary); border-radius: 8px; padding: 12px; font-family: inherit; font-size: 13px; color: var(--text-primary);">' + escapeHtml(log.detail || '-') + '</pre></div>' +
+                '        </div>' +
+                '    </div>' +
+                '    <div class="modal-footer">' +
+                '        <button class="btn btn-secondary" onclick="closeModal()">关闭</button>' +
+                '    </div>' +
+                '</div>' +
+                '</div>';
+
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            setTimeout(function() {
+                var overlay = document.getElementById('modalOverlay');
+                if (overlay) overlay.classList.add('active');
+            }, 10);
+        }
+
+        var pageNames = {
+            dashboard: '仪表盘',
+            merchants: '商户管理',
+            orders: '订单管理',
+            settlements: '结算管理',
+            'payment-types': '支付方式',
+            channels: '支付通道',
+            settings: '系统配置',
+            logs: '操作日志'
+        };
 
         // 页面映射
         var pageRenderers = {
@@ -3467,6 +4275,61 @@ app.get('/admin', async (c) => {
             settings: loadSettingsData,
             logs: loadLogsData
         };
+
+        function normalizePage(page) {
+            return pageNames[page] ? page : 'dashboard';
+        }
+
+        function getHashPage() {
+            return normalizePage((window.location.hash || '#dashboard').slice(1));
+        }
+
+        function setHashPage(page) {
+            var nextHash = '#' + page;
+            if (window.location.hash !== nextHash) {
+                history.pushState(null, '', nextHash);
+            }
+        }
+
+        function cacheCurrentPage(page) {
+            if (page === 'dashboard' || page === 'login' || state.currentPage !== page) return;
+            var mainContent = document.getElementById('mainContent');
+            if (mainContent) state.pageCache[page] = mainContent.innerHTML;
+        }
+
+        function invalidatePage(page) {
+            delete state.pageCache[page];
+        }
+
+        function refreshPageData(page, silent) {
+            var dataLoader = pageDataLoaders[page];
+            if (!dataLoader) return Promise.resolve();
+            if (state.pageLoading[page]) return state.pageLoading[page];
+            state.pageLoading[page] = Promise.resolve(dataLoader(silent)).then(function() {
+                cacheCurrentPage(page);
+            }).finally(function() {
+                delete state.pageLoading[page];
+            });
+            return state.pageLoading[page];
+        }
+
+        function refreshCurrentSection() {
+            if (!isLoggedIn() || state.currentPage === 'login') return;
+            if (document.getElementById('modalOverlay') || document.getElementById('confirmOverlay')) return;
+            if (state.currentPage === 'dashboard') {
+                loadDashboardData();
+                return;
+            }
+            refreshPageData(state.currentPage, true);
+        }
+
+        function onAdminPageVisible() {
+            if (document.visibilityState !== 'visible') return;
+            var now = Date.now();
+            if (now - state.lastAutoRefreshAt < 1000) return;
+            state.lastAutoRefreshAt = now;
+            refreshCurrentSection();
+        }
 
         // 导航到商户详情页面
         async function navigateToMerchantDetail(merchantId) {
@@ -3510,13 +4373,23 @@ app.get('/admin', async (c) => {
         }
 
         // 导航到指定页面
-        function navigateTo(page) {
+        function navigateTo(page, options) {
+            options = options || {};
+            page = page === 'login' ? page : normalizePage(page);
+            // 离开订单页时停止自动刷新
+            if (state.currentPage === 'orders' && page !== 'orders') {
+                stopOrdersAutoRefresh();
+            }
             state.currentPage = page;
 
             // 登录页面特殊处理
             if (page === 'login') {
                 document.querySelector('.layout').innerHTML = renderLogin();
                 return;
+            }
+
+            if (!options.fromHash) {
+                setHashPage(page);
             }
 
             // 更新导航激活状态
@@ -3528,28 +4401,31 @@ app.get('/admin', async (c) => {
             });
 
             // 更新面包屑
-            var pageNames = {
-                dashboard: '仪表盘',
-                merchants: '商户管理',
-                orders: '订单管理',
-                settlements: '结算管理',
-                'payment-types': '支付方式',
-                channels: '支付通道',
-                settings: '系统配置',
-                logs: '操作日志'
-            };
             document.getElementById('breadcrumbCurrent').textContent = pageNames[page] || page;
 
-            // 渲染页面
-            var renderer = pageRenderers[page];
-            if (renderer) {
-                document.getElementById('mainContent').innerHTML = renderer();
+            var mainContent = document.getElementById('mainContent');
+
+            // L1/L2 页面先展示缓存，再后台静默刷新，避免切换时闪烁。
+            if (page !== 'dashboard' && state.pageCache[page]) {
+                mainContent.innerHTML = state.pageCache[page];
+                refreshPageData(page, true);
+            } else if (page !== 'dashboard') {
+                // 渲染页面
+                var renderer = pageRenderers[page];
+                if (renderer) {
+                    mainContent.innerHTML = renderer();
+                }
+
+                // 加载页面数据
+                if (page !== 'dashboard') {
+                    refreshPageData(page, false);
+                }
             }
 
-            // 加载页面数据
-            var dataLoader = pageDataLoaders[page];
-            if (dataLoader) {
-                dataLoader();
+            // 仪表盘为实时指标，每次进入都重新拉取。
+            var renderer = pageRenderers[page];
+            if (page === 'dashboard' && renderer) {
+                mainContent.innerHTML = renderer();
             }
 
             // 初始化图表
@@ -3557,10 +4433,16 @@ app.get('/admin', async (c) => {
                 setTimeout(function() {
                     try {
                         initCharts();
+                        loadDashboardData();
                     } catch (e) {
                         console.error('图表初始化失败:', e);
                     }
                 }, 100);
+            }
+
+            // 进入订单页时启动自动刷新
+            if (page === 'orders' && state.ordersAutoRefresh) {
+                setTimeout(startOrdersAutoRefresh, 200);
             }
 
             // 移动端关闭侧边栏
@@ -3828,7 +4710,8 @@ app.get('/admin', async (c) => {
 
                 document.body.insertAdjacentHTML('beforeend', modalHTML);
                 setTimeout(function() {
-                    document.getElementById('modalOverlay').classList.add('active');
+                    var overlay = document.getElementById('modalOverlay');
+                    if (overlay) overlay.classList.add('active');
                 }, 10);
             } else if (type === 'createChannel' || type === 'editChannel') {
                 var isEdit = type === 'editChannel';
@@ -3856,11 +4739,11 @@ app.get('/admin', async (c) => {
                 window._paymentTypes = paymentTypes;
                 
                 var pluginSelectOptions = pluginOptions.map(function(p) {
-                    return '<option value="' + p.id + '" ' + (channelData.plugin === p.id ? 'selected' : '') + '>' + p.name + '</option>';
+                    return '<option value="' + escapeHtml(p.id) + '" ' + (channelData.plugin === p.id ? 'selected' : '') + '>' + escapeHtml(p.name) + '</option>';
                 }).join('');
                 
                 var paymentTypeOptions = paymentTypes.map(function(pt) {
-                    return '<option value="' + pt.id + '" ' + (channelData.paymentTypeId === pt.id ? 'selected' : '') + '>' + (pt.displayName || pt.name) + '</option>';
+                    return '<option value="' + escapeHtml(pt.id) + '" ' + (channelData.paymentTypeId === pt.id ? 'selected' : '') + '>' + escapeHtml(pt.displayName || pt.name) + '</option>';
                 }).join('');
                 
                 var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
@@ -3949,7 +4832,8 @@ app.get('/admin', async (c) => {
 
                 document.body.insertAdjacentHTML('beforeend', modalHTML);
                 setTimeout(function() {
-                    document.getElementById('modalOverlay').classList.add('active');
+                    var overlay = document.getElementById('modalOverlay');
+                    if (overlay) overlay.classList.add('active');
                 }, 10);
             } else if (type === 'editPaymentType') {
                 var paymentTypeData = data || {};
@@ -4006,7 +4890,8 @@ app.get('/admin', async (c) => {
 
                 document.body.insertAdjacentHTML('beforeend', modalHTML);
                 setTimeout(function() {
-                    document.getElementById('modalOverlay').classList.add('active');
+                    var overlay = document.getElementById('modalOverlay');
+                    if (overlay) overlay.classList.add('active');
                 }, 10);
             }
         }
@@ -4131,6 +5016,7 @@ app.get('/admin', async (c) => {
                     var result = await api.updateMerchantStatus(id, status);
                     if (result.success) {
                         showToast('success', '操作成功', '商户已' + actionText);
+                        invalidatePage('merchants');
                         navigateToMerchantDetail(id);
                     } else {
                         showToast('error', '操作失败', result.message);
@@ -4177,6 +5063,7 @@ app.get('/admin', async (c) => {
                 if (result.success) {
                     showToast('success', '创建成功', '商户 ' + username + ' 已成功创建');
                     closeModal();
+                    invalidatePage('merchants');
                     // 刷新商户列表
                     if (state.currentPage === 'merchants') {
                         loadMerchantsData();
@@ -4318,6 +5205,7 @@ app.get('/admin', async (c) => {
                 if (result.success) {
                     showToast('success', id ? '更新成功' : '创建成功', '通道 ' + name + ' 已' + (id ? '更新' : '创建'));
                     closeModal();
+                    invalidatePage('channels');
                     if (state.currentPage === 'channels') {
                         loadChannelsData();
                     }
@@ -4356,7 +5244,8 @@ app.get('/admin', async (c) => {
                 if (result.success) {
                     showToast('success', '更新成功', '支付方式已更新');
                     closeModal();
-                    if (state.currentPage === 'paymentTypes') {
+                    invalidatePage('payment-types');
+                    if (state.currentPage === 'payment-types') {
                         loadPaymentTypesData();
                     }
                 } else {
@@ -4391,6 +5280,8 @@ app.get('/admin', async (c) => {
                 var result = await api.togglePaymentTypeStatus(id, status);
                 if (result.success) {
                     showToast('success', '状态更新', '支付方式已' + (status === 1 ? '启用' : '禁用'));
+                    invalidatePage('payment-types');
+                    if (state.currentPage === 'payment-types') refreshPageData('payment-types', true);
                 } else {
                     showToast('error', '更新失败', result.message);
                     loadPaymentTypesData();
@@ -4428,6 +5319,7 @@ app.get('/admin', async (c) => {
                     var result = await api.deleteChannel(id);
                     if (result.success) {
                         showToast('success', '删除成功', '通道已删除');
+                        invalidatePage('channels');
                         loadChannelsData();
                     } else {
                         showToast('error', '删除失败', result.message);
@@ -4444,6 +5336,8 @@ app.get('/admin', async (c) => {
                 var result = await api.toggleChannelStatus(id, status);
                 if (result.success) {
                     showToast('success', '状态更新', '通道已' + (status === 1 ? '启用' : '禁用'));
+                    invalidatePage('channels');
+                    if (state.currentPage === 'channels') refreshPageData('channels', true);
                 } else {
                     showToast('error', '更新失败', result.message);
                     loadChannelsData();
@@ -4544,7 +5438,7 @@ app.get('/admin', async (c) => {
                 var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
                     '<div class="modal" style="max-width: 500px;">' +
                     '    <div class="modal-header">' +
-                    '        <span class="modal-title">通道配置 - ' + (channel.name || '') + '</span>' +
+                    '        <span class="modal-title">通道配置 - ' + escapeHtml(channel.name || '') + '</span>' +
                     '        <button class="modal-close" onclick="closeModal()">' +
                     '            <i class="ri-close-line"></i>' +
                     '        </button>' +
@@ -4563,7 +5457,8 @@ app.get('/admin', async (c) => {
 
                 document.body.insertAdjacentHTML('beforeend', modalHTML);
                 setTimeout(function() {
-                    document.getElementById('modalOverlay').classList.add('active');
+                    var overlay = document.getElementById('modalOverlay');
+                    if (overlay) overlay.classList.add('active');
                 }, 10);
             } catch (error) {
                 showToast('error', '加载失败', '无法获取通道数据');
@@ -4614,6 +5509,7 @@ app.get('/admin', async (c) => {
                 if (result.success) {
                     showToast('success', '保存成功', '通道配置已更新');
                     closeModal();
+                    invalidatePage('channels');
                     loadChannelsData();
                 } else {
                     showToast('error', '保存失败', result.message);
@@ -4641,8 +5537,8 @@ app.get('/admin', async (c) => {
         function closeSidebar() {
             var sidebar = document.getElementById('sidebar');
             var overlay = document.getElementById('drawerOverlay');
-            sidebar.classList.remove('mobile-open');
-            overlay.classList.remove('active');
+            if (sidebar) sidebar.classList.remove('mobile-open');
+            if (overlay) overlay.classList.remove('active');
         }
 
         // 主题切换
@@ -4656,7 +5552,7 @@ app.get('/admin', async (c) => {
 
             // 更新图标
             var icon = document.querySelector('#themeToggle i');
-            icon.className = newTheme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
+            if (icon) icon.className = newTheme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
         }
 
         // 初始化主题
@@ -4668,7 +5564,7 @@ app.get('/admin', async (c) => {
             state.theme = theme;
 
             var icon = document.querySelector('#themeToggle i');
-            icon.className = theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
+            if (icon) icon.className = theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line';
         }
 
         // 注册全局事件监听器（登录前后都需要）
@@ -4713,6 +5609,19 @@ app.get('/admin', async (c) => {
                     });
                 }
             });
+
+            if (!window._adminHashListenerBound) {
+                window._adminHashListenerBound = true;
+                window.addEventListener('hashchange', function() {
+                    if (isLoggedIn()) navigateTo(getHashPage(), { fromHash: true });
+                });
+            }
+
+            if (!window._adminVisibilityListenerBound) {
+                window._adminVisibilityListenerBound = true;
+                document.addEventListener('visibilitychange', onAdminPageVisible);
+                window.addEventListener('focus', onAdminPageVisible);
+            }
 
             // 退出登录按钮
             var logoutBtn = document.querySelector('[data-action="logout"]');
@@ -4764,8 +5673,8 @@ app.get('/admin', async (c) => {
                 // 更新用户信息显示
                 updateUserDisplay();
 
-                // 渲染默认页面
-                navigateTo('dashboard');
+                // 根据 hash 恢复上次页面，未知页面回退仪表盘。
+                navigateTo(getHashPage(), { fromHash: true });
             } catch (e) {
                 console.error('页面初始化失败:', e);
                 // 如果初始化失败，至少显示登录页面
@@ -4934,11 +5843,19 @@ app.get('/user', async (c) => {
         }
         var currentUser = null;
         var currentPage = 'dashboard';
+        var pageCache = {};
+        var pageLoading = {};
+        var lastAutoRefreshAt = Date.now();
+        var pageTitles = { dashboard:'仪表盘', orders:'订单管理', settlements:'结算管理', refunds:'退款管理', developer:'接口配置', domains:'域名白名单', cashierlink:'收银台链接', settings:'账户设置' };
         var app = document.getElementById('app');
 
         function escapeHtml(str) {
-            if (!str) return '';
-            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            return String(str == null ? '' : str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         function formatMoney(v) { return (Number(v) || 0).toFixed(2); }
@@ -4957,14 +5874,17 @@ app.get('/user', async (c) => {
         }
 
         function showModal(title, bodyHtml, footerHtml) {
-            document.getElementById('modalContent').innerHTML =
-                '<div class="modal-header"><span class="modal-title">' + title + '</span><button onclick="document.getElementById(\\'modalOverlay\\').classList.remove(\\'active\\')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-tertiary)">&times;</button></div>' +
+            var modalContent = document.getElementById('modalContent');
+            var modalOverlay = document.getElementById('modalOverlay');
+            if (!modalContent || !modalOverlay) return;
+            modalContent.innerHTML =
+                '<div class="modal-header"><span class="modal-title">' + title + '</span><button onclick="var o=document.getElementById(\\'modalOverlay\\');if(o)o.classList.remove(\\'active\\')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-tertiary)">&times;</button></div>' +
                 '<div class="modal-body">' + bodyHtml + '</div>' +
                 (footerHtml ? '<div class="modal-footer">' + footerHtml + '</div>' : '');
-            document.getElementById('modalOverlay').classList.add('active');
+            modalOverlay.classList.add('active');
         }
 
-        function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+        function closeModal() { var o = document.getElementById('modalOverlay'); if (o) o.classList.remove('active'); }
 
         async function api(method, path, body) {
             var opts = { method: method, headers: { 'Authorization': 'Bearer ' + token } };
@@ -5047,8 +5967,60 @@ app.get('/user', async (c) => {
         function logout() {
             token = null;
             currentUser = null;
+            pageCache = {};
+            pageLoading = {};
             localStorage.removeItem('merchant_token');
             renderLogin();
+        }
+
+        function normalizeUserPage(page) {
+            return pageTitles[page] ? page : 'dashboard';
+        }
+
+        function getUserHashPage() {
+            return normalizeUserPage((window.location.hash || '#dashboard').slice(1));
+        }
+
+        function setUserHashPage(page) {
+            var nextHash = '#' + page;
+            if (window.location.hash !== nextHash) history.pushState(null, '', nextHash);
+        }
+
+        function cacheCurrentUserPage(page) {
+            if (page === 'dashboard' || currentPage !== page) return;
+            var content = document.getElementById('pageContent');
+            if (content) pageCache[page] = content.innerHTML;
+        }
+
+        function invalidateUserPage(page) {
+            delete pageCache[page];
+        }
+
+        function refreshUserPage(page, silent) {
+            var loaders = { dashboard: loadDashboard, orders: loadOrders, settlements: loadSettlements, refunds: loadRefunds, developer: loadDeveloper, domains: loadDomains, cashierlink: loadCashierLink, settings: loadSettings };
+            var loader = loaders[page];
+            if (!loader) return Promise.resolve();
+            if (pageLoading[page]) return pageLoading[page];
+            pageLoading[page] = Promise.resolve(loader(silent)).then(function() {
+                cacheCurrentUserPage(page);
+            }).finally(function() {
+                delete pageLoading[page];
+            });
+            return pageLoading[page];
+        }
+
+        function refreshCurrentUserPage() {
+            if (!token) return;
+            if (document.getElementById('modalOverlay') && document.getElementById('modalOverlay').classList.contains('active')) return;
+            refreshUserPage(currentPage, true);
+        }
+
+        function onUserPageVisible() {
+            if (document.visibilityState !== 'visible') return;
+            var now = Date.now();
+            if (now - lastAutoRefreshAt < 1000) return;
+            lastAutoRefreshAt = now;
+            refreshCurrentUserPage();
         }
 
         async function renderApp() {
@@ -5080,8 +6052,21 @@ app.get('/user', async (c) => {
                 el.onclick = function() { navigateTo(el.getAttribute('data-page')); };
             });
 
+            if (!window._userHashListenerBound) {
+                window._userHashListenerBound = true;
+                window.addEventListener('hashchange', function() {
+                    if (token) navigateTo(getUserHashPage(), { fromHash: true });
+                });
+            }
+
+            if (!window._userVisibilityListenerBound) {
+                window._userVisibilityListenerBound = true;
+                document.addEventListener('visibilitychange', onUserPageVisible);
+                window.addEventListener('focus', onUserPageVisible);
+            }
+
             await loadProfile();
-            navigateTo('dashboard');
+            navigateTo(getUserHashPage(), { fromHash: true });
         }
 
         async function loadProfile() {
@@ -5089,32 +6074,45 @@ app.get('/user', async (c) => {
             if (!data || data.code !== 0) return;
             currentUser = data.data;
             var avatar = currentUser.username ? currentUser.username.charAt(0).toUpperCase() : '-';
-            document.getElementById('userAvatar').textContent = avatar;
-            document.getElementById('userName').textContent = currentUser.username || '-';
-            document.getElementById('userId').textContent = 'ID: ' + (currentUser.id || '').substring(0, 8) + '...';
+            var userAvatar = document.getElementById('userAvatar');
+            var userName = document.getElementById('userName');
+            var userId = document.getElementById('userId');
+            if (userAvatar) userAvatar.textContent = avatar;
+            if (userName) userName.textContent = currentUser.username || '-';
+            if (userId) userId.textContent = 'ID: ' + (currentUser.id || '').substring(0, 8) + '...';
         }
 
-        function navigateTo(page) {
+        function navigateTo(page, options) {
+            options = options || {};
+            page = normalizeUserPage(page);
             currentPage = page;
+            if (!options.fromHash) setUserHashPage(page);
             document.querySelectorAll('.nav-item').forEach(function(el) {
                 el.classList.toggle('active', el.getAttribute('data-page') === page);
             });
-            var titles = { dashboard:'仪表盘', orders:'订单管理', settlements:'结算管理', refunds:'退款管理', developer:'接口配置', domains:'域名白名单', cashierlink:'收银台链接', settings:'账户设置' };
-            document.getElementById('pageTitle').textContent = titles[page] || page;
-            var loaders = { dashboard: loadDashboard, orders: loadOrders, settlements: loadSettlements, refunds: loadRefunds, developer: loadDeveloper, domains: loadDomains, cashierlink: loadCashierLink, settings: loadSettings };
-            if (loaders[page]) loaders[page]();
+            var pageTitle = document.getElementById('pageTitle');
+            if (pageTitle) pageTitle.textContent = pageTitles[page] || page;
+            var content = document.getElementById('pageContent');
+            if (page !== 'dashboard' && pageCache[page] && content) {
+                content.innerHTML = pageCache[page];
+                refreshUserPage(page, true);
+                return;
+            }
+            refreshUserPage(page, false);
         }
 
         function toggleTheme() {
             var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
             document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
             localStorage.setItem('user_theme', isDark ? '' : 'dark');
-            document.getElementById('themeIcon').className = isDark ? 'ri-moon-line' : 'ri-sun-line';
+            var themeIcon = document.getElementById('themeIcon');
+            if (themeIcon) themeIcon.className = isDark ? 'ri-moon-line' : 'ri-sun-line';
         }
 
-        async function loadDashboard() {
+        async function loadDashboard(silent) {
             var content = document.getElementById('pageContent');
-            content.innerHTML = '<div class="loading">加载中...</div>';
+            if (!content) return;
+            if (!silent) content.innerHTML = '<div class="loading">加载中...</div>';
             var data = await api('GET', '/dashboard');
             if (!data || data.code !== 0) return;
             var d = data.data;
@@ -5161,9 +6159,9 @@ app.get('/user', async (c) => {
 
         var ordersState = { offset: 0, limit: 20 };
 
-        async function loadOrders() {
+        async function loadOrders(silent) {
             var content = document.getElementById('pageContent');
-            content.innerHTML = '<div class="loading">加载中...</div>';
+            if (!silent) content.innerHTML = '<div class="loading">加载中...</div>';
             var params = '?limit=' + ordersState.limit + '&offset=' + ordersState.offset;
             var status = document.getElementById('orderStatusFilter') ? document.getElementById('orderStatusFilter').value : '';
             if (status !== '') params += '&status=' + status;
@@ -5186,9 +6184,9 @@ app.get('/user', async (c) => {
                 html += '<tr><td colspan="8"><div class="empty-state"><i class="ri-receipt-line"></i><p>暂无订单</p></div></td></tr>';
             } else {
                 list.forEach(function(o) {
-                    var actions = '';
+                    var actions = '<button class="btn btn-sm btn-ghost" onclick="window._viewOrder(\\'' + escapeHtml(o.id) + '\\')"><i class="ri-eye-line"></i>详情</button>';
                     if (o.status === 0) {
-                        actions = '<button class="btn btn-sm btn-ghost" onclick="window._closeOrder(\\'' + o.id + '\\')">关闭</button>';
+                        actions += ' <button class="btn btn-sm btn-ghost" onclick="window._closeOrder(\\'' + o.id + '\\')">关闭</button>';
                     }
                     html += '<tr>' +
                         '<td><code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;font-size:11px;">' + escapeHtml(o.id ? o.id.substring(0, 12) + '...' : '-') + '</code></td>' +
@@ -5198,7 +6196,7 @@ app.get('/user', async (c) => {
                         '<td>' + formatMoney(o.amount) + '</td>' +
                         '<td>' + getStatusBadge(o.status, 'order') + '</td>' +
                         '<td style="font-size:12px;">' + formatDate(o.created_at) + '</td>' +
-                        '<td>' + actions + '</td></tr>';
+                        '<td style="white-space:nowrap;">' + actions + '</td></tr>';
                 });
             }
 
@@ -5224,13 +6222,117 @@ app.get('/user', async (c) => {
                 if (res && res.code === 0) { showToast('订单已关闭'); loadOrders(); }
                 else if (res) showToast(res.msg || '操作失败', 'error');
             };
+            window._viewOrder = async function(id) {
+                showModal('订单详情', '<div style="text-align:center;padding:20px;color:var(--text-tertiary);"><i class="ri-loader-4-line" style="font-size:24px;"></i><div style="margin-top:8px;">加载中...</div></div>', '');
+                var modalEl = document.getElementById('modalContent');
+                if (modalEl) modalEl.style.maxWidth = '720px';
+                var res = await api('GET', '/orders/' + encodeURIComponent(id));
+                if (!res || res.code !== 0) {
+                    var msg = (res && res.msg) ? res.msg : '加载失败';
+                    document.querySelector('#modalContent .modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--error);"><i class="ri-error-warning-line" style="font-size:32px;"></i><div style="margin-top:8px;">' + escapeHtml(msg) + '</div></div>';
+                    return;
+                }
+                renderUserOrderDetail(res.data);
+            };
+        }
+
+        function renderUserOrderDetail(o) {
+            var modalEl = document.getElementById('modalContent');
+            if (modalEl) modalEl.style.maxWidth = '720px';
+            var body = document.querySelector('#modalContent .modal-body');
+            if (!body) return;
+
+            var infoRow = function(label, value, isCode) {
+                if (value === null || value === undefined || value === '') value = '-';
+                var v = isCode
+                    ? '<code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;font-size:12px;word-break:break-all;">' + escapeHtml(value) + '</code>'
+                    : '<span style="word-break:break-all;">' + escapeHtml(value) + '</span>';
+                return '<div style="display:flex;flex-direction:column;gap:4px;min-width:0;">' +
+                    '<div style="color:var(--text-tertiary);font-size:12px;">' + label + '</div>' +
+                    '<div style="color:var(--text-primary);">' + v + '</div></div>';
+            };
+
+            var notifyBadge = (function(s) {
+                var m = { 0: ['未通知','default'], 1: ['已通知','success'], 2: ['通知失败','error'] };
+                var v = m[s] || ['未知','default'];
+                return '<span class="badge badge-' + v[1] + '">' + v[0] + '</span>';
+            })(o.notify_status);
+
+            var tabsHtml =
+                '<div style="display:flex;gap:4px;border-bottom:1px solid var(--border-color);margin-bottom:16px;flex-wrap:wrap;">' +
+                '  <button class="user-tab active" data-tab="basic" style="padding:8px 14px;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;font-size:13px;color:var(--text-secondary);">基本信息</button>' +
+                '  <button class="user-tab" data-tab="payment" style="padding:8px 14px;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;font-size:13px;color:var(--text-secondary);">支付与通知</button>' +
+                '</div>';
+
+            var basicHtml =
+                '<div class="user-panel active" data-panel="basic" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;font-size:13px;">' +
+                    infoRow('平台订单号', o.id, true) +
+                    infoRow('商户订单号', o.out_trade_no, true) +
+                    infoRow('商品名称', o.name) +
+                    infoRow('商品描述', o.body) +
+                    infoRow('自定义参数', o.param, true) +
+                    infoRow('订单金额', formatMoney(o.amount)) +
+                    infoRow('实际支付', formatMoney(o.actual_amount)) +
+                    infoRow('手续费', formatMoney(o.fee)) +
+                    infoRow('状态', '', false).replace('<span style="word-break:break-all;"></span>', getStatusBadge(o.status, 'order')) +
+                    infoRow('创建时间', formatDate(o.created_at)) +
+                    infoRow('支付时间', formatDate(o.paid_at)) +
+                    infoRow('关闭时间', formatDate(o.closed_at)) +
+                '</div>';
+
+            var payHtml =
+                '<div class="user-panel" data-panel="payment" style="display:none;grid-template-columns:1fr 1fr;gap:12px 24px;font-size:13px;">' +
+                    infoRow('支付方式', o.type_name || o.payment_type) +
+                    infoRow('支付通道', o.channel_id || '-') +
+                    infoRow('第三方交易号', o.api_trade_no, true) +
+                    infoRow('来源域名', o.domain) +
+                    infoRow('买家信息', o.buyer) +
+                    infoRow('买家IP', o.buyer_ip) +
+                    infoRow('异步通知地址', o.notify_url, true) +
+                    infoRow('同步跳转地址', o.return_url, true) +
+                    infoRow('通知状态', '', false).replace('<span style="word-break:break-all;"></span>', notifyBadge) +
+                    infoRow('通知次数', o.notify_count) +
+                    infoRow('最后通知时间', formatDate(o.last_notify_at)) +
+                    infoRow('已退款金额', formatMoney(o.refund_amount)) +
+                '</div>';
+
+            body.innerHTML = tabsHtml + basicHtml + payHtml;
+
+            var tabs = body.querySelectorAll('.user-tab');
+            tabs.forEach(function(tab) {
+                tab.onclick = function() {
+                    tabs.forEach(function(t) {
+                        t.classList.remove('active');
+                        t.style.color = 'var(--text-secondary)';
+                        t.style.borderBottomColor = 'transparent';
+                        t.style.fontWeight = '400';
+                    });
+                    tab.classList.add('active');
+                    tab.style.color = 'var(--primary-600)';
+                    tab.style.borderBottomColor = 'var(--primary-500)';
+                    tab.style.fontWeight = '600';
+                    var key = tab.getAttribute('data-tab');
+                    body.querySelectorAll('.user-panel').forEach(function(p) {
+                        var match = p.getAttribute('data-panel') === key;
+                        p.style.display = match ? 'grid' : 'none';
+                    });
+                };
+            });
+
+            // 触发 active tab 的样式
+            var activeTab = body.querySelector('.user-tab.active');
+            if (activeTab) {
+                activeTab.style.color = 'var(--primary-600)';
+                activeTab.style.borderBottomColor = 'var(--primary-500)';
+                activeTab.style.fontWeight = '600';
+            }
         }
 
         var settleState = { offset: 0, limit: 10 };
 
-        async function loadSettlements() {
+        async function loadSettlements(silent) {
             var content = document.getElementById('pageContent');
-            content.innerHTML = '<div class="loading">加载中...</div>';
+            if (!silent) content.innerHTML = '<div class="loading">加载中...</div>';
             var data = await api('GET', '/settle/list?limit=' + settleState.limit + '&offset=' + settleState.offset);
             if (!data || (data.code !== 0 && data.code !== 1)) return;
             var list = data.data || [];
@@ -5296,9 +6398,9 @@ app.get('/user', async (c) => {
 
         var refundState = { offset: 0, limit: 20 };
 
-        async function loadRefunds() {
+        async function loadRefunds(silent) {
             var content = document.getElementById('pageContent');
-            content.innerHTML = '<div class="loading">加载中...</div>';
+            if (!silent) content.innerHTML = '<div class="loading">加载中...</div>';
             var data = await api('GET', '/refunds?limit=' + refundState.limit + '&offset=' + refundState.offset);
             if (!data || data.code !== 0) return;
             var d = data.data;
@@ -5337,9 +6439,9 @@ app.get('/user', async (c) => {
             window._refundNext = function() { refundState.offset += refundState.limit; loadRefunds(); };
         }
 
-        async function loadDeveloper() {
+        async function loadDeveloper(silent) {
             var content = document.getElementById('pageContent');
-            content.innerHTML = '<div class="loading">加载中...</div>';
+            if (!silent) content.innerHTML = '<div class="loading">加载中...</div>';
             var data = await api('GET', '/profile');
             if (!data || data.code !== 0) return;
             var u = data.data;
@@ -5413,9 +6515,9 @@ app.get('/user', async (c) => {
 
         var domainState = { newDomain: '' };
 
-        async function loadDomains() {
+        async function loadDomains(silent) {
             var content = document.getElementById('pageContent');
-            content.innerHTML = '<div class="loading">加载中...</div>';
+            if (!silent) content.innerHTML = '<div class="loading">加载中...</div>';
             var data = await api('GET', '/domains');
             if (!data || data.code !== 0) return;
             var list = data.data || [];
@@ -5465,9 +6567,9 @@ app.get('/user', async (c) => {
             };
         }
 
-        async function loadCashierLink() {
+        async function loadCashierLink(silent) {
             var content = document.getElementById('pageContent');
-            content.innerHTML = '<div class="loading">加载中...</div>';
+            if (!silent) content.innerHTML = '<div class="loading">加载中...</div>';
             var data = await api('GET', '/profile');
             if (!data || data.code !== 0) return;
             var u = data.data;
@@ -5491,9 +6593,9 @@ app.get('/user', async (c) => {
                 '</div></div>';
         }
 
-        async function loadSettings() {
+        async function loadSettings(silent) {
             var content = document.getElementById('pageContent');
-            content.innerHTML = '<div class="loading">加载中...</div>';
+            if (!silent) content.innerHTML = '<div class="loading">加载中...</div>';
             var data = await api('GET', '/profile');
             if (!data || data.code !== 0) return;
             var u = data.data;

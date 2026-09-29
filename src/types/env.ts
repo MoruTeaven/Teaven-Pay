@@ -9,6 +9,7 @@ export interface Env {
     LOG_LEVEL: string;
     ENABLE_CORS: string;
     ALLOWED_ORIGINS?: string;
+    SITE_URL?: string;
     
     // D1 数据库
     DB: D1Database;
@@ -182,4 +183,74 @@ export interface ConfigRow {
     value: string | null;
     description: string | null;
     updated_at: string;
+}
+
+export interface OrderLogRow {
+    id: string;
+    order_id: string;
+    user_id: string | null;
+    out_trade_no: string | null;
+    action: string;
+    from_status: number | null;
+    to_status: number | null;
+    amount: number | null;
+    detail: string | null;
+    ip: string | null;
+    user_agent: string | null;
+    created_at: string;
+}
+
+export interface PaymentLogRow {
+    id: string;
+    order_id: string | null;
+    user_id: string | null;
+    channel_id: string | null;
+    plugin: string | null;
+    direction: string;
+    action: string;
+    status: string;
+    amount: number | null;
+    third_party_trade_no: string | null;
+    request_data: string | null;
+    response_data: string | null;
+    error_message: string | null;
+    created_at: string;
+}
+
+export interface WebhookLogRow {
+    id: string;
+    order_id: string | null;
+    user_id: string | null;
+    plugin: string | null;
+    webhook_type: string;
+    direction: string;
+    url: string | null;
+    method: string | null;
+    http_status: number | null;
+    success: number;
+    request_headers: string | null;
+    request_body: string | null;
+    response_body: string | null;
+    error_message: string | null;
+    ip: string | null;
+    user_agent: string | null;
+    created_at: string;
+}
+
+export interface ReconciliationLogRow {
+    id: string;
+    user_id: string | null;
+    payment_type: string | null;
+    date: string;
+    status: string;
+    checked_count: number;
+    matched_count: number;
+    mismatch_count: number;
+    fixed_count: number;
+    operator_id: string | null;
+    detail: string | null;
+    error_message: string | null;
+    started_at: string | null;
+    finished_at: string | null;
+    created_at: string;
 }

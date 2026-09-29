@@ -7,6 +7,7 @@ import { Env } from '../types/env';
 import { authMiddleware, merchantMiddleware, signJWT } from '../middleware/auth';
 import { hashPassword, verifyPassword } from '../utils/crypto';
 import { generateUUIDv7 } from '../utils/uuid';
+import { getRequestLogMeta, logAuditEvent, logOrderEvent } from '../utils/logging';
 
 export const merchantRouter = new Hono<{ Bindings: Env }>();
 
@@ -50,6 +51,14 @@ merchantRouter.post('/login', async (c) => {
         await c.env.DB.prepare(
             "UPDATE users SET last_login_at = ?, last_login_ip = ? WHERE id = ?"
         ).bind(now, ip, (user as any).id).run();
+
+        await logAuditEvent(c.env, {
+            userId: (user as any).id,
+            action: 'merchant_login',
+            target: (user as any).id,
+            detail: { username: (user as any).username },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({
             code: 0,
@@ -162,6 +171,12 @@ merchantRouter.put('/profile', async (c) => {
         return c.json({ code: -1, msg: '没有需要更新的字段' });
     }
 
+    // email 格式校验（RFC 5322 简化版），防止存储型 XSS 载荷入库
+    const EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+    if (allowedFields.email !== undefined && !EMAIL_RE.test(allowedFields.email)) {
+        return c.json({ code: -1, msg: '邮箱格式不正确' });
+    }
+
     try {
         if (allowedFields.email !== undefined) {
             const existing = await c.env.DB.prepare(
@@ -177,6 +192,14 @@ merchantRouter.put('/profile', async (c) => {
         await c.env.DB.prepare(
             `UPDATE users SET ${sets}, updated_at = datetime('now') WHERE id = ?`
         ).bind(...values, payload.id).run();
+
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'merchant_update_profile',
+            target: payload.id,
+            detail: { fields: Object.keys(allowedFields) },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({ code: 0, msg: '更新成功' });
     } catch (error) {
@@ -451,6 +474,26 @@ merchantRouter.post('/orders/:id/close', async (c) => {
             "UPDATE orders SET status = 3, closed_at = datetime('now') WHERE id = ?"
         ).bind(orderId).run();
 
+        await logOrderEvent(c.env, {
+            orderId,
+            userId: payload.id,
+            outTradeNo: (order as any).out_trade_no,
+            action: 'closed',
+            fromStatus: 0,
+            toStatus: 3,
+            amount: (order as any).amount,
+            detail: { source: 'merchant_center' },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'merchant_close_order',
+            target: orderId,
+            detail: { out_trade_no: (order as any).out_trade_no },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
         return c.json({ code: 0, msg: '订单已关闭' });
     } catch (error) {
         console.error('Close order error:', error);
@@ -600,15 +643,13 @@ merchantRouter.post('/settle/apply', async (c) => {
             UPDATE users SET balance = balance - ?, frozen_balance = frozen_balance + ? WHERE id = ?
         `).bind(amount, amount, payload.id).run();
 
-        await c.env.DB.prepare(`
-            INSERT INTO operation_logs (user_id, action, detail, ip, created_at)
-            VALUES (?, 'settle_apply', ?, ?, ?)
-        `).bind(
-            payload.id,
-            JSON.stringify({ amount, settle_id: settleId }),
-            c.req.header('CF-Connecting-IP') || '',
-            now
-        ).run();
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'settle_apply',
+            target: settleId,
+            detail: { amount, settle_id: settleId },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({ code: 0, msg: '结算申请已提交', data: { settle_id: settleId } });
     } catch (error) {
@@ -666,6 +707,14 @@ merchantRouter.post('/domains', async (c) => {
             'INSERT INTO domain_whitelist (user_id, domain, status, created_at) VALUES (?, ?, 1, datetime(\'now\'))'
         ).bind(payload.id, domain).run();
 
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'merchant_add_domain',
+            target: domain,
+            detail: { domain },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
         return c.json({ code: 0, msg: '添加成功' });
     } catch (error) {
         console.error('Add domain error:', error);
@@ -692,6 +741,14 @@ merchantRouter.delete('/domains/:id', async (c) => {
 
         await c.env.DB.prepare('DELETE FROM domain_whitelist WHERE id = ?').bind(domainId).run();
 
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'merchant_delete_domain',
+            target: String(domainId),
+            detail: { domain: (domain as any).domain },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
         return c.json({ code: 0, msg: '删除成功' });
     } catch (error) {
         console.error('Delete domain error:', error);
@@ -714,6 +771,14 @@ merchantRouter.put('/developer/urls', async (c) => {
         await c.env.DB.prepare(
             "UPDATE users SET notify_url = ?, return_url = ?, updated_at = datetime('now') WHERE id = ?"
         ).bind(notifyUrl || null, returnUrl || null, payload.id).run();
+
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'merchant_update_callback_urls',
+            target: payload.id,
+            detail: { has_notify_url: Boolean(notifyUrl), has_return_url: Boolean(returnUrl) },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({ code: 0, msg: '更新成功' });
     } catch (error) {
@@ -761,11 +826,13 @@ merchantRouter.post('/password', async (c) => {
             UPDATE users SET password_hash = ?, salt = ?, updated_at = datetime('now') WHERE id = ?
         `).bind(hash, salt, payload.id).run();
 
-        const now = new Date().toISOString();
-        await c.env.DB.prepare(`
-            INSERT INTO operation_logs (user_id, action, detail, ip, created_at)
-            VALUES (?, 'change_password', '{}', ?, ?)
-        `).bind(payload.id, c.req.header('CF-Connecting-IP') || '', now).run();
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'change_password',
+            target: payload.id,
+            detail: {},
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({ code: 0, msg: '密码修改成功' });
     } catch (error) {

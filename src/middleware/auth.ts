@@ -20,7 +20,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     try {
         // 验证 JWT token
         // TODO: 实现 JWT 验证
-        const payload = await verifyJWT(token, c.env.JWT_SECRET || 'default-secret-change-me');
+        const payload = await verifyJWT(token, c.env.JWT_SECRET || '');
         
         if (!payload) {
             return c.json({ code: -2, msg: 'Token 无效或已过期' }, 401);
@@ -75,30 +75,16 @@ export async function apiKeyMiddleware(c: Context<{ Bindings: Env }>, next: Next
     try {
         // 查询商户
         const user = await c.env.DB.prepare(
-            'SELECT id, role, status FROM users WHERE id = ? AND role = ?'
-        ).bind(pid, 'merchant').first();
+            'SELECT id, role, status FROM users WHERE id = ? AND api_key = ? AND role = ?'
+        ).bind(pid, apiKey, 'merchant').first();
         
         if (!user) {
-            return c.json({ code: -3, msg: '商户不存在' }, 401);
+            return c.json({ code: -3, msg: '商户不存在或密钥错误' }, 401);
         }
         
         if (user.status !== 1) {
             return c.json({ code: -2, msg: '商户已被封禁' }, 403);
         }
-        
-        // 验证 API 密钥
-        const apiKeyRecord = await c.env.DB.prepare(
-            'SELECT id FROM api_keys WHERE user_id = ? AND api_key = ? AND status = 1'
-        ).bind(pid, apiKey).first();
-        
-        if (!apiKeyRecord) {
-            return c.json({ code: -3, msg: '密钥错误' }, 401);
-        }
-        
-        // 更新最后使用时间
-        await c.env.DB.prepare(
-            "UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?"
-        ).bind((apiKeyRecord as any).id).run();
         
         // 将用户信息添加到上下文
         c.set('user', user);
@@ -112,35 +98,14 @@ export async function apiKeyMiddleware(c: Context<{ Bindings: Env }>, next: Next
 /**
  * 验证 JWT (HMAC-SHA256)
  */
-function bytesToBase64Url(bytes: Uint8Array): string {
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-}
-
-function base64UrlToBytes(value: string): Uint8Array {
-    const base64 = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
-    return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-}
-
-function base64UrlEncodeJson(value: unknown): string {
-    return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
-}
-
-function base64UrlDecodeJson<T = any>(value: string): T {
-    return JSON.parse(new TextDecoder().decode(base64UrlToBytes(value)));
-}
-
 async function verifyJWT(token: string, secret: string): Promise<any> {
     if (!secret) return null;
     try {
         const parts = token.split('.');
         if (parts.length !== 3) return null;
 
-        const header = base64UrlDecodeJson(parts[0]);
-        const payload = base64UrlDecodeJson(parts[1]);
+        const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
 
         if (header.alg !== 'HS256') return null;
 
@@ -148,7 +113,7 @@ async function verifyJWT(token: string, secret: string): Promise<any> {
         const key = await crypto.subtle.importKey(
             'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
         );
-        const signature = base64UrlToBytes(parts[2]);
+        const signature = Uint8Array.from(atob(parts[2].replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
         const data = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
         const valid = await crypto.subtle.verify('HMAC', key, signature, data);
         if (!valid) return null;
@@ -176,8 +141,10 @@ export async function signJWT(payload: Record<string, any>, secret: string, expi
         exp: now + expiresIn,
     };
 
-    const headerB64 = base64UrlEncodeJson(header);
-    const payloadB64 = base64UrlEncodeJson(jwtPayload);
+    const base64url = (data: string) => btoa(data).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+    const headerB64 = base64url(JSON.stringify(header));
+    const payloadB64 = base64url(JSON.stringify(jwtPayload));
 
     const keyData = new TextEncoder().encode(secret);
     const key = await crypto.subtle.importKey(
@@ -185,7 +152,7 @@ export async function signJWT(payload: Record<string, any>, secret: string, expi
     );
     const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
     const signature = await crypto.subtle.sign('HMAC', key, data);
-    const signatureB64 = bytesToBase64Url(new Uint8Array(signature));
+    const signatureB64 = base64url(String.fromCharCode(...new Uint8Array(signature)));
 
     return `${headerB64}.${payloadB64}.${signatureB64}`;
 }

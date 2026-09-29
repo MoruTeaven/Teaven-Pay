@@ -7,6 +7,7 @@ import { Env } from '../types/env';
 import { generateUUIDv7 } from '../utils/uuid';
 import { generateApiKey } from '../utils/crypto';
 import { verifyPassword } from '../utils/crypto';
+import { getRequestLogMeta, logAuditEvent } from '../utils/logging';
 
 export const apiKeyRouter = new Hono<{ Bindings: Env }>();
 
@@ -148,11 +149,13 @@ apiKeyRouter.post('/', async (c) => {
             VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
         `).bind(keyId, payload.id, newApiKey, name, apiKeyType, rsaPublicKey || null, now, now).run();
 
-        // 记录操作日志
-        await c.env.DB.prepare(`
-            INSERT INTO operation_logs (user_id, action, detail, ip, created_at)
-            VALUES (?, 'create_api_key', ?, ?, ?)
-        `).bind(payload.id, JSON.stringify({ name, key_id: keyId }), c.req.header('CF-Connecting-IP') || '', now).run();
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'create_api_key',
+            target: keyId,
+            detail: { name, key_id: keyId, api_key_type: apiKeyType },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({
             code: 0,
@@ -236,12 +239,13 @@ apiKeyRouter.put('/:id', async (c) => {
             `UPDATE api_keys SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`
         ).bind(...params).run();
 
-        // 记录操作日志
-        const now = new Date().toISOString();
-        await c.env.DB.prepare(`
-            INSERT INTO operation_logs (user_id, action, detail, ip, created_at)
-            VALUES (?, 'update_api_key', ?, ?, ?)
-        `).bind(payload.id, JSON.stringify({ key_id: id, name, status }), c.req.header('CF-Connecting-IP') || '', now).run();
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'update_api_key',
+            target: id,
+            detail: { key_id: id, name, status, api_key_type: apiKeyType || undefined },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({
             code: 0,
@@ -305,12 +309,13 @@ apiKeyRouter.delete('/:id', async (c) => {
             'DELETE FROM api_keys WHERE id = ? AND user_id = ?'
         ).bind(id, payload.id).run();
 
-        // 记录操作日志
-        const now = new Date().toISOString();
-        await c.env.DB.prepare(`
-            INSERT INTO operation_logs (user_id, action, detail, ip, created_at)
-            VALUES (?, 'delete_api_key', ?, ?, ?)
-        `).bind(payload.id, JSON.stringify({ key_id: id, name: (existingKey as any).name }), c.req.header('CF-Connecting-IP') || '', now).run();
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'delete_api_key',
+            target: id,
+            detail: { key_id: id, name: (existingKey as any).name },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({
             code: 0,
@@ -362,17 +367,18 @@ apiKeyRouter.post('/:id/reset', async (c) => {
 
         // 生成新的 API 密钥
         const newApiKey = await generateApiKey();
-        const now = new Date().toISOString();
 
         await c.env.DB.prepare(
             "UPDATE api_keys SET api_key = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
         ).bind(newApiKey, id, payload.id).run();
 
-        // 记录操作日志
-        await c.env.DB.prepare(`
-            INSERT INTO operation_logs (user_id, action, detail, ip, created_at)
-            VALUES (?, 'reset_api_key', ?, ?, ?)
-        `).bind(payload.id, JSON.stringify({ key_id: id, name: (existingKey as any).name }), c.req.header('CF-Connecting-IP') || '', now).run();
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'reset_api_key',
+            target: id,
+            detail: { key_id: id, name: (existingKey as any).name },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({
             code: 0,

@@ -79,6 +79,13 @@
             box-sizing: border-box;
         }
 
+        html,
+        body {
+            width: 100%;
+            min-width: 0;
+            overflow-x: hidden;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
             background-color: var(--bg-secondary);
@@ -91,6 +98,8 @@
         .layout {
             display: flex;
             min-height: 100vh;
+            width: 100%;
+            overflow-x: hidden;
         }
 
         /* 侧边栏 */
@@ -220,6 +229,8 @@
         .main-content {
             flex: 1;
             margin-left: var(--sidebar-width);
+            width: calc(100% - var(--sidebar-width));
+            min-width: 0;
             transition: margin-left 0.3s ease;
             display: flex;
             flex-direction: column;
@@ -228,11 +239,14 @@
 
         .sidebar.collapsed ~ .main-content {
             margin-left: var(--sidebar-collapsed-width);
+            width: calc(100% - var(--sidebar-collapsed-width));
         }
 
         /* 头部 */
         .header {
             height: var(--header-height);
+            width: 100%;
+            min-width: 0;
             background-color: var(--bg-primary);
             border-bottom: 1px solid var(--border-color);
             position: sticky;
@@ -381,7 +395,11 @@
         /* 内容区 */
         .content {
             flex: 1;
+            width: 100%;
+            max-width: none;
+            min-width: 0;
             padding: 24px;
+            overflow-x: hidden;
         }
 
         .page-header {
@@ -408,6 +426,9 @@
             border-radius: 8px;
             border: 1px solid var(--border-color);
             box-shadow: var(--shadow-sm);
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
             overflow: hidden;
         }
 
@@ -427,6 +448,7 @@
 
         .card-body {
             padding: 20px;
+            min-width: 0;
         }
 
         .card-footer {
@@ -438,9 +460,14 @@
         /* 统计卡片 */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 16px;
             margin-bottom: 24px;
+        }
+
+        .stats-grid > *,
+        .content [style*="grid-template-columns"] > * {
+            min-width: 0;
         }
 
         .stat-card {
@@ -517,11 +544,16 @@
 
         /* 表格 */
         .table-container {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
             overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .data-table {
             width: 100%;
+            min-width: max-content;
             border-collapse: collapse;
         }
 
@@ -882,6 +914,61 @@
             gap: 12px;
         }
 
+        /* 订单详情弹窗 */
+        .order-detail-tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .order-tab {
+            padding: 8px 14px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .order-tab:hover { color: var(--text-primary); }
+        .order-tab.active {
+            color: var(--primary-600);
+            border-bottom-color: var(--primary-500);
+            font-weight: 600;
+        }
+        .order-tab .tab-badge {
+            display: inline-block;
+            min-width: 18px;
+            padding: 0 6px;
+            height: 18px;
+            line-height: 18px;
+            text-align: center;
+            background: var(--primary-100);
+            color: var(--primary-700);
+            border-radius: 9px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .order-detail-panel { display: none; }
+        .order-detail-panel.active { display: block; }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 24px;
+            font-size: 13px;
+        }
+        .detail-row { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .detail-label { color: var(--text-tertiary); font-size: 12px; }
+        .detail-value { color: var(--text-primary); }
+        @media (max-width: 600px) {
+            .detail-grid { grid-template-columns: 1fr; }
+        }
+
         /* Toast */
         .toast-container {
             position: fixed;
@@ -1053,7 +1140,7 @@
         /* 响应式 */
         @media (max-width: 1024px) {
             .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
             .sidebar {
@@ -1062,14 +1149,17 @@
 
             .sidebar.mobile-open {
                 transform: translateX(0);
+                z-index: 1001;
             }
 
             .main-content {
                 margin-left: 0;
+                width: 100%;
             }
 
             .sidebar.collapsed ~ .main-content {
                 margin-left: 0;
+                width: 100%;
             }
 
             .filter-bar {
@@ -1111,6 +1201,10 @@
 
             .breadcrumb {
                 display: none;
+            }
+
+            .content [style*="grid-template-columns"] {
+                grid-template-columns: 1fr !important;
             }
         }
 
@@ -1591,6 +1685,21 @@
                 }
             },
 
+            // 获取订单详情
+            async getOrderDetail(id) {
+                try {
+                    const response = await this.request(`/api/admin/orders/${encodeURIComponent(id)}`);
+                    const data = await response.json();
+                    if (data.code === 1) {
+                        return { data: data.data };
+                    }
+                    throw new Error(data.msg || '获取订单详情失败');
+                } catch (error) {
+                    console.error('获取订单详情失败:', error);
+                    throw error;
+                }
+            },
+
             // 获取结算列表
             async getSettlements(params = {}) {
                 try {
@@ -1783,6 +1892,65 @@
                 qqpay: 'QQ钱包'
             };
             return names[type] || type;
+        }
+
+        function getOperationActionName(action) {
+            const names = {
+                admin_login: '管理员登录',
+                admin_create_merchant: '创建商户',
+                admin_login_merchant: '管理员登录商户',
+                admin_update_merchant: '更新商户',
+                admin_update_merchant_status: '更新商户状态',
+                admin_approve_settlement: '审核通过结算',
+                admin_reject_settlement: '拒绝结算',
+                admin_update_config: '更新系统配置',
+                admin_update_payment_type: '更新支付方式',
+                admin_toggle_payment_type: '切换支付方式状态',
+                admin_create_channel: '创建支付通道',
+                admin_update_channel: '更新支付通道',
+                admin_delete_channel: '删除支付通道',
+                admin_toggle_channel: '切换通道状态',
+                admin_run_reconciliation: '执行对账',
+                merchant_login: '商户登录',
+                merchant_update_profile: '更新商户资料',
+                merchant_close_order: '商户关闭订单',
+                merchant_add_domain: '添加域名白名单',
+                merchant_delete_domain: '删除域名白名单',
+                merchant_update_callback_urls: '更新回调地址',
+                change_password: '修改密码',
+                create_payment: '创建支付订单',
+                query_order: '查询订单',
+                refund: '发起退款',
+                settle_apply: '申请结算',
+                notify_payment_success: '支付成功通知',
+                reconcile_query_order: '对账查询订单',
+                created: '创建订单',
+                paid: '订单支付成功',
+                closed: '关闭订单',
+                refund_requested: '申请退款',
+                create_api_key: '创建 API 密钥',
+                update_api_key: '更新 API 密钥',
+                delete_api_key: '删除 API 密钥',
+                reset_api_key: '重置 API 密钥',
+                error: '系统错误'
+            };
+            return names[action] || action || '-';
+        }
+
+        function getPaymentTypeDisplayName(displayName, type) {
+            if (displayName) return displayName;
+            const names = {
+                alipay: '支付宝',
+                wxpay: '微信支付',
+                qqpay: 'QQ钱包'
+            };
+            return names[type] || '未知支付方式';
+        }
+
+        function truncateStr(str, maxLen = 12) {
+            if (!str) return '-';
+            if (str.length <= maxLen) return str;
+            return str.slice(0, maxLen) + '...';
         }
 
         // Toast 通知
@@ -2050,11 +2218,11 @@
                                 <tbody>
                                     ${recentOrders.slice(0, 5).map(order => `
                                         <tr>
-                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${order.tradeNo}</code></td>
-                                            <td>${order.merchant}</td>
+                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;" title="${escapeHtml(order.tradeNo)}">${escapeHtml(truncateStr(order.tradeNo))}</code></td>
+                                            <td>${escapeHtml(order.merchant)}</td>
                                             <td>
                                                 <i class="${getPaymentTypeIcon(order.paymentType)}" style="margin-right: 4px;"></i>
-                                                ${getPaymentTypeName(order.paymentType)}
+                                                ${escapeHtml(getPaymentTypeDisplayName(order.paymentTypeName, order.paymentType))}
                                             </td>
                                             <td>${formatMoney(order.amount)}</td>
                                             <td>${getStatusBadge(order.status, 'order')}</td>
@@ -2128,20 +2296,20 @@
                                 <tbody>
                                     ${merchants.map(merchant => `
                                         <tr>
-                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${merchant.id}</code></td>
-                                            <td>${merchant.username}</td>
-                                            <td>${merchant.email}</td>
+                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${escapeHtml(merchant.id)}</code></td>
+                                            <td>${escapeHtml(merchant.username)}</td>
+                                            <td>${escapeHtml(merchant.email)}</td>
                                             <td>${getStatusBadge(merchant.status, 'merchant')}</td>
                                             <td>${formatMoney(merchant.balance)}</td>
                                             <td>
                                                 <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">
-                                                    ${merchant.apiKey ? merchant.apiKey.substring(0, 12) + '...' : '-'}
+                                                    ${merchant.apiKey ? escapeHtml(merchant.apiKey.substring(0, 12)) + '...' : '-'}
                                                 </code>
                                             </td>
                                             <td>${formatDate(merchant.createdAt)}</td>
                                             <td>
                                                 <div style="display: flex; gap: 8px;">
-                                                    <button class="btn btn-sm btn-secondary" onclick="navigateToMerchantDetail('${merchant.id}')">
+                                                    <button class="btn btn-sm btn-secondary" onclick="navigateToMerchantDetail('${escapeHtml(merchant.id)}')">
                                                         <i class="ri-eye-line"></i>
                                                     </button>
                                                 </div>
@@ -2197,7 +2365,7 @@
                             <i class="ri-arrow-left-line"></i>
                             返回
                         </button>
-                        <h1 class="page-title">商户详情 - ${merchant.username}</h1>
+                        <h1 class="page-title">商户详情 - ${escapeHtml(merchant.username)}</h1>
                     </div>
                     <div class="page-actions">
                         <button class="btn btn-secondary" onclick="showEditMerchantModal()">
@@ -2205,12 +2373,12 @@
                             编辑
                         </button>
                         ${merchant.status === 1 ? `
-                            <button class="btn btn-danger" onclick="handleMerchantStatus('${merchant.id}', 0)">
+                            <button class="btn btn-danger" onclick="handleMerchantStatus('${escapeHtml(merchant.id)}', 0)">
                                 <i class="ri-forbid-line"></i>
                                 禁用
                             </button>
                         ` : `
-                            <button class="btn btn-primary" onclick="handleMerchantStatus('${merchant.id}', 1)">
+                            <button class="btn btn-primary" onclick="handleMerchantStatus('${escapeHtml(merchant.id)}', 1)">
                                 <i class="ri-checkbox-circle-line"></i>
                                 启用
                             </button>
@@ -2270,15 +2438,15 @@
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                                 <div class="form-group">
                                     <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">商户ID</label>
-                                    <div style="font-family: monospace; background: var(--bg-tertiary); padding: 8px; border-radius: 6px; font-size: 13px;">${merchant.id}</div>
+                                    <div style="font-family: monospace; background: var(--bg-tertiary); padding: 8px; border-radius: 6px; font-size: 13px;">${escapeHtml(merchant.id)}</div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">用户名</label>
-                                    <div style="padding: 8px;">${merchant.username}</div>
+                                    <div style="padding: 8px;">${escapeHtml(merchant.username)}</div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">邮箱</label>
-                                    <div style="padding: 8px;">${merchant.email || '-'}</div>
+                                    <div style="padding: 8px;">${escapeHtml(merchant.email) || '-'}</div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">状态</label>
@@ -2286,11 +2454,11 @@
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">QQ</label>
-                                    <div style="padding: 8px;">${merchant.contactQq || '-'}</div>
+                                    <div style="padding: 8px;">${escapeHtml(merchant.contactQq) || '-'}</div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">手机</label>
-                                    <div style="padding: 8px;">${merchant.contactWechat || '-'}</div>
+                                    <div style="padding: 8px;">${escapeHtml(merchant.contactWechat) || '-'}</div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">创建时间</label>
@@ -2312,8 +2480,8 @@
                             <div class="form-group">
                                 <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">API Key</label>
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <code style="flex: 1; background: var(--bg-tertiary); padding: 8px; border-radius: 6px; font-size: 12px; word-break: break-all;">${merchant.apiKey || '-'}</code>
-                                    <button class="btn btn-sm btn-secondary" onclick="copyToClipboard('${merchant.apiKey}')">
+                                    <code style="flex: 1; background: var(--bg-tertiary); padding: 8px; border-radius: 6px; font-size: 12px; word-break: break-all;">${escapeHtml(merchant.apiKey) || '-'}</code>
+                                    <button class="btn btn-sm btn-secondary" onclick="copyToClipboard('${escapeHtml(merchant.apiKey)}')">
                                         <i class="ri-file-copy-line"></i>
                                     </button>
                                 </div>
@@ -2324,15 +2492,15 @@
                             </div>
                             <div class="form-group">
                                 <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">异步通知地址</label>
-                                <div style="padding: 8px; word-break: break-all; font-size: 13px;">${merchant.notifyUrl || '-'}</div>
+                                <div style="padding: 8px; word-break: break-all; font-size: 13px;">${escapeHtml(merchant.notifyUrl) || '-'}</div>
                             </div>
                             <div class="form-group">
                                 <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">同步返回地址</label>
-                                <div style="padding: 8px; word-break: break-all; font-size: 13px;">${merchant.returnUrl || '-'}</div>
+                                <div style="padding: 8px; word-break: break-all; font-size: 13px;">${escapeHtml(merchant.returnUrl) || '-'}</div>
                             </div>
                             <div class="form-group">
                                 <label class="form-label" style="color: var(--text-tertiary); font-size: 12px;">分组ID</label>
-                                <div style="padding: 8px;">${merchant.groupId || '-'}</div>
+                                <div style="padding: 8px;">${escapeHtml(merchant.groupId) || '-'}</div>
                             </div>
                         </div>
                     </div>
@@ -2357,7 +2525,7 @@
                                     <tbody>
                                         ${merchant.recentOrders.length > 0 ? merchant.recentOrders.map(order => `
                                             <tr>
-                                                <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${order.order_no || order.id}</code></td>
+                                                <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${escapeHtml(order.order_no || order.id)}</code></td>
                                                 <td>${formatMoney(order.amount)}</td>
                                                 <td>${getStatusBadge(order.status, 'order')}</td>
                                                 <td style="font-size: 12px;">${formatDate(order.created_at)}</td>
@@ -2391,7 +2559,7 @@
                                     <tbody>
                                         ${merchant.recentSettlements.length > 0 ? merchant.recentSettlements.map(settle => `
                                             <tr>
-                                                <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${settle.id.substring(0, 8)}...</code></td>
+                                                <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${escapeHtml(settle.id.substring(0, 8))}...</code></td>
                                                 <td>${formatMoney(settle.amount)}</td>
                                                 <td>${getStatusBadge(settle.status, 'settlement')}</td>
                                                 <td style="font-size: 12px;">${formatDate(settle.created_at)}</td>
@@ -2475,19 +2643,19 @@
                                 <tbody>
                                     ${orders.map(order => `
                                         <tr>
-                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${order.tradeNo}</code></td>
-                                            <td>${order.outTradeNo}</td>
-                                            <td>${order.merchant}</td>
+                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;" title="${escapeHtml(order.tradeNo)}">${escapeHtml(truncateStr(order.tradeNo))}</code></td>
+                                            <td title="${escapeHtml(order.outTradeNo)}">${escapeHtml(truncateStr(order.outTradeNo))}</td>
+                                            <td>${escapeHtml(order.merchant)}</td>
                                             <td>
                                                 <i class="${getPaymentTypeIcon(order.paymentType)}" style="margin-right: 4px;"></i>
-                                                ${getPaymentTypeName(order.paymentType)}
+                                                ${escapeHtml(getPaymentTypeDisplayName(order.paymentTypeName, order.paymentType))}
                                             </td>
                                             <td>${formatMoney(order.amount)}</td>
                                             <td>${getStatusBadge(order.status, 'order')}</td>
                                             <td>${formatDate(order.createdAt)}</td>
                                             <td>${formatDate(order.paidAt)}</td>
                                             <td>
-                                                <button class="btn btn-sm btn-secondary" onclick="showToast('info', '查看详情', '订单详情页面开发中')">
+                                                <button class="btn btn-sm btn-secondary" onclick="showOrderDetailModal('${escapeHtml(order.id || order.tradeNo)}')">
                                                     <i class="ri-eye-line"></i>
                                                 </button>
                                             </td>
@@ -2555,20 +2723,20 @@
                                 <tbody>
                                     ${settlements.map(settlement => `
                                         <tr>
-                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${settlement.id}</code></td>
-                                            <td>${settlement.merchant}</td>
+                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${escapeHtml(settlement.id)}</code></td>
+                                            <td>${escapeHtml(settlement.merchant)}</td>
                                             <td>${formatMoney(settlement.amount)}</td>
                                             <td>${getStatusBadge(settlement.status, 'settlement')}</td>
-                                            <td>${settlement.bankInfo}</td>
+                                            <td>${escapeHtml(settlement.bankInfo)}</td>
                                             <td>${formatDate(settlement.createdAt)}</td>
                                             <td>${formatDate(settlement.processedAt)}</td>
                                             <td>
                                                 ${settlement.status === 0 ? `
                                                     <div style="display: flex; gap: 8px;">
-                                                        <button class="btn btn-sm btn-primary" onclick="handleSettlement('${settlement.id}', 'approve')">
+                                                        <button class="btn btn-sm btn-primary" onclick="handleSettlement('${escapeHtml(settlement.id)}', 'approve')">
                                                             批准
                                                         </button>
-                                                        <button class="btn btn-sm btn-danger" onclick="handleSettlement('${settlement.id}', 'reject')">
+                                                        <button class="btn btn-sm btn-danger" onclick="handleSettlement('${escapeHtml(settlement.id)}', 'reject')">
                                                             拒绝
                                                         </button>
                                                     </div>
@@ -2624,9 +2792,9 @@
                                 <tbody>
                                     ${paymentTypes.map(type => `
                                         <tr>
-                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${type.name}</code></td>
-                                            <td>${type.displayName}</td>
-                                            <td><i class="${type.icon}" style="font-size: 24px;"></i></td>
+                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${escapeHtml(type.name)}</code></td>
+                                            <td>${escapeHtml(type.displayName)}</td>
+                                            <td><i class="${escapeHtml(type.icon)}" style="font-size: 24px;"></i></td>
                                             <td>${type.status === 1 ? '<span class="badge success">启用</span>' : '<span class="badge error">禁用</span>'}</td>
                                             <td>${type.sortOrder}</td>
                                             <td>
@@ -2684,13 +2852,13 @@
                                 <tbody>
                                     ${channels.map(channel => `
                                         <tr>
-                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${channel.id}</code></td>
-                                            <td>${channel.name}</td>
+                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${escapeHtml(channel.id)}</code></td>
+                                            <td>${escapeHtml(channel.name)}</td>
                                             <td>
                                                 <i class="${getPaymentTypeIcon(channel.paymentType)}" style="margin-right: 4px;"></i>
-                                                ${getPaymentTypeName(channel.paymentType)}
+                                                ${escapeHtml(channel.paymentTypeName || getPaymentTypeName(channel.paymentType))}
                                             </td>
-                                            <td>${channel.plugin}</td>
+                                            <td>${escapeHtml(channel.plugin)}</td>
                                             <td>${(channel.feeRate * 100).toFixed(2)}%</td>
                                             <td>${formatMoney(channel.minAmount)} - ${formatMoney(channel.maxAmount)}</td>
                                             <td>${channel.status === 1 ? '<span class="badge success">启用</span>' : '<span class="badge error">禁用</span>'}</td>
@@ -2997,6 +3165,7 @@
             try {
                 const result = await api.getLogs();
                 logs = result.data || [];
+                state.logs = logs;
             } catch (error) {
                 console.error('获取操作日志失败:', error);
             }
@@ -3026,20 +3195,20 @@
                                         <th>日志ID</th>
                                         <th>操作用户</th>
                                         <th>操作类型</th>
-                                        <th>操作详情</th>
                                         <th>IP地址</th>
                                         <th>操作时间</th>
+                                        <th>操作</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${logs.map(log => `
                                         <tr>
-                                            <td>${log.id}</td>
-                                            <td>${log.user}</td>
-                                            <td><span class="badge info">${log.action}</span></td>
-                                            <td>${log.detail}</td>
-                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${log.ip}</code></td>
-                                            <td>${formatDate(log.createdAt)}</td>
+                                            <td>${escapeHtml(log.id || '')}</td>
+                                            <td>${escapeHtml(log.user || '系统')}</td>
+                                            <td><span class="badge info">${escapeHtml(getOperationActionName(log.action))}</span></td>
+                                            <td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${escapeHtml(log.ip || '-')}</code></td>
+                                            <td>${escapeHtml(formatDate(log.createdAt))}</td>
+                                            <td><button class="btn btn-sm btn-secondary" data-log-id="${escapeHtml(log.id || '')}" onclick="showLogDetailModal(this.dataset.logId)"><i class="ri-eye-line"></i>详情</button></td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
@@ -3056,6 +3225,49 @@
                     </div>
                 </div>
             `;
+        }
+
+        function showLogDetailModal(logId) {
+            const log = (state.logs || []).find(item => String(item.id || '') === String(logId || ''));
+            if (!log) {
+                showToast('error', '查看失败', '未找到该日志记录');
+                return;
+            }
+
+            const existing = document.getElementById('modalOverlay');
+            if (existing) existing.remove();
+
+            const modalHTML = `
+                <div class="modal-overlay" id="modalOverlay">
+                    <div class="modal" style="max-width: 680px;">
+                        <div class="modal-header">
+                            <span class="modal-title">操作日志详情</span>
+                            <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="detail-grid">
+                                <div class="detail-row"><span class="detail-label">日志ID</span><span class="detail-value">${escapeHtml(log.id || '-')}</span></div>
+                                <div class="detail-row"><span class="detail-label">操作用户</span><span class="detail-value">${escapeHtml(log.user || '系统')}</span></div>
+                                <div class="detail-row"><span class="detail-label">操作类型</span><span class="detail-value">${escapeHtml(getOperationActionName(log.action))}</span></div>
+                                <div class="detail-row"><span class="detail-label">操作目标</span><span class="detail-value">${escapeHtml(log.target || '-')}</span></div>
+                                <div class="detail-row"><span class="detail-label">IP地址</span><span class="detail-value">${escapeHtml(log.ip || '-')}</span></div>
+                                <div class="detail-row"><span class="detail-label">操作时间</span><span class="detail-value">${escapeHtml(formatDate(log.createdAt))}</span></div>
+                                <div class="detail-row" style="grid-column: 1 / -1;"><span class="detail-label">User-Agent</span><span class="detail-value" style="word-break: break-all;">${escapeHtml(log.userAgent || '-')}</span></div>
+                                <div class="detail-row" style="grid-column: 1 / -1;"><span class="detail-label">详细内容</span><pre style="margin: 0; white-space: pre-wrap; word-break: break-word; background: var(--bg-tertiary); border-radius: 8px; padding: 12px; font-family: inherit; font-size: 13px; color: var(--text-primary);">${escapeHtml(log.detail || '-')}</pre></div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" onclick="closeModal()">关闭</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            setTimeout(() => {
+                const overlay = document.getElementById('modalOverlay');
+                if (overlay) overlay.classList.add('active');
+            }, 10);
         }
 
         // 加载仪表盘数据
@@ -3565,6 +3777,159 @@
             // 渲染默认页面
             navigateTo('dashboard');
         });
+
+        // 订单详情弹窗
+        async function showOrderDetailModal(orderId) {
+            const modalHTML = `
+                <div class="modal-overlay" id="modalOverlay">
+                    <div class="modal" style="max-width: 720px;">
+                        <div class="modal-header">
+                            <span class="modal-title">订单详情</span>
+                            <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>
+                        </div>
+                        <div class="modal-body" style="padding: 24px; text-align: center; color: var(--text-tertiary);">
+                            <i class="ri-loader-4-line" style="font-size: 24px;"></i>
+                            <div style="margin-top: 8px;">加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            setTimeout(() => {
+                const overlay = document.getElementById('modalOverlay');
+                if (overlay) overlay.classList.add('active');
+            }, 10);
+
+            try {
+                const result = await api.getOrderDetail(orderId);
+                renderOrderDetailContent(result.data);
+            } catch (error) {
+                const body = document.querySelector('#modalOverlay .modal-body');
+                if (body) {
+                    body.style.textAlign = 'center';
+                    body.style.color = 'var(--error)';
+                    body.innerHTML = `<i class="ri-error-warning-line" style="font-size: 32px;"></i><div style="margin-top: 8px;">${escapeHtml(error.message || '加载失败')}</div>`;
+                }
+            }
+        }
+
+        function getRefundStatusBadge(status) {
+            const m = { 0: ['处理中', 'warning'], 1: ['成功', 'success'], 2: ['失败', 'error'] };
+            const v = m[status] || ['未知', 'default'];
+            return `<span class="badge ${v[1]}">${v[0]}</span>`;
+        }
+
+        function renderOrderDetailContent(o) {
+            const body = document.querySelector('#modalOverlay .modal-body');
+            if (!body) return;
+
+            const infoRow = (label, value, isCode) => {
+                if (value === null || value === undefined || value === '') value = '-';
+                const v = isCode
+                    ? `<code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px; word-break: break-all;">${escapeHtml(value)}</code>`
+                    : `<span style="word-break: break-all;">${escapeHtml(value)}</span>`;
+                return `<div class="detail-row"><div class="detail-label">${label}</div><div class="detail-value">${v}</div></div>`;
+            };
+
+            let refundsHtml = '';
+            if (o.refunds && o.refunds.length) {
+                refundsHtml = '<div style="margin-top: 8px;">';
+                o.refunds.forEach(r => {
+                    refundsHtml += `
+                        <div style="padding: 8px 12px; background: var(--bg-tertiary); border-radius: 6px; margin-bottom: 6px; font-size: 12px;">
+                            <div><strong>退款单号:</strong> <code style="background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">${escapeHtml(r.refund_no || '')}</code></div>
+                            <div style="margin-top: 4px;"><strong>金额:</strong> ${formatMoney(r.amount)} &nbsp; <strong>状态:</strong> ${getRefundStatusBadge(r.status)}</div>
+                            ${r.reason ? `<div style="margin-top: 4px;"><strong>原因:</strong> ${escapeHtml(r.reason)}</div>` : ''}
+                            <div style="margin-top: 4px; color: var(--text-tertiary);">${formatDate(r.created_at)}</div>
+                        </div>`;
+                });
+                refundsHtml += '</div>';
+            } else {
+                refundsHtml = '<div style="color: var(--text-tertiary); font-size: 12px;">暂无退款记录</div>';
+            }
+
+            let logsHtml = '';
+            if (o.logs && o.logs.length) {
+                logsHtml = '<div style="margin-top: 8px;">';
+                o.logs.forEach(l => {
+                    logsHtml += `
+                        <div style="padding: 6px 12px; border-left: 2px solid var(--border-color); margin-bottom: 6px; font-size: 12px;">
+                            <div><strong>${escapeHtml(getOperationActionName(l.action))}</strong> &nbsp; <span style="color: var(--text-tertiary);">${escapeHtml(l.username || '系统')}</span></div>
+                            <div style="color: var(--text-tertiary); margin-top: 2px;">${formatDate(l.created_at)} &nbsp; IP: ${escapeHtml(l.ip || '-')}</div>
+                        </div>`;
+                });
+                logsHtml += '</div>';
+            } else {
+                logsHtml = '<div style="color: var(--text-tertiary); font-size: 12px;">暂无相关日志</div>';
+            }
+
+            const notifyStatusBadge = (() => {
+                const m = { 0: ['未通知', 'default'], 1: ['已通知', 'success'], 2: ['通知失败', 'error'] };
+                const v = m[o.notifyStatus] || ['未知', 'default'];
+                return `<span class="badge ${v[1]}">${v[0]}</span>`;
+            })();
+
+            body.style.textAlign = '';
+            body.style.color = '';
+            body.innerHTML = `
+                <div class="order-detail-tabs">
+                    <button class="order-tab active" data-tab="basic">基本信息</button>
+                    <button class="order-tab" data-tab="payment">支付与通知</button>
+                    <button class="order-tab" data-tab="refunds">退款记录${o.refunds && o.refunds.length ? `<span class="tab-badge">${o.refunds.length}</span>` : ''}</button>
+                    <button class="order-tab" data-tab="logs">操作日志</button>
+                </div>
+                <div class="order-detail-panel active" data-panel="basic">
+                    <div class="detail-grid">
+                        ${infoRow('平台订单号', o.id, true)}
+                        ${infoRow('商户订单号', o.outTradeNo, true)}
+                        ${infoRow('商户', o.merchant)}
+                        ${infoRow('商品名称', o.name)}
+                        ${infoRow('商品描述', o.body)}
+                        ${infoRow('自定义参数', o.param, true)}
+                        ${infoRow('订单金额', formatMoney(o.amount))}
+                        ${infoRow('实际支付', formatMoney(o.actualAmount))}
+                        ${infoRow('手续费', formatMoney(o.fee))}
+                        ${infoRow('利润', formatMoney(o.profit))}
+                        <div class="detail-row"><div class="detail-label">状态</div><div class="detail-value">${getStatusBadge(o.status, 'order')}</div></div>
+                        ${infoRow('创建时间', formatDate(o.createdAt))}
+                        ${infoRow('支付时间', formatDate(o.paidAt))}
+                        ${infoRow('关闭时间', formatDate(o.closedAt))}
+                    </div>
+                </div>
+                <div class="order-detail-panel" data-panel="payment">
+                    <div class="detail-grid">
+                        ${infoRow('支付方式', getPaymentTypeDisplayName(o.paymentTypeName, o.paymentType))}
+                        ${infoRow('支付通道', o.channelName || o.channelId || '-')}
+                        ${infoRow('插件标识', o.plugin)}
+                        ${infoRow('第三方交易号', o.apiTradeNo, true)}
+                        ${infoRow('来源域名', o.domain)}
+                        ${infoRow('设备类型', o.device)}
+                        ${infoRow('买家信息', o.buyer)}
+                        ${infoRow('买家IP', o.buyerIp)}
+                        ${infoRow('异步通知地址', o.notifyUrl, true)}
+                        ${infoRow('同步跳转地址', o.returnUrl, true)}
+                        <div class="detail-row"><div class="detail-label">通知状态</div><div class="detail-value">${notifyStatusBadge}</div></div>
+                        ${infoRow('通知次数', o.notifyCount)}
+                        ${infoRow('最后通知时间', formatDate(o.lastNotifyAt))}
+                        ${infoRow('已退款金额', formatMoney(o.refundAmount))}
+                    </div>
+                </div>
+                <div class="order-detail-panel" data-panel="refunds">${refundsHtml}</div>
+                <div class="order-detail-panel" data-panel="logs">${logsHtml}</div>
+            `;
+
+            const tabs = body.querySelectorAll('.order-tab');
+            tabs.forEach(tab => {
+                tab.onclick = () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const key = tab.getAttribute('data-tab');
+                    body.querySelectorAll('.order-detail-panel').forEach(p => {
+                        p.classList.toggle('active', p.getAttribute('data-panel') === key);
+                    });
+                };
+            });
+        }
 
         // 模态框HTML结构
         function createModalHTML(type) {

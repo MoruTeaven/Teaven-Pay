@@ -21,39 +21,38 @@ export function generateUUIDv7(): string {
     // 48 位毫秒级时间戳
     const timestamp = BigInt(now);
     
-    // 生成随机数部分 (10 字节 = 80 位，随机需要 74 位，足够)
-    const r = new Uint8Array(10);
-    crypto.getRandomValues(r);
+    // 生成随机数部分
+    const randomBytes = new Uint8Array(10);
+    crypto.getRandomValues(randomBytes);
     
-    // RFC 9562 UUID v7 布局:
-    // 第一段 (8 字符) : unix_ts_ms[47:16] 高 32 位时间戳
+    // 构建 UUID 各部分
+    // 时间戳高位 (32 位)
     const timeHigh = Number((timestamp >> 16n) & 0xFFFFFFFFn);
-    // 第二段 (4 字符) : unix_ts_ms[15:0] 低 16 位时间戳
-    const timeMid = Number(timestamp & 0xFFFFn);
-    // 第三段 (4 字符) : ver(4) + rand_a(12)
-    const timeHiVersion = (7 << 12) | (r[0] << 4) | (r[1] >> 4);
-    // 第四段 (4 字符) : var(2) + rand_b_high(14)
-    const randBHigh = ((r[1] & 0x0F) << 10) | (r[2] << 2) | (r[3] >> 6);
-    const clockSeq = (0b10 << 14) | randBHigh;
-    // 第五段 (12 字符) : rand_b_low(48)
-    const node = Number(
-        (BigInt(r[3] & 0x3F) << 42n) |
-        (BigInt(r[4]) << 34n) |
-        (BigInt(r[5]) << 26n) |
-        (BigInt(r[6]) << 18n) |
-        (BigInt(r[7]) << 10n) |
-        (BigInt(r[8]) << 2n) |
-        (BigInt(r[9]) >> 6n)
-    );
+    // 时间戳低位 (16 位) + 版本号 (4 位) + 亚毫秒 (12 位)
+    const timeLowVersion = Number(((timestamp & 0xFFFFn) << 12n) | (7n << 8n) | BigInt(randomBytes[0] & 0xFF));
+    // 变体 (2 位) + 随机数 (6 位) + 随机数 (8 位)
+    const variantRandom = Number((0b10 << 14n) | BigInt((randomBytes[1] & 0x3F) << 8) | BigInt(randomBytes[2]));
+    // 随机数 (8 位) + 随机数 (8 位)
+    const random1 = Number((randomBytes[3] << 8) | randomBytes[4]);
+    // 随机数 (8 位) + 随机数 (8 位)
+    const random2 = Number((randomBytes[5] << 8) | randomBytes[6]);
+    // 随机数 (8 位) + 随机数 (8 位)
+    const random3 = Number((randomBytes[7] << 8) | randomBytes[8]);
+    // 随机数 (8 位) + 随机数 (8 位)
+    const random4 = Number((randomBytes[9] << 8) | randomBytes[0]);
     
+    // 格式化为 UUID 字符串
     const hex = (num: number, length: number) => num.toString(16).padStart(length, '0');
     
     return [
         hex(timeHigh, 8),
-        hex(timeMid, 4),
-        hex(timeHiVersion, 4),
-        hex(clockSeq, 4),
-        hex(node, 12),
+        hex(timeLowVersion & 0xFFFF, 4),
+        hex((timeLowVersion >> 16) & 0xFFFF, 4),
+        hex(variantRandom, 4),
+        hex(random1, 4),
+        hex(random2, 4),
+        hex(random3, 4),
+        hex(random4, 4),
     ].join('-');
 }
 
@@ -74,10 +73,10 @@ export function extractTimestamp(uuid: string): number {
     }
     
     const parts = uuid.split('-');
-    const timeHigh = BigInt(parseInt(parts[0], 16));
-    const timeMid = BigInt(parseInt(parts[1], 16));
+    const timeHigh = parseInt(parts[0], 16);
+    const timeLow = parseInt(parts[1], 16);
     
-    return Number((timeHigh << 16n) | timeMid);
+    return (timeHigh << 16) | timeLow;
 }
 
 /**

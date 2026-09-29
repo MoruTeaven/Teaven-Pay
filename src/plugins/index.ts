@@ -28,6 +28,16 @@ export function getPlugin(pluginId: string): PaymentPlugin {
 }
 
 /**
+ * 获取所有插件列表（名称/支持的支付方式）
+ */
+export function getPluginList(): Array<{ id: string; name: string; supportedTypes: string[] }> {
+    return Object.entries(plugins).map(([id, factory]) => {
+        const plugin = factory();
+        return { id, name: plugin.name, supportedTypes: plugin.supportedTypes };
+    });
+}
+
+/**
  * 注册新的支付插件
  */
 export function registerPlugin(pluginId: string, factory: () => PaymentPlugin): void {
@@ -39,16 +49,6 @@ export function registerPlugin(pluginId: string, factory: () => PaymentPlugin): 
  */
 export function getRegisteredPlugins(): string[] {
     return Object.keys(plugins);
-}
-
-/**
- * 获取所有插件信息（ID、名称和支持的支付方式）
- */
-export function getPluginList(): Array<{ id: string; name: string; supportedTypes: string[] }> {
-    return Object.entries(plugins).map(([id, factory]) => {
-        const plugin = factory();
-        return { id, name: plugin.name, supportedTypes: plugin.supportedTypes };
-    });
 }
 
 /**

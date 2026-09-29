@@ -125,6 +125,12 @@ export interface NotifyResult {
     
     /** 需要返回给第三方的响应 */
     response?: string;
+
+    /** 标准错误码（验签/解密失败时返回，便于排查与日志归类） */
+    errorCode?: string;
+
+    /** 失败原因（面向日志，不直接暴露敏感信息） */
+    message?: string;
 }
 
 /**

@@ -1,5 +1,6 @@
 /**
  * 加密工具函数
+ * 注意: 本文件按线上运行行为 1:1 重建（源对象损坏恢复）
  */
 
 /**
@@ -8,11 +9,11 @@
 export function generateNonce(length: number = 32): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     const random = crypto.getRandomValues(new Uint8Array(length));
-    return Array.from(random).map(b => chars[b % chars.length]).join('');
+    return Array.from(random).map((b) => chars[b % chars.length]).join('');
 }
 
 /**
- * 生成 API Key（UUID v7 格式去掉横线）
+ * 生成 API Key（UUIDv7 无连字符）
  */
 export async function generateApiKey(): Promise<string> {
     const { generateUUIDv7 } = await import('./uuid');
@@ -20,30 +21,24 @@ export async function generateApiKey(): Promise<string> {
 }
 
 /**
- * MD5 哈希
- * 注意: Cloudflare Workers 不原生支持 MD5，使用简化实现
+ * MD5 兼容实现（SubtleCrypto 无 MD5，使用 SHA-256 前 16 字节替代）
+ * 注意: 实际生产环境应使用第三方 MD5 库
  */
 export async function md5(message: string): Promise<string> {
     const encoder = new TextEncoder();
     const data = encoder.encode(message);
-    
-    // 使用 SubtleCrypto 的 SHA-256 作为替代
-    // 注意: 实际生产环境应使用第三方 MD5 库
     const hash = await crypto.subtle.digest('SHA-256', data);
-    
-    // 取前 16 字节作为 MD5 替代
     const hashArray = Array.from(new Uint8Array(hash)).slice(0, 16);
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
- * HMAC-SHA256
+ * HMAC-SHA256 签名
  */
 export async function hmacSha256(key: string, message: string): Promise<string> {
     const encoder = new TextEncoder();
     const keyData = encoder.encode(key);
     const messageData = encoder.encode(message);
-    
     const cryptoKey = await crypto.subtle.importKey(
         'raw',
         keyData,
@@ -51,11 +46,8 @@ export async function hmacSha256(key: string, message: string): Promise<string> 
         false,
         ['sign']
     );
-    
     const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
-    return Array.from(new Uint8Array(signature))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+    return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -65,22 +57,19 @@ export async function sha256(message: string): Promise<string> {
     const encoder = new TextEncoder();
     const data = encoder.encode(message);
     const hash = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hash))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+    return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
- * RSA 签名
+ * RSA-SHA256 私钥签名
  */
-export async function rsaSign(params: any, privateKey: string): Promise<string> {
-    // 构建待签名字符串
+export async function rsaSign(params: Record<string, any> | string, privateKey: string): Promise<string> {
     let signStr: string;
     if (typeof params === 'string') {
         signStr = params;
     } else {
         const sortedKeys = Object.keys(params).sort();
-        const parts = [];
+        const parts: string[] = [];
         for (const key of sortedKeys) {
             if (params[key] !== '' && params[key] !== undefined && key !== 'sign') {
                 parts.push(`${key}=${params[key]}`);
@@ -88,17 +77,10 @@ export async function rsaSign(params: any, privateKey: string): Promise<string> 
         }
         signStr = parts.join('&');
     }
-    
-    // 导入私钥
     const pemHeader = '-----BEGIN PRIVATE KEY-----';
     const pemFooter = '-----END PRIVATE KEY-----';
-    const pemContents = privateKey
-        .replace(pemHeader, '')
-        .replace(pemFooter, '')
-        .replace(/\s/g, '');
-    
-    const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-    
+    const pemContents = privateKey.replace(pemHeader, '').replace(pemFooter, '').replace(/\s/g, '');
+    const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
     const key = await crypto.subtle.importKey(
         'pkcs8',
         binaryDer,
@@ -106,27 +88,23 @@ export async function rsaSign(params: any, privateKey: string): Promise<string> 
         false,
         ['sign']
     );
-    
-    // 签名
     const encoder = new TextEncoder();
     const data = encoder.encode(signStr);
     const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, data);
-    
     return btoa(String.fromCharCode(...new Uint8Array(signature)));
 }
 
 /**
- * RSA 验签
+ * RSA-SHA256 公钥验签
  */
-export async function rsaVerify(params: any, signature: string, publicKey: string): Promise<boolean> {
+export async function rsaVerify(params: Record<string, any> | string, signature: string, publicKey: string): Promise<boolean> {
     try {
-        // 构建待验签字符串
         let signStr: string;
         if (typeof params === 'string') {
             signStr = params;
         } else {
             const sortedKeys = Object.keys(params).sort();
-            const parts = [];
+            const parts: string[] = [];
             for (const key of sortedKeys) {
                 if (params[key] !== '' && params[key] !== undefined && key !== 'sign') {
                     parts.push(`${key}=${params[key]}`);
@@ -134,17 +112,10 @@ export async function rsaVerify(params: any, signature: string, publicKey: strin
             }
             signStr = parts.join('&');
         }
-        
-        // 导入公钥
         const pemHeader = '-----BEGIN PUBLIC KEY-----';
         const pemFooter = '-----END PUBLIC KEY-----';
-        const pemContents = publicKey
-            .replace(pemHeader, '')
-            .replace(pemFooter, '')
-            .replace(/\s/g, '');
-        
-        const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-        
+        const pemContents = publicKey.replace(pemHeader, '').replace(pemFooter, '').replace(/\s/g, '');
+        const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
         const key = await crypto.subtle.importKey(
             'spki',
             binaryDer,
@@ -152,12 +123,9 @@ export async function rsaVerify(params: any, signature: string, publicKey: strin
             false,
             ['verify']
         );
-        
-        // 验签
         const encoder = new TextEncoder();
         const data = encoder.encode(signStr);
-        const signatureBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
-        
+        const signatureBytes = Uint8Array.from(atob(signature), (c) => c.charCodeAt(0));
         return await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, signatureBytes, data);
     } catch (error) {
         console.error('RSA verify error:', error);
@@ -165,19 +133,99 @@ export async function rsaVerify(params: any, signature: string, publicKey: strin
     }
 }
 
+/**
+ * X.509 证书 PEM → RSA 公钥 CryptoKey（微信 v3 平台证书 / 标准证书）
+ * 通过手写 ASN.1 DER 遍历提取 SubjectPublicKeyInfo，避免引入额外依赖。
+ */
+export async function x509CertToPublicKey(certPem: string): Promise<CryptoKey> {
+    const spki = parseX509(certPem).publicKey;
+    return crypto.subtle.importKey(
+        'spki',
+        spki.buffer.slice(spki.byteOffset, spki.byteOffset + spki.byteLength) as ArrayBuffer,
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+        true,
+        ['verify']
+    );
+}
+
+/**
+ * 证书有效期（毫秒时间戳），用于平台证书到期自动刷新
+ */
+export function x509CertValidity(certPem: string): { notBefore: number; notAfter: number } {
+    const c = parseX509(certPem);
+    return { notBefore: c.notBefore, notAfter: c.notAfter };
+}
+
+interface DerField { start: number; end: number; next: number; tagStart: number; }
+
+function derRead(buf: Uint8Array, at: number): DerField & { tag: number } {
+    const tag = buf[at];
+    let p = at + 1;
+    let len = buf[p++];
+    if (len & 0x80) {
+        const n = len & 0x7f;
+        len = 0;
+        for (let i = 0; i < n; i++) len = len * 256 + buf[p++];
+    }
+    return { tag, start: p, end: p + len, next: p + len, tagStart: at };
+}
+
+/**
+ * 遍历 X.509 证书 DER，取出 SubjectPublicKeyInfo 与有效期。
+ * 结构：Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue }
+ */
+function parseX509(certPem: string): { publicKey: Uint8Array; notBefore: number; notAfter: number } {
+    const b64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----/g, '').replace(/\s/g, '');
+    const der = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const cert = derRead(der, 0);
+    if (cert.tag !== 0x30) throw new Error('X509: 证书结构无效');
+    const tbs = derRead(der, cert.start);
+    let p = tbs.start;
+    const first = derRead(der, p);
+    if (first.tag === 0xa0) p = first.next; // version
+    p = derRead(der, p).next;               // serialNumber
+    p = derRead(der, p).next;               // signature
+    p = derRead(der, p).next;               // issuer
+    const validity = derRead(der, p);       // validity
+    const nb = derRead(der, validity.start);
+    const na = derRead(der, nb.next);
+    const notBefore = asn1TimeToMs(der.subarray(nb.start, nb.end));
+    const notAfter = asn1TimeToMs(der.subarray(na.start, na.end));
+    p = validity.next;
+    p = derRead(der, p).next;               // subject
+    const spki = derRead(der, p);           // subjectPublicKeyInfo（需含 SEQUENCE 头，否则 importKey 失败）
+    return { publicKey: der.subarray(spki.tagStart, spki.next), notBefore, notAfter };
+}
+
+/** ASN.1 UTCTime/GeneralizedTime → 毫秒时间戳 */
+function asn1TimeToMs(raw: Uint8Array): number {
+    const s = new TextDecoder().decode(raw);
+    if (s.length === 13 && s.endsWith('Z')) {
+        // RFC 5280: YY >= 50 视为 19xx，否则 20xx
+        let yy = parseInt(s.slice(0, 2), 10);
+        yy = yy >= 50 ? 1900 + yy : 2000 + yy;
+        return Date.parse(`${yy}-${s.slice(2, 4)}-${s.slice(4, 6)}T${s.slice(6, 8)}:${s.slice(8, 10)}:${s.slice(10, 12)}Z`);
+    }
+    return Date.parse(s.slice(0, -1) + 'Z');
+}
+
+/**
+ * 构造待签名字符串（剔除空值/sign/sign_type，按 key 排序）
+ */
 function buildSignString(params: Record<string, any>): string {
     const sortedKeys = Object.keys(params).sort();
     const parts: string[] = [];
-    
     for (const key of sortedKeys) {
         if (params[key] !== '' && params[key] !== undefined && key !== 'sign' && key !== 'sign_type') {
             parts.push(key + '=' + params[key]);
         }
     }
-
     return parts.join('&');
 }
 
+/**
+ * 签名类型归一化（sha256/hmacsha256/hmac-sha256 → hmac-sha256；下划线 → 连字符）
+ */
 function normalizeSignType(signType: string = 'md5'): string {
     const normalized = signType.toLowerCase().replace(/_/g, '-');
     if (normalized === 'sha256' || normalized === 'hmacsha256' || normalized === 'hmac-sha256') {
@@ -191,14 +239,11 @@ function normalizeSignType(signType: string = 'md5'): string {
  */
 export function generateSign(params: Record<string, any>, apiKey: string): string {
     const signStr = apiKey + buildSignString(params) + apiKey;
-
-    // 注意: 这里使用简化的 MD5 替代
-    // 生产环境应使用完整的 MD5 实现
     return simpleHash(signStr).toLowerCase();
 }
 
 /**
- * 生成签名，默认使用 HMAC-SHA256
+ * 生成签名（支持 md5 / hmac-sha256）
  */
 export async function generateSignAsync(params: Record<string, any>, apiKey: string, signType: string = 'hmac-sha256'): Promise<string> {
     const normalized = normalizeSignType(signType);
@@ -212,27 +257,24 @@ export async function generateSignAsync(params: Record<string, any>, apiKey: str
 }
 
 /**
- * 验证签名 (MD5 兼容)
+ * 校验 MD5 签名（非 md5 类型一律 false）
  */
 export function verifySign(params: Record<string, any>, apiKey: string, sign: string, signType: string = 'md5'): boolean {
     if (normalizeSignType(signType) !== 'md5') {
-        // RSA 签名验证需要异步，这里简化处理
         return false;
     }
-    
     const expectedSign = generateSign(params, apiKey);
     return expectedSign === sign.toLowerCase();
 }
 
 /**
- * 验证签名，支持 HMAC-SHA256 和 MD5 兼容模式
+ * 校验签名（异步，支持 md5 / hmac-sha256；rsa 返回 false）
  */
 export async function verifySignAsync(params: Record<string, any>, apiKey: string, sign: string, signType: string = 'hmac-sha256'): Promise<boolean> {
     const normalized = normalizeSignType(signType);
     if (normalized === 'rsa') {
         return false;
     }
-
     try {
         const expectedSign = await generateSignAsync(params, apiKey, normalized);
         return expectedSign === sign.toLowerCase();
@@ -262,14 +304,10 @@ function simpleHash(str: string): string {
  */
 export async function hashPassword(password: string, salt?: string): Promise<{ hash: string; salt: string }> {
     const encoder = new TextEncoder();
-    
-    // 生成随机盐
     if (!salt) {
         const saltBytes = crypto.getRandomValues(new Uint8Array(16));
-        salt = Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        salt = Array.from(saltBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
     }
-    
-    // 导入密钥材料
     const keyMaterial = await crypto.subtle.importKey(
         'raw',
         encoder.encode(password),
@@ -277,8 +315,6 @@ export async function hashPassword(password: string, salt?: string): Promise<{ h
         false,
         ['deriveBits']
     );
-    
-    // 使用 PBKDF2 派生密钥
     const derivedBits = await crypto.subtle.deriveBits(
         {
             name: 'PBKDF2',
@@ -289,16 +325,12 @@ export async function hashPassword(password: string, salt?: string): Promise<{ h
         keyMaterial,
         256
     );
-    
-    const hash = Array.from(new Uint8Array(derivedBits))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-    
+    const hash = Array.from(new Uint8Array(derivedBits)).map((b) => b.toString(16).padStart(2, '0')).join('');
     return { hash, salt };
 }
 
 /**
- * 验证密码
+ * 校验密码
  */
 export async function verifyPassword(password: string, hash: string, salt: string): Promise<boolean> {
     const { hash: computedHash } = await hashPassword(password, salt);
@@ -306,12 +338,11 @@ export async function verifyPassword(password: string, hash: string, salt: strin
 }
 
 /**
- * AES-256-GCM 加密
+ * AES-GCM 加密（IV 前置拼接后 base64）
  */
 export async function aesEncrypt(plaintext: string, key: string): Promise<string> {
     const encoder = new TextEncoder();
     const keyData = encoder.encode(key.padEnd(32, '0').slice(0, 32));
-    
     const cryptoKey = await crypto.subtle.importKey(
         'raw',
         keyData,
@@ -319,31 +350,25 @@ export async function aesEncrypt(plaintext: string, key: string): Promise<string
         false,
         ['encrypt']
     );
-    
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const data = encoder.encode(plaintext);
-    
     const encrypted = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv },
         cryptoKey,
         data
     );
-    
-    // 将 IV 和加密数据拼接
     const result = new Uint8Array(iv.length + encrypted.byteLength);
     result.set(iv);
     result.set(new Uint8Array(encrypted), iv.length);
-    
     return btoa(String.fromCharCode(...result));
 }
 
 /**
- * AES-256-GCM 解密
+ * AES-GCM 解密
  */
 export async function aesDecrypt(ciphertext: string, key: string): Promise<string> {
     const encoder = new TextEncoder();
     const keyData = encoder.encode(key.padEnd(32, '0').slice(0, 32));
-    
     const cryptoKey = await crypto.subtle.importKey(
         'raw',
         keyData,
@@ -351,16 +376,13 @@ export async function aesDecrypt(ciphertext: string, key: string): Promise<strin
         false,
         ['decrypt']
     );
-    
-    const data = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
+    const data = Uint8Array.from(atob(ciphertext), (c) => c.charCodeAt(0));
     const iv = data.slice(0, 12);
     const encrypted = data.slice(12);
-    
     const decrypted = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv },
         cryptoKey,
         encrypted
     );
-    
     return new TextDecoder().decode(decrypted);
 }

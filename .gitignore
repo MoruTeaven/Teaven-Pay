@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+node_modules_zerofilled/
 .pnp
 .pnp.js
 
@@ -75,3 +76,5 @@ coverage/
 .local/
 .cache/
 .temp/
+# Agent cache
+.codebuddy/

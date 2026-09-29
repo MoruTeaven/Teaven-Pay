@@ -3,11 +3,13 @@
  */
 
 import { Hono } from 'hono';
+import { clearSiteUrlCache } from '../utils/site';
 import { Env } from '../types/env';
 import { authMiddleware, adminMiddleware, signJWT } from '../middleware/auth';
 import { generateUUIDv7 } from '../utils/uuid';
 import { hashPassword, verifyPassword } from '../utils/crypto';
-import { getPluginList } from '../plugins';
+import { getPlugin, getPluginList } from '../plugins';
+import { getRequestLogMeta, logAuditEvent, logPaymentEvent, logReconciliationEvent } from '../utils/logging';
 
 export const adminRouter = new Hono<{ Bindings: Env }>();
 
@@ -52,6 +54,14 @@ adminRouter.post('/login', async (c) => {
             secret,
             86400 // 24小时
         );
+
+        await logAuditEvent(c.env, {
+            userId: (user as any).id,
+            action: 'admin_login',
+            target: (user as any).id,
+            detail: { username: (user as any).username },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({
             code: 0,
@@ -244,7 +254,7 @@ adminRouter.get('/merchants', async (c) => {
         const countQuery = 'SELECT COUNT(*) as total FROM users WHERE role = ?' + 
             (status !== undefined ? ' AND status = ?' : '') +
             (keyword ? ' AND (username LIKE ? OR email LIKE ? OR id LIKE ?)' : '');
-        const countParams = ['merchant'];
+        const countParams: any[] = ['merchant'];
         if (status !== undefined) countParams.push(parseInt(status));
         if (keyword) {
             const likeKeyword = `%${keyword}%`;
@@ -330,6 +340,15 @@ adminRouter.post('/merchants', async (c) => {
             INSERT INTO api_keys (id, user_id, api_key, name, api_key_type, status, created_at, updated_at)
             VALUES (?, ?, ?, '默认密钥', 'hmac-sha256', 1, datetime('now'), datetime('now'))
         `).bind(apiKeyId, userId, apiKey).run();
+
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_create_merchant',
+            target: userId,
+            detail: { username, email: email || '' },
+            ...getRequestLogMeta(c.req.raw),
+        });
         
         return c.json({
             code: 0,
@@ -479,18 +498,13 @@ adminRouter.post('/merchants/:id/login-token', async (c) => {
             3600
         );
 
-        const now = new Date().toISOString();
-        await c.env.DB.prepare(`
-            INSERT INTO operation_logs (user_id, action, target, detail, ip, user_agent, created_at)
-            VALUES (?, 'admin_login_merchant', ?, ?, ?, ?, ?)
-        `).bind(
-            admin?.id || null,
-            (merchant as any).id,
-            JSON.stringify({ merchant_id: (merchant as any).id, merchant_username: (merchant as any).username }),
-            c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || '',
-            c.req.header('User-Agent') || '',
-            now
-        ).run();
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_login_merchant',
+            target: (merchant as any).id,
+            detail: { merchant_id: (merchant as any).id, merchant_username: (merchant as any).username },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({
             code: 0,
@@ -553,6 +567,19 @@ adminRouter.put('/merchants/:id', async (c) => {
             groupId !== undefined ? groupId : null,
             id
         ).run();
+
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_update_merchant',
+            target: id,
+            detail: {
+                fields: Object.entries({ email, contactQq, contactWechat, notifyUrl, returnUrl, groupId })
+                    .filter(([, value]) => value !== undefined)
+                    .map(([key]) => key),
+            },
+            ...getRequestLogMeta(c.req.raw),
+        });
         
         return c.json({
             code: 0,
@@ -582,6 +609,15 @@ adminRouter.put('/merchants/:id/status', async (c) => {
             UPDATE users SET status = ?, updated_at = datetime('now')
             WHERE id = ? AND role = 'merchant'
         `).bind(status, id).run();
+
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_update_merchant_status',
+            target: id,
+            detail: { status },
+            ...getRequestLogMeta(c.req.raw),
+        });
         
         return c.json({
             code: 0,
@@ -666,6 +702,86 @@ adminRouter.get('/orders', async (c) => {
         });
     } catch (error) {
         console.error('Get orders error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 订单详情
+ * GET /api/admin/orders/:id
+ */
+adminRouter.get('/orders/:id', async (c) => {
+    const { id } = c.req.param();
+
+    try {
+        const order = await c.env.DB.prepare(`
+            SELECT o.*, u.username, pt.display_name as payment_type_name, c.name as channel_name
+            FROM orders o
+            LEFT JOIN users u ON o.user_id = u.id
+            LEFT JOIN payment_types pt ON o.payment_type = pt.name
+            LEFT JOIN channels c ON o.channel_id = c.id
+            WHERE o.id = ?
+        `).bind(id).first();
+
+        if (!order) {
+            return c.json({ code: -1, msg: '订单不存在' });
+        }
+
+        const o = order as any;
+
+        // 关联退款记录
+        const refunds = await c.env.DB.prepare(
+            'SELECT * FROM refunds WHERE order_id = ? ORDER BY created_at DESC'
+        ).bind(id).all();
+
+        // 关联操作日志（按订单号匹配 detail）
+        const logs = await c.env.DB.prepare(`
+            SELECT l.*, u.username FROM operation_logs l
+            LEFT JOIN users u ON l.user_id = u.id
+            WHERE l.target = ? OR l.detail LIKE ?
+            ORDER BY l.created_at DESC LIMIT 20
+        `).bind(id, `%${id}%`).all();
+
+        return c.json({
+            code: 1,
+            data: {
+                id: o.id,
+                outTradeNo: o.out_trade_no || '',
+                userId: o.user_id,
+                merchant: o.username || '-',
+                paymentType: o.payment_type || '',
+                paymentTypeName: o.payment_type_name || '',
+                channelId: o.channel_id || '',
+                channelName: o.channel_name || '',
+                plugin: o.plugin || '',
+                amount: o.amount || 0,
+                actualAmount: o.actual_amount || 0,
+                fee: o.fee || 0,
+                profit: o.profit || 0,
+                status: o.status,
+                name: o.name || '',
+                body: o.body || '',
+                param: o.param || '',
+                buyer: o.buyer || '',
+                buyerIp: o.buyer_ip || '',
+                notifyUrl: o.notify_url || '',
+                returnUrl: o.return_url || '',
+                notifyStatus: o.notify_status || 0,
+                notifyCount: o.notify_count || 0,
+                lastNotifyAt: o.last_notify_at || '',
+                domain: o.domain || '',
+                device: o.device || '',
+                apiTradeNo: o.api_trade_no || '',
+                refundAmount: o.refund_amount || 0,
+                createdAt: o.created_at || '',
+                paidAt: o.paid_at || '',
+                closedAt: o.closed_at || '',
+                refunds: refunds.results || [],
+                logs: logs.results || [],
+            }
+        });
+    } catch (error) {
+        console.error('Get order detail error:', error);
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }
 });
@@ -779,6 +895,15 @@ adminRouter.put('/settlements/:id', async (c) => {
                 WHERE id = ?
             `).bind(settlement.amount, settlement.amount, settlement.user_id).run();
         }
+
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: action === 'approve' ? 'admin_approve_settlement' : 'admin_reject_settlement',
+            target: id,
+            detail: { merchant_id: settlement.user_id, amount: settlement.amount, reason: reason || '' },
+            ...getRequestLogMeta(c.req.raw),
+        });
         
         return c.json({
             code: 0,
@@ -829,6 +954,20 @@ adminRouter.put('/config', async (c) => {
                 VALUES (?, ?, datetime('now'))
             `).bind(key, value).run();
         }
+        
+        // 如果更新了 site_url，清除缓存
+        if ('site_url' in body) {
+            clearSiteUrlCache();
+        }
+
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_update_config',
+            target: 'system_config',
+            detail: { keys: Object.keys(body) },
+            ...getRequestLogMeta(c.req.raw),
+        });
         
         return c.json({
             code: 0,
@@ -918,6 +1057,15 @@ adminRouter.put('/payment-types/:id', async (c) => {
             id
         ).run();
 
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_update_payment_type',
+            target: id,
+            detail: { fields: Object.keys(body) },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
         return c.json({ code: 1, msg: '支付方式更新成功' });
     } catch (error) {
         console.error('Update payment type error:', error);
@@ -952,6 +1100,15 @@ adminRouter.patch('/payment-types/:id/status', async (c) => {
         await c.env.DB.prepare(
             'UPDATE payment_types SET status = ?, updated_at = ? WHERE id = ?'
         ).bind(status, now, id).run();
+
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_toggle_payment_type',
+            target: id,
+            detail: { status },
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({ code: 1, msg: status === 1 ? '支付方式已启用' : '支付方式已禁用' });
     } catch (error) {
@@ -1061,6 +1218,15 @@ adminRouter.post('/channels', async (c) => {
             now
         ).run();
 
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_create_channel',
+            target: id,
+            detail: { payment_type_id: paymentTypeId, name, plugin },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
         return c.json({
             code: 1,
             msg: '通道创建成功',
@@ -1137,6 +1303,15 @@ adminRouter.put('/channels/:id', async (c) => {
             id
         ).run();
 
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_update_channel',
+            target: id,
+            detail: { fields: Object.keys(body) },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
         return c.json({ code: 1, msg: '通道更新成功' });
     } catch (error) {
         console.error('Update channel error:', error);
@@ -1171,6 +1346,15 @@ adminRouter.delete('/channels/:id', async (c) => {
         await c.env.DB.prepare(
             'DELETE FROM channels WHERE id = ?'
         ).bind(id).run();
+
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_delete_channel',
+            target: id,
+            detail: {},
+            ...getRequestLogMeta(c.req.raw),
+        });
 
         return c.json({ code: 1, msg: '通道删除成功' });
     } catch (error) {
@@ -1207,9 +1391,198 @@ adminRouter.patch('/channels/:id/status', async (c) => {
             'UPDATE channels SET status = ?, updated_at = ? WHERE id = ?'
         ).bind(status, now, id).run();
 
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_toggle_channel',
+            target: id,
+            detail: { status },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
         return c.json({ code: 1, msg: status === 1 ? '通道已启用' : '通道已禁用' });
     } catch (error) {
         console.error('Toggle channel status error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 执行订单对账
+ * POST /api/admin/reconciliation/run
+ */
+adminRouter.post('/reconciliation/run', async (c) => {
+    const contentType = c.req.header('Content-Type') || '';
+    const body = contentType.includes('application/json') ? await c.req.json() : await c.req.parseBody();
+    const admin = c.get('user') as any;
+    const date = ((body.date as string) || new Date().toISOString().split('T')[0]).trim();
+    const userId = ((body.user_id as string) || '').trim();
+    const paymentType = ((body.payment_type as string) || '').trim();
+    const limit = Math.min(parseInt((body.limit as string) || '200'), 500);
+    const startedAt = new Date().toISOString();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return c.json({ code: -1, msg: '对账日期格式应为 YYYY-MM-DD' });
+    }
+
+    let checkedCount = 0;
+    let matchedCount = 0;
+    let mismatchCount = 0;
+    const mismatches: any[] = [];
+
+    try {
+        let query = `
+            SELECT * FROM orders
+            WHERE DATE(created_at) = ? AND plugin IS NOT NULL AND channel_id IS NOT NULL
+        `;
+        const params: any[] = [date];
+
+        if (userId) {
+            query += ' AND user_id = ?';
+            params.push(userId);
+        }
+
+        if (paymentType) {
+            query += ' AND payment_type = ?';
+            params.push(paymentType);
+        }
+
+        query += ' ORDER BY created_at ASC LIMIT ?';
+        params.push(limit);
+
+        const orderResult = await c.env.DB.prepare(query).bind(...params).all();
+        const channelCache = new Map<string, any>();
+
+        for (const row of orderResult.results) {
+            const order = row as any;
+            checkedCount++;
+
+            try {
+                let channel = channelCache.get(order.channel_id);
+                if (!channel) {
+                    channel = await c.env.DB.prepare(
+                        'SELECT * FROM channels WHERE id = ?'
+                    ).bind(order.channel_id).first();
+                    if (channel) channelCache.set(order.channel_id, channel);
+                }
+
+                if (!channel) {
+                    mismatchCount++;
+                    mismatches.push({ order_id: order.id, reason: 'channel_not_found', local_status: order.status });
+                    continue;
+                }
+
+                const plugin = getPlugin(order.plugin);
+                const config = JSON.parse((channel as any).config || '{}');
+                const remoteStatus = await plugin.queryOrder(order.id, {
+                    appId: config.appId || '',
+                    appSecret: config.appSecret || '',
+                    ...config,
+                });
+                const expectedStatus = mapPluginOrderStatus(remoteStatus.status);
+
+                await logPaymentEvent(c.env, {
+                    orderId: order.id,
+                    userId: order.user_id,
+                    channelId: order.channel_id,
+                    plugin: order.plugin,
+                    direction: 'response',
+                    action: 'reconcile_query_order',
+                    status: expectedStatus === order.status ? 'success' : 'mismatch',
+                    amount: order.amount,
+                    thirdPartyTradeNo: remoteStatus.thirdPartyTradeNo || null,
+                    responseData: remoteStatus,
+                });
+
+                if (expectedStatus === order.status) {
+                    matchedCount++;
+                } else {
+                    mismatchCount++;
+                    mismatches.push({
+                        order_id: order.id,
+                        out_trade_no: order.out_trade_no,
+                        local_status: order.status,
+                        channel_status: remoteStatus.status,
+                        expected_status: expectedStatus,
+                        amount: order.amount,
+                        third_party_trade_no: remoteStatus.thirdPartyTradeNo || '',
+                    });
+                }
+            } catch (error) {
+                mismatchCount++;
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                mismatches.push({ order_id: order.id, reason: 'query_error', error: errorMessage });
+
+                await logPaymentEvent(c.env, {
+                    orderId: order.id,
+                    userId: order.user_id,
+                    channelId: order.channel_id,
+                    plugin: order.plugin,
+                    direction: 'response',
+                    action: 'reconcile_query_order',
+                    status: 'error',
+                    amount: order.amount,
+                    errorMessage,
+                });
+            }
+        }
+
+        const finishedAt = new Date().toISOString();
+        const logId = await logReconciliationEvent(c.env, {
+            userId: userId || null,
+            paymentType: paymentType || null,
+            date,
+            status: 'success',
+            checkedCount,
+            matchedCount,
+            mismatchCount,
+            fixedCount: 0,
+            operatorId: admin?.id || null,
+            detail: { mismatches },
+            startedAt,
+            finishedAt,
+        });
+
+        await logAuditEvent(c.env, {
+            userId: admin?.id || null,
+            action: 'admin_run_reconciliation',
+            target: logId || date,
+            detail: { date, user_id: userId || '', payment_type: paymentType || '', checked_count: checkedCount, mismatch_count: mismatchCount },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
+        return c.json({
+            code: 1,
+            msg: '对账完成',
+            data: {
+                log_id: logId,
+                date,
+                checked_count: checkedCount,
+                matched_count: matchedCount,
+                mismatch_count: mismatchCount,
+                fixed_count: 0,
+                mismatches,
+            }
+        });
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await logReconciliationEvent(c.env, {
+            userId: userId || null,
+            paymentType: paymentType || null,
+            date,
+            status: 'failed',
+            checkedCount,
+            matchedCount,
+            mismatchCount,
+            fixedCount: 0,
+            operatorId: admin?.id || null,
+            detail: { mismatches },
+            errorMessage,
+            startedAt,
+            finishedAt: new Date().toISOString(),
+        });
+
+        console.error('Run reconciliation error:', error);
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }
 });
@@ -1261,3 +1634,125 @@ adminRouter.get('/logs', async (c) => {
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }
 });
+
+/**
+ * 等保日志列表
+ * GET /api/admin/logs/:type
+ */
+adminRouter.get('/logs/:type', async (c) => {
+    const type = c.req.param('type');
+    const table = LOG_TABLES[type];
+    const limit = Math.min(parseInt(c.req.query('limit') || '50'), 100);
+    const offset = parseInt(c.req.query('offset') || '0');
+    const keyword = c.req.query('keyword');
+
+    if (!table) {
+        return c.json({ code: -1, msg: '日志类型不存在' });
+    }
+
+    try {
+        let query = `
+            SELECT l.*, u.username
+            FROM ${table.name} l
+            LEFT JOIN users u ON l.user_id = u.id
+            WHERE 1=1
+        `;
+        let countQuery = `SELECT COUNT(*) as total FROM ${table.name} l LEFT JOIN users u ON l.user_id = u.id WHERE 1=1`;
+        const params: any[] = [];
+        const countParams: any[] = [];
+
+        const addCondition = (condition: string, value: string | number) => {
+            query += ` AND ${condition}`;
+            countQuery += ` AND ${condition}`;
+            params.push(value);
+            countParams.push(value);
+        };
+
+        if (keyword) {
+            const columns = table.keywordColumns.map(column => `${column} LIKE ?`).join(' OR ');
+            query += ` AND (${columns})`;
+            countQuery += ` AND (${columns})`;
+            const like = `%${keyword}%`;
+            for (let i = 0; i < table.keywordColumns.length; i++) {
+                params.push(like);
+                countParams.push(like);
+            }
+        }
+
+        const userId = c.req.query('user_id');
+        if (userId && table.filters.includes('user_id')) addCondition('l.user_id = ?', userId);
+
+        const orderId = c.req.query('order_id');
+        if (orderId && table.filters.includes('order_id')) addCondition('l.order_id = ?', orderId);
+
+        const action = c.req.query('action');
+        if (action && table.filters.includes('action')) addCondition('l.action = ?', action);
+
+        const plugin = c.req.query('plugin');
+        if (plugin && table.filters.includes('plugin')) addCondition('l.plugin = ?', plugin);
+
+        const paymentType = c.req.query('payment_type');
+        if (paymentType && table.filters.includes('payment_type')) addCondition('l.payment_type = ?', paymentType);
+
+        const status = c.req.query('status');
+        if (status && table.filters.includes('status')) addCondition('l.status = ?', status);
+
+        const date = c.req.query('date');
+        if (date && table.filters.includes('date')) addCondition('l.date = ?', date);
+
+        const success = c.req.query('success');
+        if (success !== undefined && table.filters.includes('success')) addCondition('l.success = ?', parseInt(success));
+
+        query += ' ORDER BY l.created_at DESC LIMIT ? OFFSET ?';
+        params.push(limit, offset);
+
+        const [result, count] = await Promise.all([
+            c.env.DB.prepare(query).bind(...params).all(),
+            c.env.DB.prepare(countQuery).bind(...countParams).first(),
+        ]);
+
+        return c.json({
+            code: 1,
+            count: (count as any)?.total || 0,
+            data: result.results,
+        });
+    } catch (error) {
+        console.error('Get security logs error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+const LOG_TABLES: Record<string, { name: string; keywordColumns: string[]; filters: string[] }> = {
+    audit: {
+        name: 'operation_logs',
+        keywordColumns: ['l.action', 'l.target', 'l.detail', 'u.username'],
+        filters: ['user_id', 'action'],
+    },
+    order: {
+        name: 'order_logs',
+        keywordColumns: ['l.order_id', 'l.out_trade_no', 'l.action', 'l.detail', 'u.username'],
+        filters: ['user_id', 'order_id', 'action'],
+    },
+    payment: {
+        name: 'payment_logs',
+        keywordColumns: ['l.order_id', 'l.plugin', 'l.action', 'l.status', 'l.third_party_trade_no', 'l.error_message', 'u.username'],
+        filters: ['user_id', 'order_id', 'plugin', 'action', 'status'],
+    },
+    webhook: {
+        name: 'webhook_logs',
+        keywordColumns: ['l.order_id', 'l.plugin', 'l.webhook_type', 'l.url', 'l.error_message', 'u.username'],
+        filters: ['user_id', 'order_id', 'plugin', 'success'],
+    },
+    reconciliation: {
+        name: 'reconciliation_logs',
+        keywordColumns: ['l.id', 'l.payment_type', 'l.status', 'l.detail', 'l.error_message', 'u.username'],
+        filters: ['user_id', 'payment_type', 'status', 'date'],
+    },
+};
+
+function mapPluginOrderStatus(status: string): number {
+    if (status === 'paid') return 1;
+    if (status === 'refunded') return 2;
+    if (status === 'closed') return 3;
+    return 0;
+}

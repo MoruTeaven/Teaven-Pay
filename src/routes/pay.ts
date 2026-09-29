@@ -7,6 +7,8 @@ import { Env } from '../types/env';
 import { generateUUIDv7 } from '../utils/uuid';
 import { verifySignAsync } from '../utils/crypto';
 import { getPlugin } from '../plugins';
+import { getSiteUrl } from '../utils/site';
+import { getRequestLogMeta, logOrderEvent, logPaymentEvent } from '../utils/logging';
 
 export const payRouter = new Hono<{ Bindings: Env }>();
 
@@ -17,6 +19,7 @@ export const payRouter = new Hono<{ Bindings: Env }>();
 payRouter.post('/submit', async (c) => {
     const body = await c.req.parseBody();
     const env = c.env;
+    const requestMeta = getRequestLogMeta(c.req.raw);
     
     // 获取参数
     const pid = body.pid as string;
@@ -101,11 +104,12 @@ payRouter.post('/submit', async (c) => {
                 return c.json({ code: -1, msg: '该订单已完成支付，请勿重复发起' });
             }
             // 返回已有订单
+            const siteUrl = await getSiteUrl(env, c.req.url);
             return c.json({
                 code: 1,
                 msg: '创建订单成功',
                 trade_no: existingOrder.id,
-                payurl: `${env.SITE_URL || 'https://pay.example.com'}/cashier/${existingOrder.id}`
+                payurl: `${siteUrl}/cashier/${existingOrder.id}`
             });
         }
         
@@ -135,12 +139,26 @@ payRouter.post('/submit', async (c) => {
             notifyUrl, returnUrl, clientIp, '', device,
             now
         ).run();
+
+        await logOrderEvent(env, {
+            orderId: tradeNo,
+            userId: pid,
+            outTradeNo,
+            action: 'created',
+            toStatus: 0,
+            amount,
+            detail: { source: 'api_submit', payment_type: type, channel_id: channel.id, plugin: channel.plugin, device },
+            ...requestMeta,
+        });
         
         // 获取支付插件
         const plugin = getPlugin(channel.plugin);
         
         // 调用插件创建支付
         const channelConfig = JSON.parse(channel.config || '{}');
+        const siteUrl = await getSiteUrl(env, c.req.url);
+        const defaultNotifyUrl = `${siteUrl}/notify/${channel.plugin}`;
+        console.log('[Pay/submit] notify_url:', channelConfig.notifyUrl || defaultNotifyUrl);
         const payResult = await plugin.createPayment(
             {
                 tradeNo,
@@ -154,10 +172,30 @@ payRouter.post('/submit', async (c) => {
             {
                 appId: channelConfig.appId || '',
                 appSecret: channelConfig.appSecret || '',
-                notifyUrl: channelConfig.notifyUrl || '',
+                notifyUrl: channelConfig.notifyUrl || defaultNotifyUrl,
+                returnUrl: returnUrl || `${siteUrl}/cashier/${tradeNo}`,
                 ...channelConfig
             }
         );
+
+        await logPaymentEvent(env, {
+            orderId: tradeNo,
+            userId: pid,
+            channelId: channel.id,
+            plugin: channel.plugin,
+            direction: 'response',
+            action: 'create_payment',
+            status: payResult.success ? 'success' : 'failed',
+            amount,
+            requestData: { out_trade_no: outTradeNo, payment_type: type, subject: name },
+            responseData: {
+                method: payResult.method,
+                has_pay_url: Boolean(payResult.payUrl),
+                has_qrcode: Boolean(payResult.qrcode || payResult.qrcodeUrl),
+                message: payResult.message || '',
+            },
+            errorMessage: payResult.success ? null : payResult.message || '创建支付失败',
+        });
         
         if (!payResult.success) {
             return c.json({ code: -1, msg: payResult.message || '创建支付失败' });
@@ -167,7 +205,7 @@ payRouter.post('/submit', async (c) => {
             code: 1,
             msg: '创建订单成功',
             trade_no: tradeNo,
-            payurl: payResult.payUrl || `${env.SITE_URL || 'https://pay.example.com'}/cashier/${tradeNo}`,
+            payurl: payResult.payUrl || `${siteUrl}/cashier/${tradeNo}`,
             qrcode: payResult.qrcode
         });
     } catch (error) {
@@ -183,6 +221,7 @@ payRouter.post('/submit', async (c) => {
 payRouter.post('/cashier', async (c) => {
     const body = await c.req.parseBody();
     const env = c.env;
+    const requestMeta = getRequestLogMeta(c.req.raw);
 
     const merchantId = body.merchant_id as string;
     const amountStr = body.amount as string;
@@ -231,9 +270,23 @@ payRouter.post('/cashier', async (c) => {
             now
         ).run();
 
+        await logOrderEvent(env, {
+            orderId: tradeNo,
+            userId: merchantId,
+            outTradeNo,
+            action: 'created',
+            toStatus: 0,
+            amount,
+            detail: { source: 'cashier', payment_type: type, channel_id: channel.id, plugin: channel.plugin },
+            ...requestMeta,
+        });
+
         const plugin = getPlugin(channel.plugin);
 
         const channelConfig = JSON.parse(channel.config || '{}');
+        const siteUrl = await getSiteUrl(env, c.req.url);
+        const defaultNotifyUrl = `${siteUrl}/notify/${channel.plugin}`;
+        console.log('[Pay/cashier] notify_url:', channelConfig.notifyUrl || user.notify_url || defaultNotifyUrl);
         const payResult = await plugin.createPayment(
             {
                 tradeNo,
@@ -247,10 +300,30 @@ payRouter.post('/cashier', async (c) => {
             {
                 appId: channelConfig.appId || '',
                 appSecret: channelConfig.appSecret || '',
-                notifyUrl: channelConfig.notifyUrl || user.notify_url || '',
+                notifyUrl: channelConfig.notifyUrl || user.notify_url || defaultNotifyUrl,
+                returnUrl: user.return_url || `${siteUrl}/cashier/${tradeNo}`,
                 ...channelConfig
             }
         );
+
+        await logPaymentEvent(env, {
+            orderId: tradeNo,
+            userId: merchantId,
+            channelId: channel.id,
+            plugin: channel.plugin,
+            direction: 'response',
+            action: 'create_payment',
+            status: payResult.success ? 'success' : 'failed',
+            amount,
+            requestData: { out_trade_no: outTradeNo, payment_type: type, subject: name },
+            responseData: {
+                method: payResult.method,
+                has_pay_url: Boolean(payResult.payUrl),
+                has_qrcode: Boolean(payResult.qrcode || payResult.qrcodeUrl),
+                message: payResult.message || '',
+            },
+            errorMessage: payResult.success ? null : payResult.message || '创建支付失败',
+        });
 
         if (!payResult.success) {
             return c.json({ code: -1, msg: payResult.message || '创建支付失败' });
@@ -260,11 +333,131 @@ payRouter.post('/cashier', async (c) => {
             code: 1,
             msg: '创建订单成功',
             trade_no: tradeNo,
-            payurl: payResult.payUrl || `${env.SITE_URL || ''}/cashier/${tradeNo}`,
+            payurl: payResult.payUrl || `${siteUrl}/cashier/${tradeNo}`,
             qrcode: payResult.qrcode
         });
     } catch (error) {
         console.error('Cashier payment error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 查询订单状态（公开接口，供收银台轮询，会主动查询支付渠道）
+ * GET /api/pay/status/:tradeNo
+ */
+payRouter.get('/status/:tradeNo', async (c) => {
+    const { tradeNo } = c.req.param();
+    const env = c.env;
+
+    try {
+        const order = await env.DB.prepare(
+            'SELECT * FROM orders WHERE id = ?'
+        ).bind(tradeNo).first() as any;
+
+        if (!order) {
+            return c.json({ code: -1, msg: '订单不存在' });
+        }
+
+        // 如果订单未支付，主动查询支付渠道
+        if (order.status === 0 && order.plugin && order.channel_id) {
+            try {
+                const channel = await env.DB.prepare(
+                    'SELECT * FROM channels WHERE id = ? AND status = 1'
+                ).bind(order.channel_id).first() as any;
+
+                if (channel) {
+                    const plugin = getPlugin(order.plugin);
+                    const channelConfig = JSON.parse(channel.config || '{}');
+                    const orderStatus = await plugin.queryOrder(tradeNo, {
+                        appId: channelConfig.appId || '',
+                        appSecret: channelConfig.appSecret || '',
+                        ...channelConfig
+                    });
+
+                    await logPaymentEvent(env, {
+                        orderId: tradeNo,
+                        userId: order.user_id,
+                        channelId: order.channel_id,
+                        plugin: order.plugin,
+                        direction: 'response',
+                        action: 'query_order',
+                        status: orderStatus.status === 'paid' ? 'success' : orderStatus.status,
+                        amount: order.amount,
+                        thirdPartyTradeNo: orderStatus.thirdPartyTradeNo || null,
+                        responseData: orderStatus,
+                    });
+
+                    // 如果查询到已支付，更新订单状态
+                    if (orderStatus.status === 'paid') {
+                        const now = new Date().toISOString();
+                        await env.DB.prepare(`
+                            UPDATE orders SET
+                                status = 1,
+                                api_trade_no = ?,
+                                paid_at = ?,
+                                notify_status = 0
+                            WHERE id = ? AND status = 0
+                        `).bind(
+                            orderStatus.thirdPartyTradeNo || '',
+                            orderStatus.paidAt || now,
+                            tradeNo
+                        ).run();
+
+                        // 更新商户余额
+                        const fee = order.fee || 0;
+                        const profit = order.amount - fee;
+                        await env.DB.prepare(`
+                            UPDATE users SET
+                                balance = balance + ?,
+                                today_income = today_income + ?,
+                                total_income = total_income + ?,
+                                today_orders = today_orders + 1,
+                                total_orders = total_orders + 1
+                            WHERE id = ?
+                        `).bind(profit, profit, profit, order.user_id).run();
+
+                        await logOrderEvent(env, {
+                            orderId: tradeNo,
+                            userId: order.user_id,
+                            outTradeNo: order.out_trade_no,
+                            action: 'paid',
+                            fromStatus: 0,
+                            toStatus: 1,
+                            amount: order.amount,
+                            detail: { source: 'status_poll', third_party_trade_no: orderStatus.thirdPartyTradeNo || '' },
+                        });
+
+                        return c.json({
+                            code: 1,
+                            status: 1,
+                            msg: '已支付'
+                        });
+                    }
+                }
+            } catch (e) {
+                await logPaymentEvent(env, {
+                    orderId: tradeNo,
+                    userId: order.user_id,
+                    channelId: order.channel_id,
+                    plugin: order.plugin,
+                    direction: 'response',
+                    action: 'query_order',
+                    status: 'error',
+                    amount: order.amount,
+                    errorMessage: e instanceof Error ? e.message : String(e),
+                });
+                console.error('[Pay/status] queryOrder error:', e);
+            }
+        }
+
+        return c.json({
+            code: 1,
+            status: order.status,
+            msg: order.status === 1 ? '已支付' : order.status === 2 ? '已退款' : order.status === 3 ? '已关闭' : '未支付'
+        });
+    } catch (error) {
+        console.error('Status query error:', error);
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }
 });
@@ -370,6 +563,7 @@ payRouter.get('/query', async (c) => {
  * GET /api/pay/orders
  */
 payRouter.get('/orders', async (c) => {
+    const env = c.env;
     const pid = c.req.query('pid');
     const key = c.req.query('key');
     const limit = parseInt(c.req.query('limit') || '10');
@@ -450,6 +644,7 @@ payRouter.get('/orders', async (c) => {
 payRouter.post('/refund', async (c) => {
     const body = await c.req.parseBody();
     const env = c.env;
+    const requestMeta = getRequestLogMeta(c.req.raw);
     
     const pid = body.pid as string;
     const tradeNo = body.trade_no as string;
@@ -519,7 +714,8 @@ payRouter.post('/refund', async (c) => {
             return c.json({ code: -1, msg: '订单状态不允许退款' });
         }
         
-        if (refundAmount > order.amount - (order.refund_amount || 0)) {
+        const remainingRefundAmount = order.amount - (order.refund_amount || 0);
+        if (refundAmount > remainingRefundAmount) {
             return c.json({ code: -1, msg: '退款金额超过可退金额' });
         }
         
@@ -538,11 +734,36 @@ payRouter.post('/refund', async (c) => {
         `).bind(refundAmount, order.id).run();
         
         // 如果全额退款，更新订单状态
-        if (refundAmount >= order.amount - (order.refund_amount || 0)) {
+        const isFullRefund = refundAmount >= remainingRefundAmount;
+        if (isFullRefund) {
             await env.DB.prepare(
                 'UPDATE orders SET status = 2 WHERE id = ?'
             ).bind(order.id).run();
         }
+
+        await logOrderEvent(env, {
+            orderId: order.id,
+            userId: pid,
+            outTradeNo: order.out_trade_no,
+            action: 'refund_requested',
+            fromStatus: 1,
+            toStatus: isFullRefund ? 2 : 1,
+            amount: refundAmount,
+            detail: { refund_no: refundNo, remaining_before_refund: remainingRefundAmount },
+            ...requestMeta,
+        });
+
+        await logPaymentEvent(env, {
+            orderId: order.id,
+            userId: pid,
+            channelId: order.channel_id,
+            plugin: order.plugin,
+            direction: 'internal',
+            action: 'refund',
+            status: 'accepted',
+            amount: refundAmount,
+            requestData: { refund_no: refundNo, reason: body.reason || '' },
+        });
         
         // TODO: 调用支付渠道退款接口
         
@@ -564,6 +785,7 @@ payRouter.post('/refund', async (c) => {
  * GET /api/pay/refund/query
  */
 payRouter.get('/refund/query', async (c) => {
+    const env = c.env;
     const pid = c.req.query('pid');
     const refundNo = c.req.query('refund_no');
     const outTradeNo = c.req.query('out_trade_no');
@@ -614,6 +836,7 @@ payRouter.get('/refund/query', async (c) => {
 payRouter.post('/close', async (c) => {
     const body = await c.req.parseBody();
     const env = c.env;
+    const requestMeta = getRequestLogMeta(c.req.raw);
     
     const pid = body.pid as string;
     const tradeNo = body.trade_no as string;
@@ -681,6 +904,18 @@ payRouter.post('/close', async (c) => {
         await env.DB.prepare(
             'UPDATE orders SET status = 3, closed_at = ? WHERE id = ?'
         ).bind(now, order.id).run();
+
+        await logOrderEvent(env, {
+            orderId: order.id,
+            userId: pid,
+            outTradeNo: order.out_trade_no,
+            action: 'closed',
+            fromStatus: 0,
+            toStatus: 3,
+            amount: order.amount,
+            detail: { source: 'api_close' },
+            ...requestMeta,
+        });
         
         return c.json({
             code: 0,
@@ -688,6 +923,36 @@ payRouter.post('/close', async (c) => {
         });
     } catch (error) {
         console.error('Close order error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 获取支持的支付方式
+ * GET /api/pay/types
+ */
+payRouter.get('/types', async (c) => {
+    const env = c.env;
+
+    try {
+        // 查询所有启用的支付方式
+        const paymentTypes = await env.DB.prepare(
+            'SELECT id, name, display_name, icon, sort_order FROM payment_types WHERE status = 1 ORDER BY sort_order ASC'
+        ).all();
+
+        return c.json({
+            code: 1,
+            msg: '获取支付方式列表成功',
+            data: paymentTypes.results.map((type: any) => ({
+                id: type.id,
+                name: type.name,
+                display_name: type.display_name,
+                icon: type.icon,
+                sort_order: type.sort_order
+            }))
+        });
+    } catch (error) {
+        console.error('Get payment types error:', error);
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }
 });

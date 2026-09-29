@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import { Env } from '../types/env';
 import { getPlugin } from '../plugins';
+import { getRequestLogMeta, headersToLogObject, logOrderEvent, logPaymentEvent, logWebhookEvent } from '../utils/logging';
 
 export const notifyRouter = new Hono<{ Bindings: Env }>();
 
@@ -15,6 +16,7 @@ export const notifyRouter = new Hono<{ Bindings: Env }>();
 notifyRouter.post('/alipay', async (c) => {
     try {
         const body = await c.req.parseBody();
+        const requestMeta = getRequestLogMeta(c.req.raw);
         
         // 查询支付宝通道配置
         const channel = await c.env.DB.prepare(
@@ -22,6 +24,19 @@ notifyRouter.post('/alipay', async (c) => {
         ).first();
         
         if (!channel) {
+            await logWebhookEvent(c.env, {
+                plugin: 'alipay',
+                webhookType: 'channel_notify',
+                direction: 'inbound',
+                url: c.req.url,
+                method: c.req.method,
+                success: false,
+                requestHeaders: headersToLogObject(c.req.raw.headers),
+                requestBody: body,
+                responseBody: 'fail',
+                errorMessage: '通道不存在',
+                ...requestMeta,
+            });
             return c.text('fail');
         }
         
@@ -36,8 +51,36 @@ notifyRouter.post('/alipay', async (c) => {
         });
         
         if (!result.success) {
+            await logWebhookEvent(c.env, {
+                orderId: result.tradeNo || null,
+                plugin: 'alipay',
+                webhookType: 'channel_notify',
+                direction: 'inbound',
+                url: c.req.url,
+                method: c.req.method,
+                success: false,
+                requestHeaders: headersToLogObject(c.req.raw.headers),
+                requestBody: body,
+                responseBody: 'fail',
+                errorMessage: '回调验签失败',
+                ...requestMeta,
+            });
             return c.text('fail');
         }
+
+        await logWebhookEvent(c.env, {
+            orderId: result.tradeNo || null,
+            plugin: 'alipay',
+            webhookType: 'channel_notify',
+            direction: 'inbound',
+            url: c.req.url,
+            method: c.req.method,
+            success: true,
+            requestHeaders: headersToLogObject(c.req.raw.headers),
+            requestBody: body,
+            responseBody: result.response || 'success',
+            ...requestMeta,
+        });
         
         // 处理支付成功
         if (result.status === 'success') {
@@ -65,6 +108,7 @@ notifyRouter.post('/wxpay', async (c) => {
     try {
         const rawBody = await c.req.text();
         const body = JSON.parse(rawBody);
+        const requestMeta = getRequestLogMeta(c.req.raw);
         
         // 查询微信支付通道配置
         const channel = await c.env.DB.prepare(
@@ -72,6 +116,19 @@ notifyRouter.post('/wxpay', async (c) => {
         ).first();
         
         if (!channel) {
+            await logWebhookEvent(c.env, {
+                plugin: 'wxpay',
+                webhookType: 'channel_notify',
+                direction: 'inbound',
+                url: c.req.url,
+                method: c.req.method,
+                success: false,
+                requestHeaders: headersToLogObject(c.req.raw.headers),
+                requestBody: body,
+                responseBody: { code: 'FAIL', message: '通道不存在' },
+                errorMessage: '通道不存在',
+                ...requestMeta,
+            });
             return c.json({ code: 'FAIL', message: '通道不存在' });
         }
         
@@ -92,12 +149,49 @@ notifyRouter.post('/wxpay', async (c) => {
             appId: config.appId,
             appSecret: config.appSecret,
             mchId: config.mchId,
-            apiKey: config.apiKey
+            apiKey: config.apiKey,
+            db: c.env.DB
         });
         
         if (!result.success) {
-            return c.json({ code: 'FAIL', message: '验证失败' });
+            await logWebhookEvent(c.env, {
+                orderId: result.tradeNo || null,
+                plugin: 'wxpay',
+                webhookType: 'channel_notify',
+                direction: 'inbound',
+                url: c.req.url,
+                method: c.req.method,
+                success: false,
+                requestHeaders: headersToLogObject(c.req.raw.headers),
+                requestBody: body,
+                responseBody: {
+                    code: 'FAIL',
+                    message: '验证失败',
+                    error_code: result.errorCode || 'VERIFY_FAILED'
+                },
+                errorMessage: `回调验签失败: ${result.errorCode || 'VERIFY_FAILED'} ${result.message || ''}`.trim(),
+                ...requestMeta,
+            });
+            return c.json({
+                code: 'FAIL',
+                message: '验证失败',
+                error_code: result.errorCode || 'VERIFY_FAILED'
+            });
         }
+
+        await logWebhookEvent(c.env, {
+            orderId: result.tradeNo || null,
+            plugin: 'wxpay',
+            webhookType: 'channel_notify',
+            direction: 'inbound',
+            url: c.req.url,
+            method: c.req.method,
+            success: true,
+            requestHeaders: headersToLogObject(c.req.raw.headers),
+            requestBody: body,
+            responseBody: result.response || { code: 'SUCCESS', message: 'OK' },
+            ...requestMeta,
+        });
         
         // 处理支付成功
         if (result.status === 'success') {
@@ -122,41 +216,106 @@ notifyRouter.post('/wxpay', async (c) => {
  * POST /notify/qqpay
  */
 notifyRouter.post('/qqpay', async (c) => {
-    // TODO: 实现 QQ 钱包通知
+    const body = await c.req.parseBody();
+    await logWebhookEvent(c.env, {
+        plugin: 'qqpay',
+        webhookType: 'channel_notify',
+        direction: 'inbound',
+        url: c.req.url,
+        method: c.req.method,
+        success: true,
+        requestHeaders: headersToLogObject(c.req.raw.headers),
+        requestBody: body,
+        responseBody: 'success',
+        ...getRequestLogMeta(c.req.raw),
+    });
     return c.text('success');
 });
 
 /**
  * 通用异步通知 (用于自定义插件)
- * POST /notify/:plugin
+ * POST/GET /notify/:plugin
  */
-notifyRouter.post('/:plugin', async (c) => {
+const pluginNotifyHandler = async (c: any) => {
     const { plugin: pluginId } = c.req.param();
-    
+
     try {
-        const body = await c.req.parseBody();
-        
+        // 同时支持 POST 和 GET，虎皮椒用 POST form 表单
+        let body: Record<string, any>;
+        if (c.req.method === 'GET') {
+            body = c.req.query();
+        } else {
+            body = await c.req.parseBody();
+        }
+        const requestMeta = getRequestLogMeta(c.req.raw);
+
+        console.log(`[Notify/${pluginId}] received ${c.req.method} request:`, JSON.stringify(body));
+
         // 查询通道配置
         const channel = await c.env.DB.prepare(
             'SELECT * FROM channels WHERE plugin = ? AND status = 1 LIMIT 1'
         ).bind(pluginId).first();
-        
+
         if (!channel) {
+            console.error(`[Notify/${pluginId}] channel not found`);
+            await logWebhookEvent(c.env, {
+                plugin: pluginId,
+                webhookType: 'channel_notify',
+                direction: 'inbound',
+                url: c.req.url,
+                method: c.req.method,
+                success: false,
+                requestHeaders: headersToLogObject(c.req.raw.headers),
+                requestBody: body,
+                responseBody: 'fail',
+                errorMessage: '通道不存在',
+                ...requestMeta,
+            });
             return c.text('fail');
         }
-        
+
         const config = JSON.parse((channel as any).config || '{}');
-        
+
         // 获取插件并验证通知
         const plugin = getPlugin(pluginId);
         const result = await plugin.verifyNotify(body, config);
-        
+
         if (!result.success) {
+            console.error(`[Notify/${pluginId}] verifyNotify failed`);
+            await logWebhookEvent(c.env, {
+                orderId: result.tradeNo || null,
+                plugin: pluginId,
+                webhookType: 'channel_notify',
+                direction: 'inbound',
+                url: c.req.url,
+                method: c.req.method,
+                success: false,
+                requestHeaders: headersToLogObject(c.req.raw.headers),
+                requestBody: body,
+                responseBody: 'fail',
+                errorMessage: '回调验签失败',
+                ...requestMeta,
+            });
             return c.text('fail');
         }
-        
+
+        await logWebhookEvent(c.env, {
+            orderId: result.tradeNo || null,
+            plugin: pluginId,
+            webhookType: 'channel_notify',
+            direction: 'inbound',
+            url: c.req.url,
+            method: c.req.method,
+            success: true,
+            requestHeaders: headersToLogObject(c.req.raw.headers),
+            requestBody: body,
+            responseBody: result.response || 'success',
+            ...requestMeta,
+        });
+
         // 处理支付成功
         if (result.status === 'success') {
+            console.log(`[Notify/${pluginId}] payment success, tradeNo: ${result.tradeNo}`);
             await handlePaymentSuccess(c.env, {
                 tradeNo: result.tradeNo,
                 outTradeNo: result.outTradeNo,
@@ -165,13 +324,16 @@ notifyRouter.post('/:plugin', async (c) => {
                 paidAt: result.paidAt
             });
         }
-        
+
         return c.text(result.response || 'success');
     } catch (error) {
-        console.error(`${pluginId} notify error:`, error);
+        console.error(`[Notify/${pluginId}] error:`, error);
         return c.text('fail');
     }
-});
+};
+
+notifyRouter.post('/:plugin', pluginNotifyHandler);
+notifyRouter.get('/:plugin', pluginNotifyHandler);
 
 /**
  * 处理支付成功
@@ -228,6 +390,30 @@ async function handlePaymentSuccess(
             total_orders = total_orders + 1
         WHERE id = ?
     `).bind(profit, profit, profit, (order as any).user_id).run();
+
+    await logOrderEvent(env, {
+        orderId: data.tradeNo,
+        userId: (order as any).user_id,
+        outTradeNo: (order as any).out_trade_no,
+        action: 'paid',
+        fromStatus: 0,
+        toStatus: 1,
+        amount,
+        detail: { source: 'channel_notify', third_party_trade_no: data.thirdPartyTradeNo || '' },
+    });
+
+    await logPaymentEvent(env, {
+        orderId: data.tradeNo,
+        userId: (order as any).user_id,
+        channelId: (order as any).channel_id,
+        plugin: (order as any).plugin,
+        direction: 'internal',
+        action: 'notify_payment_success',
+        status: 'success',
+        amount,
+        thirdPartyTradeNo: data.thirdPartyTradeNo || null,
+        responseData: { buyer: data.buyer || '', paid_at: data.paidAt || now },
+    });
     
     // 发送异步通知给商户
     await sendMerchantNotification(env, order as any);
@@ -246,6 +432,17 @@ async function sendMerchantNotification(env: Env, order: any) {
     // 验证通知 URL 合法性 (防止 SSRF)
     if (!isValidNotifyUrl(order.notify_url)) {
         console.error(`Invalid notify_url blocked: ${order.notify_url}`);
+        await logWebhookEvent(env, {
+            orderId: order.id,
+            userId: order.user_id,
+            plugin: order.plugin,
+            webhookType: 'merchant_notify',
+            direction: 'outbound',
+            url: order.notify_url,
+            method: 'POST',
+            success: false,
+            errorMessage: '通知URL不合法',
+        });
         return;
     }
     
@@ -287,9 +484,25 @@ async function sendMerchantNotification(env: Env, order: any) {
         });
         
         const responseText = await response.text();
+        const notifySuccess = responseText.toLowerCase() === 'success';
+
+        await logWebhookEvent(env, {
+            orderId: order.id,
+            userId: order.user_id,
+            plugin: order.plugin,
+            webhookType: 'merchant_notify',
+            direction: 'outbound',
+            url: order.notify_url,
+            method: 'POST',
+            httpStatus: response.status,
+            success: notifySuccess,
+            requestBody: notifyParams,
+            responseBody: responseText,
+            errorMessage: notifySuccess ? null : '商户未返回 success',
+        });
         
         // 更新通知状态
-        if (responseText.toLowerCase() === 'success') {
+        if (notifySuccess) {
             await env.DB.prepare(`
                 UPDATE orders SET 
                     notify_status = 1,
@@ -310,6 +523,17 @@ async function sendMerchantNotification(env: Env, order: any) {
         }
     } catch (error) {
         console.error('Send merchant notification error:', error);
+        await logWebhookEvent(env, {
+            orderId: order.id,
+            userId: order.user_id,
+            plugin: order.plugin,
+            webhookType: 'merchant_notify',
+            direction: 'outbound',
+            url: order.notify_url,
+            method: 'POST',
+            success: false,
+            errorMessage: error instanceof Error ? error.message : String(error),
+        });
         
         // 更新通知失败状态
         await env.DB.prepare(`

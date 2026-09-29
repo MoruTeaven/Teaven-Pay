@@ -13,7 +13,21 @@ import {
     RefundStatus,
     JsapiParams
 } from '../types/plugin';
-import { rsaSign, generateNonce } from '../utils/crypto';
+import { rsaSign, generateNonce, x509CertToPublicKey, x509CertValidity } from '../utils/crypto';
+
+/** 微信 v3 平台证书（含 DER 解析出的有效期，用于到期自动刷新） */
+interface PlatformCert {
+    serial: string;
+    pem: string;
+    notBefore: number;
+    notAfter: number;
+}
+
+/** 平台证书缓存键（system_config 表） */
+const WX_CERT_CACHE_KEY = 'wxpay:platform_certs';
+
+/** 证书到期前提前刷新窗口（7 天） */
+const WX_CERT_REFRESH_AHEAD_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class WxpayPlugin implements PaymentPlugin {
     id = 'wxpay';
@@ -22,6 +36,9 @@ export class WxpayPlugin implements PaymentPlugin {
     supportedTypes = ['wxpay'];
     
     private apiBase = 'https://api.mch.weixin.qq.com';
+
+    /** 平台证书进程内缓存（isolate 生命周期内有效） */
+    private certCache: { list: PlatformCert[]; expiresAt: number } | null = null;
     
     /**
      * 创建支付订单
@@ -121,90 +138,250 @@ export class WxpayPlugin implements PaymentPlugin {
     }
     
     /**
-     * 验证支付回调 (WxPay v3)
+     * 验证支付回调（微信支付 APIv3）
+     *
+     * 微信真实签名由「平台证书私钥 RSA-SHA256」签出，待签字符串为
+     * timestamp + "\n" + nonce + "\n" + body + "\n"（换行分隔，非点号；
+     * body 必须是原始报文，不能重新序列化）。验签公钥来自
+     * GET /v3/certificates 下发的平台证书，缓存于 system_config 表。
      */
     async verifyNotify(payload: any, config: PluginConfig): Promise<NotifyResult> {
+        let tradeNo = '';
+        let outTradeNo = '';
         try {
             const headers = payload._headers || {};
-            const signature = headers['wechatpay-signature'] || '';
-            const timestamp = headers['wechatpay-timestamp'] || '';
-            const nonce = headers['wechatpay-nonce'] || '';
-            const body = payload._rawBody || '';
+            const signature = (headers['wechatpay-signature'] || '').trim();
+            const timestamp = (headers['wechatpay-timestamp'] || '').trim();
+            const nonce = (headers['wechatpay-nonce'] || '').trim();
+            const serial = (headers['wechatpay-serial'] || '').trim();
+            const rawBody = typeof payload._rawBody === 'string' ? payload._rawBody : '';
 
-            if (!signature || !timestamp || !nonce) {
-                return { success: false, tradeNo: '', outTradeNo: '', status: 'failed' };
+            const fail = (errorCode: string, message: string): NotifyResult => ({
+                success: false,
+                tradeNo,
+                outTradeNo,
+                status: 'failed',
+                errorCode,
+                message,
+                response: JSON.stringify({ code: 'FAIL', message })
+            });
+
+            if (!signature || !timestamp || !nonce || !rawBody) {
+                return fail('PARAM_ERROR', '缺少签名请求头或请求体');
             }
 
-            // 验证签名
-            const message = `${timestamp}\n${nonce}\n${body}\n`;
-            const keyData = new TextEncoder().encode(config.apiKey || '');
-            const cryptoKey = await crypto.subtle.importKey(
-                'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+            // 时间戳漂移校验（微信建议 5 分钟内）
+            const tsSec = Number(timestamp);
+            if (!Number.isFinite(tsSec) || Math.abs(Date.now() / 1000 - tsSec) > 300) {
+                return fail('TIMESTAMP_EXPIRED', '回调时间戳超出允许范围');
+            }
+
+            // 取平台证书：按 Wechatpay-Serial 命中，失败则回退任一有效证书
+            const certs = await this.getPlatformCertificates(config, config.db as D1Database | undefined);
+            if (!certs.length) {
+                return fail('CERT_UNAVAILABLE', '平台证书获取失败');
+            }
+            const cert = certs.find((x) => x.serial === serial) || certs[0];
+
+            const message = timestamp + '\n' + nonce + '\n' + rawBody + '\n';
+            const pubKey = await x509CertToPublicKey(cert.pem);
+            const sigBytes = Uint8Array.from(atob(signature), (c) => c.charCodeAt(0));
+            const verified = await crypto.subtle.verify(
+                { name: 'RSASSA-PKCS1-v1_5' },
+                pubKey,
+                sigBytes,
+                new TextEncoder().encode(message)
             );
-            const sig = await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(message));
-            const expectedSig = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-            if (expectedSig !== signature.toLowerCase()) {
-                return { success: false, tradeNo: '', outTradeNo: '', status: 'failed' };
+            if (!verified) {
+                return fail('SIGNATURE_INVALID', '回调签名验证失败');
             }
 
-            // 解密资源数据
+            // ===== 以下为 resource AES-256-GCM 解密（保留原逻辑） =====
             const resource = payload.resource || {};
             const ciphertext = resource.ciphertext || '';
-            const nonce2 = resource.nonce || '';
+            const aesNonce = resource.nonce || '';
             const associatedData = resource.associated_data || '';
-
             if (!ciphertext) {
-                return { success: false, tradeNo: '', outTradeNo: '', status: 'failed' };
+                return fail('RESOURCE_MISSING', '回调资源数据缺失');
             }
 
-            const keyBytes = new TextEncoder().encode((config.apiKey || '').padEnd(32, '0').slice(0, 32));
+            const apiV3Key = (config.apiKey || '').padEnd(32, '0').slice(0, 32);
             const aesKey = await crypto.subtle.importKey(
-                'raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']
+                'raw',
+                new TextEncoder().encode(apiV3Key),
+                { name: 'AES-GCM' },
+                false,
+                ['decrypt']
             );
-            const ciphertextBytes = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
-            const ivBytes = new TextEncoder().encode(nonce2);
-            const aadBytes = new TextEncoder().encode(associatedData);
-
             const decrypted = await crypto.subtle.decrypt(
-                { name: 'AES-GCM', iv: ivBytes, additionalData: aadBytes, tagLength: 128 },
+                {
+                    name: 'AES-GCM',
+                    iv: new TextEncoder().encode(aesNonce),
+                    additionalData: new TextEncoder().encode(associatedData),
+                    tagLength: 128
+                },
                 aesKey,
-                ciphertextBytes
+                Uint8Array.from(atob(ciphertext), (c) => c.charCodeAt(0))
             );
-            const decryptedData = JSON.parse(new TextDecoder().decode(decrypted));
+            const data = JSON.parse(new TextDecoder().decode(decrypted));
 
-            if (decryptedData.trade_state !== 'SUCCESS') {
+            tradeNo = data.out_trade_no || '';
+            outTradeNo = data.out_trade_no || '';
+
+            if (data.trade_state !== 'SUCCESS') {
                 return {
                     success: true,
-                    tradeNo: decryptedData.out_trade_no || '',
-                    outTradeNo: decryptedData.out_trade_no || '',
-                    thirdPartyTradeNo: decryptedData.transaction_id,
+                    tradeNo,
+                    outTradeNo,
+                    thirdPartyTradeNo: data.transaction_id,
                     status: 'pending',
-                    buyer: decryptedData.payer?.openid,
+                    buyer: data.payer?.openid,
                     response: JSON.stringify({ code: 'SUCCESS', message: 'OK' })
                 };
             }
 
             return {
                 success: true,
-                tradeNo: decryptedData.out_trade_no || '',
-                outTradeNo: decryptedData.out_trade_no || '',
-                thirdPartyTradeNo: decryptedData.transaction_id,
+                tradeNo,
+                outTradeNo,
+                thirdPartyTradeNo: data.transaction_id,
                 status: 'success',
-                buyer: decryptedData.payer?.openid,
-                paidAt: decryptedData.success_time,
+                buyer: data.payer?.openid,
+                paidAt: data.success_time,
                 response: JSON.stringify({ code: 'SUCCESS', message: 'OK' })
             };
         } catch (error) {
+            console.error('[Wxpay] verifyNotify error:', error);
             return {
                 success: false,
-                tradeNo: '',
-                outTradeNo: '',
-                status: 'failed'
+                tradeNo,
+                outTradeNo,
+                status: 'failed',
+                errorCode: 'DECRYPT_FAILED',
+                message: '回调数据解密失败',
+                response: JSON.stringify({ code: 'FAIL', message: '回调数据解密失败' })
             };
         }
     }
-    
+
+    /**
+     * 获取平台证书列表：内存/DB 缓存优先，缺失或临近过期时重新下载
+     */
+    private async getPlatformCertificates(config: PluginConfig, db?: D1Database): Promise<PlatformCert[]> {
+        const now = Date.now();
+        if (this.certCache && this.certCache.expiresAt - now > WX_CERT_REFRESH_AHEAD_MS) {
+            return this.certCache.list;
+        }
+
+        if (db) {
+            try {
+                const row = await db
+                    .prepare('SELECT value FROM system_config WHERE key = ?')
+                    .bind(WX_CERT_CACHE_KEY)
+                    .first<{ value: string }>();
+                if (row?.value) {
+                    const cached = JSON.parse(row.value) as { list: PlatformCert[]; expiresAt: number };
+                    if (cached.expiresAt - now > WX_CERT_REFRESH_AHEAD_MS && cached.list?.length) {
+                        this.certCache = cached;
+                        return cached.list;
+                    }
+                }
+            } catch (error) {
+                console.error('[Wxpay] read cert cache error:', error);
+            }
+        }
+
+        const list = await this.downloadPlatformCertificates(config);
+        if (!list.length) {
+            return this.certCache?.list || [];
+        }
+
+        // 有效期取所有证书中最早的过期时间，保证任何一张临近过期都会触发重下
+        const expiresAt = Math.min(...list.map((c) => c.notAfter));
+        const entry = { list, expiresAt };
+        this.certCache = entry;
+
+        if (db) {
+            try {
+                await db
+                    .prepare(
+                        "INSERT INTO system_config (key, value, description, updated_at) VALUES (?, ?, ?, datetime('now')) " +
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')"
+                    )
+                    .bind(WX_CERT_CACHE_KEY, JSON.stringify(entry), '微信支付平台证书缓存（自动维护，勿手改）')
+                    .run();
+            } catch (error) {
+                console.error('[Wxpay] write cert cache error:', error);
+            }
+        }
+
+        return list;
+    }
+
+    /**
+     * GET /v3/certificates 下载并解密平台证书
+     */
+    private async downloadPlatformCertificates(config: PluginConfig): Promise<PlatformCert[]> {
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+        const nonce = generateNonce();
+        const url = '/v3/certificates';
+
+        const signature = await rsaSign(
+            { method: 'GET', url, timestamp, nonce, body: '' },
+            config.appSecret
+        );
+
+        const authorization =
+            'WECHATPAY2-SHA256-RSA2048 mchid="' + config.mchId +
+            '",nonce_str="' + nonce +
+            '",timestamp="' + timestamp +
+            '",signature="' + signature +
+            '",serial_no="' + config.serialNo + '"';
+
+        const response = await fetch(this.apiBase + url, {
+            method: 'GET',
+            headers: { Authorization: authorization, Accept: 'application/json' }
+        });
+
+        if (!response.ok) {
+            console.error('[Wxpay] download certificates failed: HTTP ' + response.status);
+            return [];
+        }
+
+        const data: any = await response.json();
+        const apiV3Key = (config.apiKey || '').padEnd(32, '0').slice(0, 32);
+        const aesKey = await crypto.subtle.importKey(
+            'raw',
+            new TextEncoder().encode(apiV3Key),
+            { name: 'AES-GCM' },
+            false,
+            ['decrypt']
+        );
+
+        const out: PlatformCert[] = [];
+        for (const item of data.data || []) {
+            try {
+                const enc = item.encrypt_certificate || {};
+                const decrypted = await crypto.subtle.decrypt(
+                    {
+                        name: 'AES-GCM',
+                        iv: new TextEncoder().encode(enc.nonce || ''),
+                        additionalData: new TextEncoder().encode(enc.associated_data || ''),
+                        tagLength: 128
+                    },
+                    aesKey,
+                    Uint8Array.from(atob(enc.ciphertext || ''), (c) => c.charCodeAt(0))
+                );
+                const pem = new TextDecoder().decode(decrypted);
+                const { notBefore, notAfter } = x509CertValidity(pem);
+                out.push({ serial: item.serial_no, pem, notBefore, notAfter });
+            } catch (error) {
+                console.error('[Wxpay] decrypt platform certificate error:', error);
+            }
+        }
+        return out;
+    }
+
     /**
      * 查询订单状态
      */
