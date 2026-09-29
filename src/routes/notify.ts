@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import { Env } from '../types/env';
 import { getPlugin } from '../plugins';
+import { decryptChannelConfig } from '../utils/crypto';
 import { getRequestLogMeta, headersToLogObject, logOrderEvent, logPaymentEvent, logWebhookEvent } from '../utils/logging';
 
 export const notifyRouter = new Hono<{ Bindings: Env }>();
@@ -40,7 +41,7 @@ notifyRouter.post('/alipay', async (c) => {
             return c.text('fail');
         }
         
-        const config = JSON.parse((channel as any).config || '{}');
+        const config = await decryptChannelConfig((channel as any).config, c.env.ENCRYPTION_KEY);
         
         // 获取插件并验证通知
         const plugin = getPlugin('alipay');
@@ -132,7 +133,7 @@ notifyRouter.post('/wxpay', async (c) => {
             return c.json({ code: 'FAIL', message: '通道不存在' });
         }
         
-        const config = JSON.parse((channel as any).config || '{}');
+        const config = await decryptChannelConfig((channel as any).config, c.env.ENCRYPTION_KEY);
         
         // 传递原始 headers 和 body 用于签名验证
         body._headers = {
@@ -274,7 +275,7 @@ const pluginNotifyHandler = async (c: any) => {
             return c.text('fail');
         }
 
-        const config = JSON.parse((channel as any).config || '{}');
+        const config = await decryptChannelConfig((channel as any).config, c.env.ENCRYPTION_KEY);
 
         // 获取插件并验证通知
         const plugin = getPlugin(pluginId);
