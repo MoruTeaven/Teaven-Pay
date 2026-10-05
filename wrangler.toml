@@ -16,6 +16,17 @@ DEFAULT_CURRENCY = "CNY"
 LOG_LEVEL = "info"
 ENABLE_CORS = "true"
 
+# 限流与登录防爆破（未配置时回退到 src/utils/throttleStore.ts 的默认值）
+# 通用 IP 限流：60 秒窗口内同一 IP 177 次
+RATE_LIMIT = "177"
+RATE_LIMIT_WINDOW = "60"
+# 登录接口 IP 限流：60 秒窗口内同一 IP 7 次
+LOGIN_RATE_LIMIT = "7"
+LOGIN_RATE_LIMIT_WINDOW = "60"
+# 登录失败：累计 7 次失败即临时锁定 907 秒（约 15 分钟）
+LOGIN_MAX_FAILURES = "7"
+LOGIN_LOCKOUT_SECONDS = "907"
+
 # D1 数据库配置
 [[d1_databases]]
 binding = "DB"
@@ -24,6 +35,9 @@ database_id = "7de39fde-b84c-46bd-bb0c-01004b6f5200"
 # preview_database_id = "16625207-21df-40f6-b5c0-01004b6f5200"
 
 # KV 命名空间配置 (用于缓存) - 暂时禁用
+# 未绑定时限流不会失效：计数自动降级到 D1(throttle_counters, 需执行
+# migrations/0005_throttle_counters.sql) → isolate 内存 Map。
+# 建议尽快创建 KV 并解除注释，以获得跨实例一致的限流计数。
 # [[kv_namespaces]]
 # binding = "CACHE"
 # id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

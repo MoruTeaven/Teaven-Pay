@@ -32,14 +32,15 @@ adminRouter.post('/login', async (c) => {
             'SELECT * FROM users WHERE username = ? AND role = ?'
         ).bind(username, 'admin').first();
 
+        // 凭据类失败返回 401（业务码保持原样兼容前端），登录守卫据此累计失败次数并触发临时锁定
         if (!user) {
-            return c.json({ code: -1, msg: '用户名或密码错误' });
+            return c.json({ code: -1, msg: '用户名或密码错误' }, 401);
         }
 
         // 验证密码
         const valid = await verifyPassword(password, (user as any).password_hash, (user as any).salt);
         if (!valid) {
-            return c.json({ code: -1, msg: '用户名或密码错误' });
+            return c.json({ code: -1, msg: '用户名或密码错误' }, 401);
         }
 
         // 检查状态

@@ -235,6 +235,18 @@ function normalizeSignType(signType: string = 'md5'): string {
 }
 
 /**
+ * 服务端权威签名类型（安全整改：sign_type 不再接受客户端覆盖）
+ *
+ * 只认商户密钥记录里的 api_key_type，未配置时按 hmac-sha256 处理。
+ * 客户端传来的 sign_type 一律忽略——否则攻击者可把 hmac-sha256 降级成
+ * md5（当前实现是 32 位 simpleHash，可离线穷举碰撞），造成签名校验绕过。
+ */
+export function resolveServerSignType(record?: { api_key_type?: string | null } | null): string {
+    const configured = (record?.api_key_type ?? '').trim();
+    return configured ? normalizeSignType(configured) : 'hmac-sha256';
+}
+
+/**
  * 生成 MD5 兼容签名
  */
 export function generateSign(params: Record<string, any>, apiKey: string): string {

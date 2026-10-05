@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { Env } from '../types/env';
 import { generateUUIDv7 } from '../utils/uuid';
-import { verifySignAsync } from '../utils/crypto';
+import { resolveServerSignType, verifySignAsync } from '../utils/crypto';
 import { getPlugin } from '../plugins';
 import { getSiteUrl } from '../utils/site';
 import { getRequestLogMeta, logOrderEvent, logPaymentEvent } from '../utils/logging';
@@ -30,7 +30,7 @@ payRouter.post('/submit', async (c) => {
     const name = body.name as string;
     const money = body.money as string;
     const sign = body.sign as string;
-    const requestedSignType = body.sign_type as string;
+    // sign_type 由服务端按商户密钥记录决定，客户端传入的 sign_type 不参与验签
     const param = body.param as string;
     const clientIp = body.clientip as string;
     const device = body.device as string || 'pc';
@@ -88,7 +88,7 @@ payRouter.post('/submit', async (c) => {
             param: param || ''
         };
         
-        const signType = requestedSignType || (apiKeyRecord as any).api_key_type || 'hmac-sha256';
+        const signType = resolveServerSignType(apiKeyRecord as { api_key_type?: string | null } | null);
         const isValidSign = await verifySignAsync(signParams, (apiKeyRecord as any).api_key, sign, signType);
         if (!isValidSign) {
             return c.json({ code: -2, msg: '签名验证失败' });
@@ -473,7 +473,7 @@ payRouter.get('/query', async (c) => {
     const outTradeNo = c.req.query('out_trade_no');
     const key = c.req.query('key');
     const sign = c.req.query('sign');
-    const requestedSignType = c.req.query('sign_type');
+    // sign_type 不再从客户端读取，统一由服务端密钥记录决定
     
     if (!pid) return c.json({ code: -1, msg: '商户ID不能为空' });
     if (!tradeNo && !outTradeNo) return c.json({ code: -1, msg: '订单号不能为空' });
@@ -504,7 +504,7 @@ payRouter.get('/query', async (c) => {
             if (tradeNo) signParams.trade_no = tradeNo;
             if (outTradeNo) signParams.out_trade_no = outTradeNo;
             
-            const signType = requestedSignType || (apiKeyRecord as any).api_key_type || 'hmac-sha256';
+            const signType = resolveServerSignType(apiKeyRecord as { api_key_type?: string | null } | null);
             const isValid = await verifySignAsync(signParams, (apiKeyRecord as any).api_key, sign, signType);
             if (!isValid) {
                 return c.json({ code: -2, msg: '签名验证失败' });
@@ -687,7 +687,7 @@ payRouter.post('/refund', async (c) => {
             const signParams: Record<string, string> = { pid, money: amount };
             if (tradeNo) signParams.trade_no = tradeNo;
             if (outTradeNo) signParams.out_trade_no = outTradeNo;
-            const signType = (body.sign_type as string) || (apiKeyRecord as any).api_key_type || 'hmac-sha256';
+            const signType = resolveServerSignType(apiKeyRecord as { api_key_type?: string | null } | null);
             const isValid = await verifySignAsync(signParams, (apiKeyRecord as any).api_key, sign, signType);
             if (!isValid) return c.json({ code: -2, msg: '签名验证失败' });
         } else if (key) {
@@ -872,7 +872,7 @@ payRouter.post('/close', async (c) => {
             const signParams: Record<string, string> = { pid };
             if (tradeNo) signParams.trade_no = tradeNo;
             if (outTradeNo) signParams.out_trade_no = outTradeNo;
-            const signType = (body.sign_type as string) || (apiKeyRecord as any).api_key_type || 'hmac-sha256';
+            const signType = resolveServerSignType(apiKeyRecord as { api_key_type?: string | null } | null);
             const isValid = await verifySignAsync(signParams, (apiKeyRecord as any).api_key, sign, signType);
             if (!isValid) return c.json({ code: -2, msg: '签名验证失败' });
         } else if (key) {

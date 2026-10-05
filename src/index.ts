@@ -18,8 +18,12 @@ import { apiKeyRouter } from './routes/api-key';
 
 // 中间件
 import { authMiddleware } from './middleware/auth';
-import { rateLimitMiddleware } from './middleware/rateLimit';
+import { rateLimitMiddleware, loginRateLimitMiddleware } from './middleware/rateLimit';
+import { adminLoginGuard, merchantLoginGuard } from './middleware/loginGuard';
 import { errorHandler } from './middleware/errorHandler';
+
+// 限流存储（用于健康检查暴露当前生效的计数后端）
+import { getThrottleStore } from './utils/throttleStore';
 
 // 类型
 import { Env } from './types/env';
@@ -48,12 +52,19 @@ app.use('*', async (c, next) => {
 // 错误处理
 app.onError(errorHandler);
 
+// 登录接口防护（安全整改：原 rateLimitMiddleware 只 import 未挂载，登录可被无限爆破）
+// 顺序：通用 IP 限流 → 登录更严格的 IP 限流 → 失败计数 + 临时锁定
+app.use('/api/admin/login', rateLimitMiddleware, loginRateLimitMiddleware, adminLoginGuard);
+app.use('/api/merchant/login', rateLimitMiddleware, loginRateLimitMiddleware, merchantLoginGuard);
+
 // 健康检查
 app.get('/api/health', (c) => {
     return c.json({
         status: 'ok',
         version: '1.0.0',
         timestamp: new Date().toISOString(),
+        // 限流计数实际使用的存储后端：kv / d1 / memory（KV 未绑定时自动降级）
+        throttleBackend: getThrottleStore(c.env).getActiveBackend(),
     });
 });
 
