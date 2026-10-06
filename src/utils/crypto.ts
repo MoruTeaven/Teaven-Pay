@@ -4,6 +4,7 @@
  */
 
 import md5Lib from 'md5';
+import { timingSafeEqual, timingSafeEqualSign } from './constantTime';
 
 /**
  * 生成随机字符串
@@ -216,7 +217,7 @@ function buildSignString(params: Record<string, any>): string {
 /**
  * 签名类型归一化（sha256/hmacsha256/hmac-sha256 → hmac-sha256；下划线 → 连字符）
  */
-function normalizeSignType(signType: string = 'md5'): string {
+function normalizeSignType(signType: string = 'hmac-sha256'): string {
     const normalized = signType.toLowerCase().replace(/_/g, '-');
     if (normalized === 'sha256' || normalized === 'hmacsha256' || normalized === 'hmac-sha256') {
         return 'hmac-sha256';
@@ -226,6 +227,10 @@ function normalizeSignType(signType: string = 'md5'): string {
 
 /**
  * 生成 MD5 兼容签名
+ *
+ * @deprecated 已废弃：MD5 为弱哈希且与易支付生态的标准 MD5 拼串存在差异，
+ * 现统一使用 hmac-sha256。此函数仅保留给存量 MD5 商户验签使用，
+ * 新签名一律走 generateSignAsync(..., 'hmac-sha256')。
  */
 export function generateSign(params: Record<string, any>, apiKey: string): string {
     const signStr = apiKey + buildSignString(params) + apiKey;
@@ -233,7 +238,7 @@ export function generateSign(params: Record<string, any>, apiKey: string): strin
 }
 
 /**
- * 生成签名（支持 md5 / hmac-sha256）
+ * 生成签名（默认 hmac-sha256；md5 分支已废弃，仅存量兼容保留）
  */
 export async function generateSignAsync(params: Record<string, any>, apiKey: string, signType: string = 'hmac-sha256'): Promise<string> {
     const normalized = normalizeSignType(signType);
@@ -248,17 +253,22 @@ export async function generateSignAsync(params: Record<string, any>, apiKey: str
 
 /**
  * 校验 MD5 签名（非 md5 类型一律 false）
+ *
+ * @deprecated 仅用于存量 MD5 商户兼容，新接入请使用 verifySignAsync。
  */
-export function verifySign(params: Record<string, any>, apiKey: string, sign: string, signType: string = 'md5'): boolean {
+export function verifySign(params: Record<string, any>, apiKey: string, sign: string, signType: string = 'hmac-sha256'): boolean {
     if (normalizeSignType(signType) !== 'md5') {
         return false;
     }
-    const expectedSign = generateSign(params, apiKey);
-    return expectedSign === sign.toLowerCase();
+    if (typeof sign !== 'string' || sign === '') {
+        return false;
+    }
+    // 常数时间比较，避免通过响应时间逐字节爆破签名
+    return timingSafeEqualSign(generateSign(params, apiKey), sign);
 }
 
 /**
- * 校验签名（异步，支持 md5 / hmac-sha256；rsa 返回 false）
+ * 校验签名（异步；md5 仅保留存量兼容，hmac-sha256 为默认；rsa 返回 false）
  */
 export async function verifySignAsync(params: Record<string, any>, apiKey: string, sign: string, signType: string = 'hmac-sha256'): Promise<boolean> {
     const normalized = normalizeSignType(signType);
@@ -266,8 +276,12 @@ export async function verifySignAsync(params: Record<string, any>, apiKey: strin
         return false;
     }
     try {
+        if (typeof sign !== 'string' || sign === '') {
+            return false;
+        }
+        // 常数时间比较，避免通过响应时间逐字节爆破签名
         const expectedSign = await generateSignAsync(params, apiKey, normalized);
-        return expectedSign === sign.toLowerCase();
+        return timingSafeEqualSign(expectedSign, sign);
     } catch (error) {
         console.error('Verify sign error:', error);
         return false;
@@ -309,8 +323,12 @@ export async function hashPassword(password: string, salt?: string): Promise<{ h
  * 校验密码
  */
 export async function verifyPassword(password: string, hash: string, salt: string): Promise<boolean> {
+    if (typeof hash !== 'string' || hash === '') {
+        return false;
+    }
     const { hash: computedHash } = await hashPassword(password, salt);
-    return computedHash === hash;
+    // 常数时间比较，避免通过响应时间逐字节爆破密码哈希
+    return timingSafeEqual(computedHash, hash);
 }
 
 /**

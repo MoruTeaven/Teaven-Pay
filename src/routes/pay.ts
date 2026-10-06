@@ -6,6 +6,8 @@ import { Hono } from 'hono';
 import { Env } from '../types/env';
 import { generateUUIDv7 } from '../utils/uuid';
 import { verifySignAsync } from '../utils/crypto';
+import { isTimestampFresh, verifyCashierSign, verifyCashierTicket } from '../utils/cashierAuth';
+import { isSafeOutboundUrl } from '../utils/netSecurity';
 import { getPlugin } from '../plugins';
 import { getSiteUrl } from '../utils/site';
 import { getRequestLogMeta, logOrderEvent, logPaymentEvent } from '../utils/logging';
@@ -47,6 +49,12 @@ payRouter.post('/submit', async (c) => {
     const amount = parseFloat(money);
     if (isNaN(amount) || amount <= 0) {
         return c.json({ code: -1, msg: '金额不合法' });
+    }
+
+    // 异步通知地址出站安全校验 (防止 SSRF)
+    const notifyUrlGuard = await isSafeOutboundUrl(notifyUrl);
+    if (!notifyUrlGuard.ok) {
+        return c.json({ code: -1, msg: '通知地址不合法' });
     }
     
     // 订单号格式验证
@@ -215,8 +223,15 @@ payRouter.post('/submit', async (c) => {
 });
 
 /**
- * 收银台下单 - 无需签名，供公开收银台页面使用
+ * 收银台下单
  * POST /api/pay/cashier
+ *
+ * 认证方式（二选一）：
+ *  A. 收银台页面模式：携带服务端签发的 ticket + 以 ticket 为密钥的 sign
+ *  B. 商户服务端直连：不带 ticket，直接以商户 API 密钥签名
+ *
+ * 两者都要求 sign = HMAC-SHA256(key, amount=<>&merchant_id=<>&timestamp=<>&type=<>[&name=<>])，
+ * 且 timestamp 与服务器时间偏差在 5 分钟内，防止重放。
  */
 payRouter.post('/cashier', async (c) => {
     const body = await c.req.parseBody();
@@ -227,14 +242,24 @@ payRouter.post('/cashier', async (c) => {
     const amountStr = body.amount as string;
     const type = body.type as string;
     const name = body.name as string || '在线收银台付款';
+    const ticket = body.ticket as string;
+    const timestamp = body.timestamp as string;
+    const sign = body.sign as string;
 
     if (!merchantId) return c.json({ code: -1, msg: '商户ID不能为空' });
     if (!amountStr) return c.json({ code: -1, msg: '金额不能为空' });
     if (!type) return c.json({ code: -1, msg: '支付方式不能为空' });
+    if (!timestamp) return c.json({ code: -1, msg: '时间戳不能为空' });
+    if (!sign) return c.json({ code: -1, msg: '签名不能为空' });
 
     const amount = parseFloat(amountStr);
     if (isNaN(amount) || amount < 0.01) {
         return c.json({ code: -1, msg: '金额不合法' });
+    }
+
+    // 时间戳新鲜度校验（放重放）
+    if (!isTimestampFresh(timestamp)) {
+        return c.json({ code: -2, msg: '请求已过期，请刷新收银台页面' });
     }
 
     try {
@@ -244,6 +269,41 @@ payRouter.post('/cashier', async (c) => {
 
         if (!user) return c.json({ code: -3, msg: '商户不存在' });
         if (user.status !== 1) return c.json({ code: -2, msg: '商户已被封禁' });
+
+        const apiKeyRecord = await env.DB.prepare(
+            'SELECT api_key, api_key_type FROM api_keys WHERE user_id = ? AND status = 1 ORDER BY created_at LIMIT 1'
+        ).bind(merchantId).first();
+
+        if (!apiKeyRecord) return c.json({ code: -3, msg: '商户未配置 API 密钥' });
+
+        const apiKey = (apiKeyRecord as any).api_key as string;
+
+        // 1) 票据校验（收银台页面模式）
+        let signingKey = apiKey;
+        if (ticket) {
+            const ticketPayload = await verifyCashierTicket(ticket, apiKey);
+            if (!ticketPayload) {
+                return c.json({ code: -2, msg: '收银台票据无效或已过期' });
+            }
+            // 票据与下单商户必须一致，防止一张票据给任意商户下单
+            if (ticketPayload.merchantId !== merchantId) {
+                return c.json({ code: -2, msg: '收银台票据与商户不匹配' });
+            }
+            signingKey = ticket;
+        }
+
+        // 2) 下单签名校验
+        const signParams = {
+            merchant_id: merchantId,
+            amount: amount.toFixed(2),
+            type,
+            timestamp,
+            name,
+        };
+        const isValidSign = await verifyCashierSign(signParams, signingKey, sign);
+        if (!isValidSign) {
+            return c.json({ code: -2, msg: '签名验证失败' });
+        }
 
         const channel = await env.DB.prepare(
             'SELECT * FROM channels WHERE payment_type_id = ? AND status = 1 ORDER BY sort_order LIMIT 1'

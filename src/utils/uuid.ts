@@ -64,20 +64,20 @@ export function extractTimestamp(uuid: string): number {
 
 /**
  * 生成简单的唯一 ID (用于订单号等)
- * 格式: 时间戳 + 随机数
+ * 格式: UUID v7
  */
 export function generateTradeNo(): string {
-    const now = Date.now();
-    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
-    return `${now}${random}`;
+    return generateUUIDv7();
 }
 
 /**
  * 生成退款单号
- * 格式: REF_时间戳_随机数
+ * 格式: REF_<UUID v7>
+ *
+ * 说明: 退款单号会作为退款查询与对账的凭据对外暴露，
+ * 原实现使用 Math.random 生成 5 位随机数，可被枚举预测；
+ * 改为 UUID v7（时间戳 + 密码学随机）保证不可预测且可排序。
  */
 export function generateRefundNo(): string {
-    const now = Date.now();
-    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
-    return `REF_${now}_${random}`;
+    return `REF_${generateUUIDv7()}`;
 }

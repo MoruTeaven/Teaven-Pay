@@ -14,6 +14,7 @@ import {
     JsapiParams
 } from '../types/plugin';
 import { rsaSign, generateNonce, x509CertToPublicKey, x509CertValidity } from '../utils/crypto';
+import { generateRefundNo } from '../utils/uuid';
 
 /** 微信 v3 平台证书（含 DER 解析出的有效期，用于到期自动刷新） */
 interface PlatformCert {
@@ -439,7 +440,8 @@ export class WxpayPlugin implements PaymentPlugin {
      */
     async refund(order: OrderInfo, amount: number, config: PluginConfig): Promise<RefundResult> {
         try {
-            const refundNo = `REF_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            // 微信 out_refund_no 字符集有限制，去掉 UUID 连字符
+    const refundNo = generateRefundNo().replace(/-/g, '');
             const timestamp = Math.floor(Date.now() / 1000).toString();
             const nonce = generateNonce();
             

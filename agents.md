@@ -23,7 +23,7 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 - `src/plugins/`：支付插件实现与注册表，新增插件需实现 `PaymentPlugin`
 - `src/middleware/`：认证、限流、错误处理等中间件
 - `src/types/`：Cloudflare 绑定、数据库行、支付插件类型定义
-- `src/utils/`：签名、密码哈希、AES、UUID 等工具函数
+- `src/utils/`：签名、密码哈希、AES、UUID 等工具函数,  - `constantTime.ts`：常数时间字符串比较,  - `netSecurity.ts`：出站 URL 安全（SSRF）校验与 DNS 二次校验,  - `cors.ts`：`ALLOWED_ORIGINS` 白名单解析与来源判定,  - `cashierAuth.ts`：公开收银台下单票据与签名
 - `migrations/`：D1 初始化和修复 SQL
 - `docs/`：API、部署、插件开发和后台设计文档
 - `admin/index.html`：独立管理后台静态页面/原型，当前主要后台页面也内联在 `src/index.ts`
@@ -89,10 +89,31 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 ## 签名与安全注意事项
 
 - 商户 API 当前通过 `src/utils/crypto.ts` 的 `verifySignAsync` 校验签名。
-- 默认签名类型偏向 `hmac-sha256`，同时保留 MD5 兼容模式。
-- `md5`/`simpleHash` 实现有兼容风险，生产级易支付 MD5 兼容需求需要谨慎处理。
-- 管理后台使用 JWT，`JWT_SECRET` 必须通过 Wrangler secret 或本地 `.dev.vars` 提供。
+- 签名类型统一为 `hmac-sha256`；`md5` 已废弃，仅保留存量商户验签兼容，不再允许新建 MD5 密钥。
 - 密码哈希使用 PBKDF2，迭代次数为 `77777`。
+- 密码哈希与签名比较一律走 `src/utils/constantTime.ts` 的常数时间比较，禁止使用 `===`。
+- 管理后台使用 JWT，`JWT_SECRET` 必须通过 Wrangler secret 或本地 `.dev.vars` 提供。
+
+### 出站请求安全（SSRF）
+
+- 所有出站 URL（商户 `notify_url`、`/api/pay/submit` 传入的通知地址）都要过 `src/utils/netSecurity.ts`。
+- 仅允许 `https`；拒绝 localhost、`.local`、`.internal`、云元数据域名与 DNS 别名服务（nip.io 等）。
+- 覆盖 `127.0.0.0/8` 全段、`169.254.0.0/16`、`10/8`、`172.16/12`、`192.168/16`、`100.64/10` 及 IPv6 保留段。
+- DNS 解析后二次校验；解析失败按 fail-closed 拒绝。
+
+### CORS
+
+- 由 `src/utils/cors.ts` 解析 `ALLOWED_ORIGINS`（逗号分隔，支持 `https://*.example.com` 子域通配）。
+- **未配置 `ALLOWED_ORIGINS` 时不允许任何跨源**，不再回落 `*`。
+- 站点页面均为同源直出，不需要跨源；确需跨源时在 `wrangler.toml` 显式配置白名单。
+
+### 公开收银台下单认证
+
+- `POST /api/pay/cashier` 需要签名：`ticket`（可选）+ `timestamp` + `sign`。
+- 票据由 `GET /pay/:merchantId` 页面服务端用商户 API 密钥签发，有效期 10 分钟。
+- 签名 = HMAC-SHA256(密钥, `amount=..&merchant_id=..&timestamp=..&type=..[&name=..]`)，字段名按字典序拼接。
+- 带 `ticket` 时以票据原文为密钥（页面模式）；不带 `ticket` 时以商户 API 密钥为密钥（服务端直连）。
+- `timestamp` 与服务器时间偏差超过 5 分钟拒绝，防重放。
 
 ## 校验建议
 
@@ -100,6 +121,7 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 
 ```bash
 npm run typecheck
+npm run test
 ```
 
 涉及 API、数据库或支付流程时，尽量补充或手动验证：

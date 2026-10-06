@@ -13,6 +13,7 @@ import {
     RefundStatus
 } from '../types/plugin';
 import { generateNonce } from '../utils/crypto';
+import { generateRefundNo } from '../utils/uuid';
 import md5 from 'md5';
 
 export class XunhupayPlugin implements PaymentPlugin {
@@ -255,7 +256,7 @@ export class XunhupayPlugin implements PaymentPlugin {
             if (data.errcode === 0) {
                 return {
                     success: true,
-                    refundNo: data.out_refund_no || `REF_${Date.now()}`,
+                    refundNo: data.out_refund_no || generateRefundNo().replace(/-/g, ''),
                     thirdPartyRefundNo: data.transaction_id
                 };
             } else {
