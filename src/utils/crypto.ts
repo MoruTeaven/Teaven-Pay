@@ -3,6 +3,8 @@
  * 注意: 本文件按线上运行行为 1:1 重建（源对象损坏恢复）
  */
 
+import md5Lib from 'md5';
+
 /**
  * 生成随机字符串
  */
@@ -18,18 +20,6 @@ export function generateNonce(length: number = 32): string {
 export async function generateApiKey(): Promise<string> {
     const { generateUUIDv7 } = await import('./uuid');
     return generateUUIDv7().replace(/-/g, '');
-}
-
-/**
- * MD5 兼容实现（SubtleCrypto 无 MD5，使用 SHA-256 前 16 字节替代）
- * 注意: 实际生产环境应使用第三方 MD5 库
- */
-export async function md5(message: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(message);
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hash)).slice(0, 16);
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -239,7 +229,7 @@ function normalizeSignType(signType: string = 'md5'): string {
  */
 export function generateSign(params: Record<string, any>, apiKey: string): string {
     const signStr = apiKey + buildSignString(params) + apiKey;
-    return simpleHash(signStr).toLowerCase();
+    return md5Lib(signStr);
 }
 
 /**
@@ -282,20 +272,6 @@ export async function verifySignAsync(params: Record<string, any>, apiKey: strin
         console.error('Verify sign error:', error);
         return false;
     }
-}
-
-/**
- * 简化的哈希函数 (用于替代 MD5)
- * 注意: 生产环境应使用完整的 MD5 实现
- */
-function simpleHash(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash).toString(16).padStart(32, '0');
 }
 
 /**
