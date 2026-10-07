@@ -235,6 +235,7 @@ export class WxpayPlugin implements PaymentPlugin {
                     outTradeNo,
                     thirdPartyTradeNo: data.transaction_id,
                     status: 'pending',
+                    paidAmount: paidAmountFromCents(data.amount),
                     buyer: data.payer?.openid,
                     response: JSON.stringify({ code: 'SUCCESS', message: 'OK' })
                 };
@@ -246,6 +247,7 @@ export class WxpayPlugin implements PaymentPlugin {
                 outTradeNo,
                 thirdPartyTradeNo: data.transaction_id,
                 status: 'success',
+                paidAmount: paidAmountFromCents(data.amount),
                 buyer: data.payer?.openid,
                 paidAt: data.success_time,
                 response: JSON.stringify({ code: 'SUCCESS', message: 'OK' })
@@ -424,6 +426,7 @@ export class WxpayPlugin implements PaymentPlugin {
             return {
                 status,
                 thirdPartyTradeNo: data.transaction_id,
+                paidAmount: paidAmountFromCents(data.amount),
                 buyer: data.payer?.openid,
                 paidAt: data.success_time
             };
@@ -544,3 +547,15 @@ export class WxpayPlugin implements PaymentPlugin {
         }
     }
 }
+
+/**
+ * 微信支付金额字段单位为「分」，统一换算成元。
+ * 缺失或非法时返回 undefined，由入账层按「无法核对」拒绝入账。
+ */
+function paidAmountFromCents(amount: any): number | undefined {
+    if (!amount || typeof amount !== 'object') return undefined;
+    const cents = Number(amount.payer_total ?? amount.total);
+    if (!Number.isFinite(cents) || cents <= 0) return undefined;
+    return Math.round(cents) / 100;
+}
+

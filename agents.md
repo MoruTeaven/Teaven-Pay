@@ -85,6 +85,7 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 3. 在 `src/plugins/index.ts` 注册插件 ID。
 4. 在迁移或种子数据中添加 `payment_types` 和 `channels` 配置。
 5. 确保回调验证失败时不会更新订单，成功回调重复到达时不会重复入账。
+6. 在 `verifyNotify()` 和 `queryOrder()` 返回值中回填实付金额 `paidAmount`（`src/types/plugin.ts`）。入账统一走 `src/utils/credit.ts` 的 `creditOrder()`：金额按「分」比对，容差 `AMOUNT_TOLERANCE_CENTS`（±0.70 元），超容差直接拒绝入账；渠道未回传金额时无法核对，会按订单额放行并写一条 `payment_logs` 的 `amount_verified=false` warning 流水——即该笔入账不经过金额核对。若插件对接的是允许买家改价的渠道（易支付类），必须回传实付金额。
 
 ## 签名与安全注意事项
 

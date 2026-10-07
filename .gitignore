@@ -78,3 +78,6 @@ coverage/
 .temp/
 # Agent cache
 .codebuddy/
+# Test scratch directories
+# (compile output, runtime DBs etc)
+tests/.tmp/

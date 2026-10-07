@@ -3,10 +3,11 @@
  */
 
 import { Hono } from 'hono';
-import { Env } from '../types/env';
+import { Env, OrderRow } from '../types/env';
 import { getPlugin } from '../plugins';
 import { decryptChannelConfig } from '../utils/crypto';
 import { getRequestLogMeta, headersToLogObject, logOrderEvent, logPaymentEvent, logWebhookEvent } from '../utils/logging';
+import { CREDIT_OUTCOME, CREDIT_SOURCE, CreditOutcome, creditOrder } from '../utils/credit';
 
 export const notifyRouter = new Hono<{ Bindings: Env }>();
 
@@ -90,7 +91,8 @@ notifyRouter.post('/alipay', async (c) => {
                 outTradeNo: result.outTradeNo,
                 thirdPartyTradeNo: result.thirdPartyTradeNo,
                 buyer: result.buyer,
-                paidAt: result.paidAt
+                paidAt: result.paidAt,
+                paidAmount: result.paidAmount
             });
         }
         
@@ -201,7 +203,8 @@ notifyRouter.post('/wxpay', async (c) => {
                 outTradeNo: result.outTradeNo,
                 thirdPartyTradeNo: result.thirdPartyTradeNo,
                 buyer: result.buyer,
-                paidAt: result.paidAt
+                paidAt: result.paidAt,
+                paidAmount: result.paidAmount
             });
         }
         
@@ -322,7 +325,8 @@ const pluginNotifyHandler = async (c: any) => {
                 outTradeNo: result.outTradeNo,
                 thirdPartyTradeNo: result.thirdPartyTradeNo,
                 buyer: result.buyer,
-                paidAt: result.paidAt
+                paidAt: result.paidAt,
+                paidAmount: result.paidAmount
             });
         }
 
@@ -338,6 +342,13 @@ notifyRouter.get('/:plugin', pluginNotifyHandler);
 
 /**
  * 处理支付成功
+ *
+ * 幂等与金额核对全部交给 creditOrder()：
+ *  - 本函数的 SELECT 只是取入账前快照，不再充当幂等判据（原实现依赖它，
+ *    与后面的无守卫 UPDATE 之间存在竞态窗口，并发回调/回调+轮询交错会双倍入账）；
+ *  - creditOrder() 先用「回调实付金额 == 订单金额」（容差 0）核对，不一致只记日志不入账；
+ *  - 再用 UPDATE orders ... WHERE id = ? AND status = 0 做状态翻转 CAS，
+ *    只有 meta.changes > 0 的那一次才会执行余额入账（余额+统计+流水在同一 D1 事务内）。
  */
 async function handlePaymentSuccess(
     env: Env,
@@ -347,79 +358,45 @@ async function handlePaymentSuccess(
         thirdPartyTradeNo?: string;
         buyer?: string;
         paidAt?: string;
+        paidAmount?: number | null;
     }
-) {
-    const now = new Date().toISOString();
-    
-    // 查询订单
+): Promise<CreditOutcome> {
+    // 入账前快照：不再限制 status = 0，便于区分「不存在 / 已入账 / 已关闭」并留痕
     const order = await env.DB.prepare(
-        'SELECT * FROM orders WHERE id = ? AND status = 0'
-    ).bind(data.tradeNo).first();
-    
+        'SELECT * FROM orders WHERE id = ?'
+    ).bind(data.tradeNo).first<OrderRow>();
+
     if (!order) {
-        console.log(`Order not found or already paid: ${data.tradeNo}`);
-        return;
+        console.log(`Order not found: ${data.tradeNo}`);
+        return CREDIT_OUTCOME.NOT_FOUND;
     }
-    
-    // 更新订单状态
-    await env.DB.prepare(`
-        UPDATE orders SET 
-            status = 1,
-            api_trade_no = ?,
-            buyer = ?,
-            paid_at = ?,
-            notify_status = 0
-        WHERE id = ?
-    `).bind(
-        data.thirdPartyTradeNo || '',
-        data.buyer || '',
-        data.paidAt || now,
-        data.tradeNo
-    ).run();
-    
-    // 更新商户余额
-    const amount = (order as any).amount;
-    const fee = (order as any).fee || 0;
-    const profit = amount - fee;
-    
-    await env.DB.prepare(`
-        UPDATE users SET 
-            balance = balance + ?,
-            today_income = today_income + ?,
-            total_income = total_income + ?,
-            today_orders = today_orders + 1,
-            total_orders = total_orders + 1
-        WHERE id = ?
-    `).bind(profit, profit, profit, (order as any).user_id).run();
 
-    await logOrderEvent(env, {
-        orderId: data.tradeNo,
-        userId: (order as any).user_id,
-        outTradeNo: (order as any).out_trade_no,
-        action: 'paid',
-        fromStatus: 0,
-        toStatus: 1,
-        amount,
-        detail: { source: 'channel_notify', third_party_trade_no: data.thirdPartyTradeNo || '' },
-    });
+    if (order.status !== 0) {
+        // 0 之外的状态说明已被轮询路径/人工/上一次回调处理过，直接确认为重复通知
+        console.log(`Order already settled, skip credit: ${data.tradeNo} (status=${order.status})`);
+        return CREDIT_OUTCOME.DUPLICATE;
+    }
 
-    await logPaymentEvent(env, {
-        orderId: data.tradeNo,
-        userId: (order as any).user_id,
-        channelId: (order as any).channel_id,
-        plugin: (order as any).plugin,
-        direction: 'internal',
-        action: 'notify_payment_success',
-        status: 'success',
-        amount,
-        thirdPartyTradeNo: data.thirdPartyTradeNo || null,
-        responseData: { buyer: data.buyer || '', paid_at: data.paidAt || now },
-    });
-    
-    // 发送异步通知给商户
-    await sendMerchantNotification(env, order as any);
-    
-    console.log(`Payment success: ${data.tradeNo}`);
+    const result = await creditOrder(
+        env,
+        order,
+        {
+            tradeNo: data.tradeNo,
+            thirdPartyTradeNo: data.thirdPartyTradeNo,
+            buyer: data.buyer,
+            paidAt: data.paidAt,
+            paidAmount: data.paidAmount,
+        },
+        CREDIT_SOURCE.CHANNEL_NOTIFY
+    );
+
+    if (result.outcome === CREDIT_OUTCOME.CREDITED) {
+        // 只有本次真正抢到入账时才通知商户，重复回调不会重复推送
+        await sendMerchantNotification(env, order as any);
+        console.log(`Payment success: ${data.tradeNo}`);
+    }
+
+    return result.outcome;
 }
 
 /**

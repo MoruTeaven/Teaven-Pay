@@ -3,12 +3,13 @@
  */
 
 import { Hono } from 'hono';
-import { Env } from '../types/env';
+import { Env, OrderRow } from '../types/env';
 import { generateUUIDv7 } from '../utils/uuid';
 import { resolveServerSignType, verifySignAsync, decryptChannelConfig } from '../utils/crypto';
 import { getPlugin } from '../plugins';
 import { getSiteUrl } from '../utils/site';
 import { getRequestLogMeta, logOrderEvent, logPaymentEvent } from '../utils/logging';
+import { CREDIT_OUTCOME, CREDIT_SOURCE, creditOrder } from '../utils/credit';
 
 export const payRouter = new Hono<{ Bindings: Env }>();
 
@@ -390,48 +391,48 @@ payRouter.get('/status/:tradeNo', async (c) => {
 
                     // 如果查询到已支付，更新订单状态
                     if (orderStatus.status === 'paid') {
-                        const now = new Date().toISOString();
-                        await env.DB.prepare(`
-                            UPDATE orders SET
-                                status = 1,
-                                api_trade_no = ?,
-                                paid_at = ?,
-                                notify_status = 0
-                            WHERE id = ? AND status = 0
-                        `).bind(
-                            orderStatus.thirdPartyTradeNo || '',
-                            orderStatus.paidAt || now,
-                            tradeNo
-                        ).run();
+                        // 轮询路径与回调路径共用同一个入账单元：
+                        // 金额核对 -> UPDATE orders ... WHERE id=? AND status=0 状态翻转 CAS
+                        // -> meta.changes>0 才在单个 D1 事务(batch)里加余额与统计，
+                        // 因此「回调 + 轮询」并发也只会入账一次。
+                        const credit = await creditOrder(
+                            env,
+                            order as OrderRow,
+                            {
+                                tradeNo,
+                                thirdPartyTradeNo: orderStatus.thirdPartyTradeNo,
+                                buyer: orderStatus.buyer,
+                                paidAt: orderStatus.paidAt,
+                                paidAmount: orderStatus.paidAmount,
+                            },
+                            CREDIT_SOURCE.STATUS_POLL
+                        );
 
-                        // 更新商户余额
-                        const fee = order.fee || 0;
-                        const profit = order.amount - fee;
-                        await env.DB.prepare(`
-                            UPDATE users SET
-                                balance = balance + ?,
-                                today_income = today_income + ?,
-                                total_income = total_income + ?,
-                                today_orders = today_orders + 1,
-                                total_orders = total_orders + 1
-                            WHERE id = ?
-                        `).bind(profit, profit, profit, order.user_id).run();
+                        if (credit.outcome === CREDIT_OUTCOME.CREDITED || credit.outcome === CREDIT_OUTCOME.DUPLICATE) {
+                            // DUPLICATE = 已被回调/其它轮询入账，只回报状态，绝不重复加钱
+                            return c.json({
+                                code: 1,
+                                status: 1,
+                                msg: '已支付'
+                            });
+                        }
 
-                        await logOrderEvent(env, {
-                            orderId: tradeNo,
-                            userId: order.user_id,
-                            outTradeNo: order.out_trade_no,
-                            action: 'paid',
-                            fromStatus: 0,
-                            toStatus: 1,
-                            amount: order.amount,
-                            detail: { source: 'status_poll', third_party_trade_no: orderStatus.thirdPartyTradeNo || '' },
-                        });
+                        if (credit.outcome === CREDIT_OUTCOME.AMOUNT_MISMATCH) {
+                            // 渠道报已支付但实付金额与订单不一致：拒绝入账，订单保持未支付等待对账
+                            console.error(`[Pay/status] amount mismatch, credit rejected: ${tradeNo} (${credit.reason})`);
+                            return c.json({
+                                code: 1,
+                                status: order.status,
+                                msg: '未支付'
+                            });
+                        }
 
+                        // 数据库异常：本次不入账，等渠道重试回调时再来一次
+                        console.error(`[Pay/status] credit transaction failed: ${tradeNo} (${credit.reason})`);
                         return c.json({
                             code: 1,
-                            status: 1,
-                            msg: '已支付'
+                            status: order.status,
+                            msg: '未支付'
                         });
                     }
                 }
