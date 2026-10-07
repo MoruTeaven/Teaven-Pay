@@ -1,0 +1,24 @@
+-- 0005: 渠道配置加密迁移记录
+-- ============================================================
+-- 背景: channels.config 原为明文 JSON（appSecret/private_key 等
+--       渠道密钥裸奔），现改为 AES-GCM 加密存储。
+--
+-- 注意: AES-GCM 加密依赖 Web Crypto 运行时（crypto.subtle），
+--       无法用纯 SQL 完成。本文件仅作迁移记录，无可执行 SQL。
+--
+-- 迁移步骤:
+-- 1. 生成 32 字节随机密钥:
+--      node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+-- 2. 设置 Workers Secret:
+--      wrangler secret put ENCRYPTION_KEY   # 粘贴上一步的密钥
+-- 3. 部署 Workers: npm run deploy
+-- 4. 调用迁移端点（管理员鉴权）:
+--      POST /api/admin/channels/migrate-encrypt
+--    脚本对每条通道:
+--      a. 读旧明文 config（以 '{' 开头判定为未加密）
+--      b. AES-GCM 加密 → UPDATE 写入（明文被密文覆盖）
+--      c. 解密读回，与原文比对验证
+-- 5. 验证: 返回 { migrated, skipped, failed, errors }
+--    已加密或空 config 自动跳过，可安全重复执行。
+-- 6. 轮换: 迁移后务必在各渠道后台轮换已泄露的 appSecret/private_key/APIv3 key。
+-- ============================================================

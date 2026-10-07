@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS channels (
     payment_type_id TEXT NOT NULL,                    -- 支付方式ID
     name TEXT NOT NULL,                               -- 通道名称
     plugin TEXT NOT NULL,                             -- 插件标识
-    config TEXT,                                      -- 配置 (JSON, 加密存储)
+    config TEXT,                                      -- 配置 (JSON, AES-GCM 加密存储, 运行时用 ENCRYPTION_KEY 解密)
     fee_rate REAL DEFAULT 0,                          -- 费率 (%)
     min_amount REAL DEFAULT 0,                        -- 最小金额
     max_amount REAL DEFAULT 0,                        -- 最大金额

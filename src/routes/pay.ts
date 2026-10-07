@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { Env } from '../types/env';
 import { generateUUIDv7 } from '../utils/uuid';
-import { resolveServerSignType, verifySignAsync } from '../utils/crypto';
+import { resolveServerSignType, verifySignAsync, decryptChannelConfig } from '../utils/crypto';
 import { getPlugin } from '../plugins';
 import { getSiteUrl } from '../utils/site';
 import { getRequestLogMeta, logOrderEvent, logPaymentEvent } from '../utils/logging';
@@ -155,7 +155,7 @@ payRouter.post('/submit', async (c) => {
         const plugin = getPlugin(channel.plugin);
         
         // 调用插件创建支付
-        const channelConfig = JSON.parse(channel.config || '{}');
+        const channelConfig = await decryptChannelConfig(channel.config, env.ENCRYPTION_KEY);
         const siteUrl = await getSiteUrl(env, c.req.url);
         const defaultNotifyUrl = `${siteUrl}/notify/${channel.plugin}`;
         console.log('[Pay/submit] notify_url:', channelConfig.notifyUrl || defaultNotifyUrl);
@@ -283,7 +283,7 @@ payRouter.post('/cashier', async (c) => {
 
         const plugin = getPlugin(channel.plugin);
 
-        const channelConfig = JSON.parse(channel.config || '{}');
+        const channelConfig = await decryptChannelConfig(channel.config, env.ENCRYPTION_KEY);
         const siteUrl = await getSiteUrl(env, c.req.url);
         const defaultNotifyUrl = `${siteUrl}/notify/${channel.plugin}`;
         console.log('[Pay/cashier] notify_url:', channelConfig.notifyUrl || user.notify_url || defaultNotifyUrl);
@@ -368,7 +368,7 @@ payRouter.get('/status/:tradeNo', async (c) => {
 
                 if (channel) {
                     const plugin = getPlugin(order.plugin);
-                    const channelConfig = JSON.parse(channel.config || '{}');
+                    const channelConfig = await decryptChannelConfig(channel.config, env.ENCRYPTION_KEY);
                     const orderStatus = await plugin.queryOrder(tradeNo, {
                         appId: channelConfig.appId || '',
                         appSecret: channelConfig.appSecret || '',

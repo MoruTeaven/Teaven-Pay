@@ -7,7 +7,7 @@ import { clearSiteUrlCache } from '../utils/site';
 import { Env } from '../types/env';
 import { authMiddleware, adminMiddleware, signJWT } from '../middleware/auth';
 import { generateUUIDv7 } from '../utils/uuid';
-import { hashPassword, verifyPassword } from '../utils/crypto';
+import { hashPassword, verifyPassword, encryptChannelConfig, decryptChannelConfig } from '../utils/crypto';
 import { getPlugin, getPluginList } from '../plugins';
 import { getRequestLogMeta, logAuditEvent, logPaymentEvent, logReconciliationEvent } from '../utils/logging';
 
@@ -1145,25 +1145,28 @@ adminRouter.get('/channels', async (c) => {
             ORDER BY c.sort_order ASC, c.created_at DESC
         `).all();
 
-        const mapped = result.results.map((row: any) => ({
-            id: row.id,
-            paymentTypeId: row.payment_type_id,
-            paymentType: row.payment_type_name || '',
-            paymentTypeDisplay: row.payment_type_display || '',
-            name: row.name,
-            plugin: row.plugin,
-            config: row.config || '{}',
-            feeRate: row.fee_rate || 0,
-            minAmount: row.min_amount || 0,
-            maxAmount: row.max_amount || 0,
-            dailyLimit: row.daily_limit || 0,
-            timeStart: row.time_start,
-            timeStop: row.time_stop,
-            sortOrder: row.sort_order || 0,
-            status: row.status,
-            description: row.description || '',
-            createdAt: row.created_at || '',
-            updatedAt: row.updated_at || ''
+        const mapped = await Promise.all(result.results.map(async (row: any) => {
+            const configObj = await decryptChannelConfig(row.config, c.env.ENCRYPTION_KEY);
+            return {
+                id: row.id,
+                paymentTypeId: row.payment_type_id,
+                paymentType: row.payment_type_name || '',
+                paymentTypeDisplay: row.payment_type_display || '',
+                name: row.name,
+                plugin: row.plugin,
+                config: JSON.stringify(configObj),
+                feeRate: row.fee_rate || 0,
+                minAmount: row.min_amount || 0,
+                maxAmount: row.max_amount || 0,
+                dailyLimit: row.daily_limit || 0,
+                timeStart: row.time_start,
+                timeStop: row.time_stop,
+                sortOrder: row.sort_order || 0,
+                status: row.status,
+                description: row.description || '',
+                createdAt: row.created_at || '',
+                updatedAt: row.updated_at || ''
+            };
         }));
 
         return c.json({ code: 1, data: mapped });
@@ -1205,7 +1208,7 @@ adminRouter.post('/channels', async (c) => {
             paymentTypeId,
             name,
             plugin,
-            config ? JSON.stringify(config) : null,
+            config ? await encryptChannelConfig(config, c.env.ENCRYPTION_KEY) : null,
             feeRate || 0,
             minAmount || 0,
             maxAmount || 0,
@@ -1290,7 +1293,7 @@ adminRouter.put('/channels/:id', async (c) => {
             paymentTypeId || null,
             name || null,
             plugin || null,
-            config !== undefined ? JSON.stringify(config) : null,
+            config !== undefined ? await encryptChannelConfig(config, c.env.ENCRYPTION_KEY) : null,
             feeRate !== undefined ? feeRate : null,
             minAmount !== undefined ? minAmount : null,
             maxAmount !== undefined ? maxAmount : null,
@@ -1409,6 +1412,64 @@ adminRouter.patch('/channels/:id/status', async (c) => {
 });
 
 /**
+ * 渠道配置加密迁移
+ * POST /api/admin/channels/migrate-encrypt
+ * 读旧明文 config → AES-GCM 加密写入 → 解密验证 → 明文被密文覆盖
+ * 可安全重复执行（已加密的自动跳过）
+ */
+adminRouter.post('/channels/migrate-encrypt', async (c) => {
+    const key = c.env.ENCRYPTION_KEY;
+    if (!key) {
+        return c.json({ code: -1, msg: 'ENCRYPTION_KEY 未配置，请先 wrangler secret put ENCRYPTION_KEY' });
+    }
+
+    const result = await c.env.DB.prepare('SELECT id, config FROM channels').all();
+    let migrated = 0;
+    let skipped = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const row of result.results as any[]) {
+        const config = row.config as string | null;
+        // 空或已加密（非 '{' 开头）跳过
+        if (!config || !config.trim().startsWith('{')) {
+            skipped++;
+            continue;
+        }
+        try {
+            const configObj = JSON.parse(config);
+            // 加密写入（明文被密文覆盖，即清除明文）
+            const encrypted = await encryptChannelConfig(configObj, key);
+            await c.env.DB.prepare('UPDATE channels SET config = ?, updated_at = ? WHERE id = ?')
+                .bind(encrypted, new Date().toISOString(), row.id).run();
+            // 验证：解密读回与原文比对
+            const verify = await c.env.DB.prepare('SELECT config FROM channels WHERE id = ?').bind(row.id).first() as any;
+            const decrypted = await decryptChannelConfig(verify.config, key);
+            if (JSON.stringify(decrypted) !== JSON.stringify(configObj)) {
+                failed++;
+                errors.push(`${row.id}: 验证失败`);
+            } else {
+                migrated++;
+            }
+        } catch (e: any) {
+            failed++;
+            errors.push(`${row.id}: ${e.message}`);
+        }
+    }
+
+    const admin = c.get('user') as any;
+    await logAuditEvent(c.env, {
+        userId: admin?.id || null,
+        action: 'admin_migrate_encrypt_config',
+        target: 'channels',
+        detail: { migrated, skipped, failed },
+        ...getRequestLogMeta(c.req.raw),
+    });
+
+    return c.json({ code: 1, data: { migrated, skipped, failed, errors } });
+});
+
+/**
  * 执行订单对账
  * POST /api/admin/reconciliation/run
  */
@@ -1474,7 +1535,7 @@ adminRouter.post('/reconciliation/run', async (c) => {
                 }
 
                 const plugin = getPlugin(order.plugin);
-                const config = JSON.parse((channel as any).config || '{}');
+                const config = await decryptChannelConfig((channel as any).config, c.env.ENCRYPTION_KEY);
                 const remoteStatus = await plugin.queryOrder(order.id, {
                     appId: config.appId || '',
                     appSecret: config.appSecret || '',

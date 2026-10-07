@@ -374,3 +374,24 @@ export async function aesDecrypt(ciphertext: string, key: string): Promise<strin
     );
     return new TextDecoder().decode(decrypted);
 }
+
+/**
+ * 加密通道配置（config 对象 → AES-GCM 密文字符串）
+ * 落盘前调用；ENCRYPTION_KEY 缺失时抛错，绝不静默存明文
+ */
+export async function encryptChannelConfig(config: object, key: string | undefined): Promise<string> {
+    if (!key) throw new Error('ENCRYPTION_KEY 未配置，无法加密渠道配置');
+    return aesEncrypt(JSON.stringify(config), key);
+}
+
+/**
+ * 解密通道配置（返回 config 对象）
+ * 兼容明文 JSON：迁移过渡期/旧数据仍可读，不中断服务
+ */
+export async function decryptChannelConfig(stored: string | null | undefined, key: string | undefined): Promise<any> {
+    if (!stored) return {};
+    // 兼容明文 JSON（迁移前的旧数据，或开发环境未加密）
+    if (stored.trim().startsWith('{')) return JSON.parse(stored);
+    if (!key) throw new Error('ENCRYPTION_KEY 未配置，无法解密渠道配置');
+    return JSON.parse(await aesDecrypt(stored, key));
+}
