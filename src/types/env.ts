@@ -11,11 +11,19 @@ export interface Env {
     ALLOWED_ORIGINS?: string;
     SITE_URL?: string;
     
+    // 限流/防爆破可调参数（未配置时使用 throttleStore.ts 中的默认值）
+    RATE_LIMIT?: string;
+    RATE_LIMIT_WINDOW?: string;
+    LOGIN_RATE_LIMIT?: string;
+    LOGIN_RATE_LIMIT_WINDOW?: string;
+    LOGIN_MAX_FAILURES?: string;
+    LOGIN_LOCKOUT_SECONDS?: string;
+    
     // D1 数据库
     DB: D1Database;
     
-    // KV 缓存
-    CACHE: KVNamespace;
+    // KV 缓存（wrangler.toml 中当前未绑定，限流会自动降级到 D1 / 内存计数）
+    CACHE?: KVNamespace;
     
     // Secrets
     JWT_SECRET?: string;
@@ -253,4 +261,15 @@ export interface ReconciliationLogRow {
     started_at: string | null;
     finished_at: string | null;
     created_at: string;
+}
+
+/**
+ * 限流/登录失败计数表行（migrations/0005_throttle_counters.sql）
+ * reset_at 为窗口结束时间（epoch 毫秒）
+ */
+export interface ThrottleCounterRow {
+    key: string;
+    count: number;
+    reset_at: number;
+    updated_at: number;
 }
