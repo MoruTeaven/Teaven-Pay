@@ -10,6 +10,7 @@ import { generateUUIDv7 } from '../utils/uuid';
 import { hashPassword, verifyPassword, encryptChannelConfig, decryptChannelConfig } from '../utils/crypto';
 import { getPlugin, getPluginList } from '../plugins';
 import { getRequestLogMeta, logAuditEvent, logPaymentEvent, logReconciliationEvent } from '../utils/logging';
+import { isSafeOutboundUrl } from '../utils/netSecurity';
 
 export const adminRouter = new Hono<{ Bindings: Env }>();
 
@@ -540,6 +541,14 @@ adminRouter.put('/merchants/:id', async (c) => {
     const returnUrl = body.returnUrl as string;
     const groupId = body.groupId as string;
     
+    // 通知地址出站安全校验 (防止 SSRF)
+    if (notifyUrl) {
+        const guard = await isSafeOutboundUrl(notifyUrl);
+        if (!guard.ok) {
+            return c.json({ code: -1, msg: '通知地址不合法: ' + (guard.reason || '未通过安全校验') });
+        }
+    }
+
     try {
         const merchant = await c.env.DB.prepare(
             'SELECT id FROM users WHERE id = ? AND role = ?'

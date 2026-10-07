@@ -24,6 +24,9 @@ import { errorHandler } from './middleware/errorHandler';
 
 // 限流存储（用于健康检查暴露当前生效的计数后端）
 import { getThrottleStore } from './utils/throttleStore';
+// 工具
+import { parseAllowedOrigins, resolveAllowedOrigin } from './utils/cors';
+import { issueCashierTicket } from './utils/cashierAuth';
 
 // 类型
 import { Env } from './types/env';
@@ -35,16 +38,17 @@ app.use('*', timing());
 app.use('*', logger());
 app.use('*', secureHeaders());
 
-// CORS 配置
+// CORS 配置（白名单收紧：ALLOWED_ORIGINS 未配置时不允许任何跨源）
 app.use('*', async (c, next) => {
-    const allowedOrigins = (c.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+    const allowedOrigins = parseAllowedOrigins(c.env.ALLOWED_ORIGINS);
     const corsMiddleware = cors({
-        origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
+        origin: (origin) => resolveAllowedOrigin(origin, allowedOrigins),
         allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
         exposeHeaders: ['X-Request-Id'],
         maxAge: 86400,
-        credentials: allowedOrigins.length > 0,
+        // 仅在白名单生效时允许携带凭证；通配符与凭证不可同时生效
+        credentials: allowedOrigins.length > 0 && !allowedOrigins.includes('*'),
     });
     return corsMiddleware(c, next);
 });
@@ -308,6 +312,17 @@ app.get('/pay/:merchantId', async (c) => {
             return c.html(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>收银台</title></head><body style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#6b7280;"><div style="text-align:center;"><h2>商户不存在或已停用</h2></div></body></html>`);
         }
 
+        // 收银台下单票据：只有加载过本页面的客户端才能拿到，用于下单签名
+        const apiKeyRow = await env.DB.prepare(
+            'SELECT api_key FROM api_keys WHERE user_id = ? AND status = 1 ORDER BY created_at LIMIT 1'
+        ).bind(merchantId).first() as any;
+
+        if (!apiKeyRow || !apiKeyRow.api_key) {
+            return c.html(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>收银台</title></head><body style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#6b7280;"><div style="text-align:center;"><h2>商户未配置 API 密钥，暂无法下单</h2></div></body></html>`);
+        }
+
+        const { ticket, expiresAt } = await issueCashierTicket(merchantId, apiKeyRow.api_key as string);
+
         const channels = await env.DB.prepare(
             `SELECT pt.id, pt.name, pt.display_name, pt.icon FROM payment_types pt
              INNER JOIN channels c ON c.payment_type_id = pt.id AND c.status = 1
@@ -421,7 +436,10 @@ app.get('/pay/:merchantId', async (c) => {
     <script>
         var payTypes = ${JSON.stringify(payTypes)};
         var selectedType = '';
-        var merchantId = '${merchantId}';
+        // 使用 JSON 序列化内插，避免 URL 中的引号闭合脚本字符串造成注入
+        var merchantId = ${JSON.stringify(merchantId)};
+        var cashierTicket = ${JSON.stringify(ticket)};
+        var cashierTicketExpiresAt = ${Number(expiresAt)};
         var payTypesEl = document.getElementById('payTypes');
 
         function escapeHtml(value) {
@@ -618,6 +636,34 @@ app.get('/pay/:merchantId', async (c) => {
             el.style.display = 'block';
         }
 
+        // 以收银台票据为密钥计算 HMAC-SHA256 下单签名
+        async function signCashierRequest(amountStr) {
+            var timestamp = String(Date.now());
+            var name = '在线收银台付款';
+            var entries = {
+                amount: amountStr,
+                merchant_id: merchantId,
+                timestamp: timestamp,
+                type: selectedType,
+                name: name
+            };
+            var signStr = Object.keys(entries).sort()
+                .map(function(k) { return k + '=' + entries[k]; })
+                .join('&');
+
+            var enc = new TextEncoder();
+            var key = await crypto.subtle.importKey(
+                'raw', enc.encode(cashierTicket),
+                { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+            );
+            var sig = await crypto.subtle.sign('HMAC', key, enc.encode(signStr));
+            var signHex = Array.from(new Uint8Array(sig))
+                .map(function(b) { return b.toString(16).padStart(2, '0'); })
+                .join('');
+
+            return { timestamp: timestamp, name: name, sign: signHex };
+        }
+
         async function submitPay() {
             var amountEl = document.getElementById('amount');
             if (!amountEl) return;
@@ -635,11 +681,23 @@ app.get('/pay/:merchantId', async (c) => {
             btn.textContent = '正在创建订单...';
 
             try {
+                // 票据过期则先刷新页面重新获取
+                if (cashierTicketExpiresAt && Date.now() >= cashierTicketExpiresAt) {
+                    showError('页面已过期，正在刷新...');
+                    setTimeout(function() { window.location.reload(); }, 1200);
+                    return;
+                }
+
+                var signed = await signCashierRequest(amount.toFixed(2));
+
                 var body = new URLSearchParams();
                 body.set('merchant_id', merchantId);
                 body.set('amount', amount.toFixed(2));
                 body.set('type', selectedType);
-                body.set('name', '在线收银台付款');
+                body.set('name', signed.name);
+                body.set('ticket', cashierTicket);
+                body.set('timestamp', signed.timestamp);
+                body.set('sign', signed.sign);
 
                 var res = await fetch('/api/pay/cashier', { method: 'POST', body: body });
                 var data = await res.json();
@@ -6466,7 +6524,8 @@ app.get('/user', async (c) => {
                 '</div></div>' +
 
                 '<div class="card"><div class="card-header"><h3 class="card-title">签名配置</h3></div><div class="card-body">' +
-                '<div class="form-group"><label class="form-label">签名方式</label><select class="form-input" id="devSignType" style="max-width:300px;"><option value="hmac-sha256">HMAC-SHA256</option><option value="md5">MD5</option><option value="rsa">RSA</option></select></div>' +
+                '<div class="form-group"><label class="form-label">签名方式</label><select class="form-input" id="devSignType" style="max-width:300px;"><option value="hmac-sha256">HMAC-SHA256</option><option value="rsa">RSA</option><option value="md5" disabled>MD5（已废弃）</option></select></div>' +
+                '<div class="form-hint" id="md5DeprecatedHint" style="display:none;color:var(--error);font-size:12px;">MD5 签名已废弃，请选择 HMAC-SHA256 或 RSA。</div>' +
                 '<div class="form-group" id="rsaKeyGroup" style="display:none;"><label class="form-label">RSA 公钥</label><textarea class="form-input" id="devRsaKey" placeholder="-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----">' + escapeHtml(u.rsa_public_key || '') + '</textarea></div>' +
                 '<button class="btn btn-primary" onclick="window._saveSign()"><i class="ri-save-line"></i>保存签名配置</button>' +
                 '</div></div>' +
@@ -6480,8 +6539,10 @@ app.get('/user', async (c) => {
             document.getElementById('devSignType').value = u.api_key_type || 'hmac-sha256';
             document.getElementById('devSignType').onchange = function() {
                 document.getElementById('rsaKeyGroup').style.display = this.value === 'rsa' ? 'block' : 'none';
+                document.getElementById('md5DeprecatedHint').style.display = this.value === 'md5' ? 'block' : 'none';
             };
             if (u.api_key_type === 'rsa') document.getElementById('rsaKeyGroup').style.display = 'block';
+            if (u.api_key_type === 'md5') document.getElementById('md5DeprecatedHint').style.display = 'block';
 
             window._saveSign = async function() {
                 var signType = document.getElementById('devSignType').value;

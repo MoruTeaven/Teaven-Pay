@@ -8,6 +8,7 @@ import { getPlugin } from '../plugins';
 import { decryptChannelConfig } from '../utils/crypto';
 import { getRequestLogMeta, headersToLogObject, logOrderEvent, logPaymentEvent, logWebhookEvent } from '../utils/logging';
 import { CREDIT_OUTCOME, CREDIT_SOURCE, CreditOutcome, creditOrder } from '../utils/credit';
+import { isSafeOutboundUrl } from '../utils/netSecurity';
 
 export const notifyRouter = new Hono<{ Bindings: Env }>();
 
@@ -253,7 +254,6 @@ const pluginNotifyHandler = async (c: any) => {
         }
         const requestMeta = getRequestLogMeta(c.req.raw);
 
-        console.log(`[Notify/${pluginId}] received ${c.req.method} request:`, JSON.stringify(body));
 
         // 查询通道配置
         const channel = await c.env.DB.prepare(
@@ -408,8 +408,11 @@ async function sendMerchantNotification(env: Env, order: any) {
     }
     
     // 验证通知 URL 合法性 (防止 SSRF)
-    if (!isValidNotifyUrl(order.notify_url)) {
-        console.error(`Invalid notify_url blocked: ${order.notify_url}`);
+    // 同步层：协议 / 主机黑名单 / IP 字面量
+    // 异步层：DNS 解析后二次校验，防 nip.io 等别名指向内网
+    const urlGuard = await isSafeOutboundUrl(order.notify_url);
+    if (!urlGuard.ok) {
+        console.error('[Notify] blocked unsafe notify_url:', urlGuard.reason || 'unknown');
         await logWebhookEvent(env, {
             orderId: order.id,
             userId: order.user_id,
@@ -419,7 +422,7 @@ async function sendMerchantNotification(env: Env, order: any) {
             url: order.notify_url,
             method: 'POST',
             success: false,
-            errorMessage: '通知URL不合法',
+            errorMessage: '通知URL不合法: ' + (urlGuard.reason || 'unknown'),
         });
         return;
     }
@@ -526,18 +529,15 @@ async function sendMerchantNotification(env: Env, order: any) {
 
 /**
  * 验证通知 URL 合法性 (防止 SSRF)
- * 只允许 https 协议，禁止内网地址
+ *
+ * 完整校验逻辑已下沉到 src/utils/netSecurity.ts：
+ *   - 仅允许 https
+ *   - 拒绝 localhost / .local / .internal / 元数据域名 / DNS 别名服务
+ *   - 覆盖 127.0.0.0/8 全段、169.254.0.0/16、10/8、172.16/12、192.168/16、
+ *     100.64/10、100.64 CGNAT、组播与保留段、IPv6 回环/ULA/链路本地
+ *   - DNS 解析后二次校验，防 nip.io 等域名指向内网 IP 的绕过
  */
-function isValidNotifyUrl(url: string): boolean {
-    try {
-        const parsed = new URL(url);
-        if (parsed.protocol !== 'https:') return false;
-        const hostname = parsed.hostname;
-        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
-        if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|0\.)/.test(hostname)) return false;
-        if (hostname.endsWith('.local') || hostname.endsWith('.internal')) return false;
-        return true;
-    } catch {
-        return false;
-    }
+export async function isValidNotifyUrl(url: string): Promise<boolean> {
+    const result = await isSafeOutboundUrl(url);
+    return result.ok;
 }

@@ -8,6 +8,7 @@ import { authMiddleware, merchantMiddleware, signJWT } from '../middleware/auth'
 import { hashPassword, verifyPassword } from '../utils/crypto';
 import { generateUUIDv7 } from '../utils/uuid';
 import { getRequestLogMeta, logAuditEvent, logOrderEvent } from '../utils/logging';
+import { isSafeOutboundUrl } from '../utils/netSecurity';
 
 export const merchantRouter = new Hono<{ Bindings: Env }>();
 
@@ -767,6 +768,14 @@ merchantRouter.put('/developer/urls', async (c) => {
 
     const notifyUrl = body.notify_url as string;
     const returnUrl = body.return_url as string;
+
+    // 通知地址出站安全校验 (防止 SSRF)
+    if (notifyUrl) {
+        const guard = await isSafeOutboundUrl(notifyUrl);
+        if (!guard.ok) {
+            return c.json({ code: -1, msg: '通知地址不合法: ' + (guard.reason || '未通过安全校验') });
+        }
+    }
 
     try {
         await c.env.DB.prepare(

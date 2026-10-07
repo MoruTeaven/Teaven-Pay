@@ -13,6 +13,7 @@ import {
     RefundStatus
 } from '../types/plugin';
 import { rsaSign, rsaVerify } from '../utils/crypto';
+import { generateRefundNo } from '../utils/uuid';
 
 export class AlipayPlugin implements PaymentPlugin {
     id = 'alipay';
@@ -179,7 +180,8 @@ export class AlipayPlugin implements PaymentPlugin {
      */
     async refund(order: OrderInfo, amount: number, config: PluginConfig): Promise<RefundResult> {
         try {
-            const refundNo = `REF_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            // 支付宝 out_request_no 字符集有限制，去掉 UUID 连字符
+    const refundNo = generateRefundNo().replace(/-/g, '');
             
             const params: Record<string, string> = {
                 app_id: config.appId,

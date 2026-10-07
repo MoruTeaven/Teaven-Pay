@@ -29,7 +29,11 @@ Teaven Pay 提供完全兼容易支付标准的 API 接口，支持支付宝、�
 
 ## 签名算法
 
-### MD5 签名
+### MD5 签名（已废弃）
+
+> **已废弃**：MD5 为弱哈希，且与标准易支付 MD5 拼串存在兼容差异。
+> 新接入商户请统一使用 HMAC-SHA256；MD5 仅保留给存量商户验签兼容，
+> 商户后台已无法新建 MD5 类型密钥。
 
 1. 将所有请求参数按参数名 ASCII 码从小到大排序
 2. 将排序后的参数按照 `key=value` 的格式拼接
@@ -58,6 +62,67 @@ function generateSign(params, apiKey) {
 }
 ```
 
+### HMAC-SHA256 签名（推荐，默认）
+
+1. 将所有请求参数按参数名 ASCII 码从小到大排序
+2. 剔除空值（`''` / `undefined`）与 `sign`、`sign_type` 字段
+3. 按 `key=value` 用 `&` 拼接成待签串
+4. 以商户 `api_key` 为密钥对待签串做 HMAC-SHA256，输出 64 位小写十六进制
+
+```javascript
+async function generateHmacSign(params, apiKey) {
+    const signStr = Object.keys(params).sort()
+        .filter((k) => params[k] !== '' && params[k] !== undefined && k !== 'sign' && k !== 'sign_type')
+        .map((k) => k + '=' + params[k])
+        .join('&');
+
+    const key = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(apiKey),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    );
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signStr));
+    return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+```
+
+请求时带上 `sign_type=HMAC-SHA256`（不传时默认即为 HMAC-SHA256）。
+
+---
+
+## 公开收银台下单（需签名）
+
+**POST** `/api/pay/cashier`
+
+收银台页面 `GET /pay/:merchantId` 由服务端签发一次性票据，页面用该票据对下单参数签名。
+商户服务端直连时可不带 `ticket`，直接用商户 `api_key` 签名。
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| merchant_id | string | 是 | 商户 ID |
+| amount | string | 是 | 金额，保留两位小数（如 `7.77`） |
+| type | string | 是 | 支付方式标识 |
+| name | string | 否 | 商品名称，默认「在线收银台付款」 |
+| ticket | string | 否 | 收银台票据，页面模式必填 |
+| timestamp | string | 是 | 毫秒时间戳，与服务器偏差需在 5 分钟内 |
+| sign | string | 是 | HMAC-SHA256 签名（64 位小写十六进制） |
+
+**待签串**（字段名按 ASCII 升序，`name` 有值时参与）：
+
+```
+amount=<amount>&merchant_id=<merchant_id>&timestamp=<timestamp>&type=<type>[&name=<name>]
+```
+
+**签名密钥**：带 `ticket` 时为票据原文；不带 `ticket` 时为商户 `api_key`。
+
+**响应**（成功）：
+
+```json
+{ "code": 1, "msg": "创建订单成功", "trade_no": "...", "payurl": "...", "qrcode": "..." }
+```
+
+常见错误码：`-1` 参数缺失/不合法，`-2` 票据无效或过期、签名验证失败、时间戳过期，`-3` 商户不存在或未配置密钥。
+
+---
 ### RSA 签名
 
 1. 将所有请求参数按参数名 ASCII 码从小到大排序

@@ -105,9 +105,9 @@ apiKeyRouter.post('/', async (c) => {
         return c.json({ code: -1, msg: '请输入当前密码' });
     }
 
-    // 验证签名类型
-    if (!['md5', 'hmac-sha256', 'rsa'].includes(apiKeyType)) {
-        return c.json({ code: -1, msg: '签名类型不合法' });
+    // 验证签名类型（md5 已废弃，不再允许新建）
+    if (!['hmac-sha256', 'rsa'].includes(apiKeyType)) {
+        return c.json({ code: -1, msg: '签名类型不合法，MD5 已废弃，请使用 HMAC-SHA256 或 RSA' });
     }
 
     // RSA 类型必须提供公钥
@@ -213,7 +213,8 @@ apiKeyRouter.put('/:id', async (c) => {
             params.push(status);
         }
 
-        if (apiKeyType && ['md5', 'hmac-sha256', 'rsa'].includes(apiKeyType)) {
+        // md5 仅允许保持现状（存量为 md5 的密钥不传该字段即可），不允许切换为 md5
+        if (apiKeyType && ['hmac-sha256', 'rsa'].includes(apiKeyType)) {
             updates.push('api_key_type = ?');
             params.push(apiKeyType);
 

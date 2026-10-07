@@ -288,12 +288,16 @@ VITE_API_URL=https://pay.yourdomain.com
 
 [vars]
 ENVIRONMENT = "production"
-# 开启 CORS
+# CORS 白名单（必填，逗号分隔；未配置时不允许任何跨源）
+# 支持子域通配：https://*.yourdomain.com
 ALLOWED_ORIGINS = "https://yourdomain.com,https://admin.yourdomain.com"
 # 请求频率限制
 RATE_LIMIT = "100"
 RATE_LIMIT_WINDOW = "60"
 ```
+
+> **注意**：`ALLOWED_ORIGINS` 未配置时不再回落 `*`（允许任意站点跨源读取接口响应）。
+> 站点页面（收银台、管理后台）均为同源直出，无需跨源；确需跨源调用 API 时请显式配置白名单。
 
 ### 7.2 日志配置
 
@@ -546,7 +550,7 @@ if (env.MAINTENANCE_MODE === 'true') {
 | JWT_SECRET | JWT 密钥 | (secret) |
 | ENCRYPTION_KEY | 加密密钥 | (secret) |
 | ADMIN_PASSWORD | 管理员密码 | (secret) |
-| ALLOWED_ORIGINS | 允许的域名 | https://yourdomain.com |
+| ALLOWED_ORIGINS | CORS 白名单域名（逗号分隔，未配置则不允许跨源） | https://yourdomain.com,https://admin.yourdomain.com |
 | RATE_LIMIT | 请求频率限制 | 100 |
 | RATE_LIMIT_WINDOW | 限制窗口(秒) | 60 |
 | LOG_LEVEL | 日志级别 | info |
