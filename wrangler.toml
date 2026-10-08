@@ -61,5 +61,5 @@ head_sampling_rate = 1
 
 # Secrets — 通过 wrangler secret put <NAME> 设置，不在此明文存储
 # ENCRYPTION_KEY  渠道配置 AES-GCM 加密密钥（32 字节随机串，必填）
-# JWT_SECRET      JWT 签名密钥
+# JWT_SECRET      JWT 签名密钥（必填，缺失即 fail-fast）
 # ADMIN_PASSWORD  管理员密码

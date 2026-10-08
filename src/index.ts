@@ -21,6 +21,8 @@ import { authMiddleware } from './middleware/auth';
 import { rateLimitMiddleware, loginRateLimitMiddleware } from './middleware/rateLimit';
 import { adminLoginGuard, merchantLoginGuard } from './middleware/loginGuard';
 import { errorHandler } from './middleware/errorHandler';
+import { jwtSecretGuard } from './middleware/jwtSecretGuard';
+import { isJwtSecretConfigured } from './utils/jwtSecret';
 
 // 限流存储（用于健康检查暴露当前生效的计数后端）
 import { getThrottleStore } from './utils/throttleStore';
@@ -56,6 +58,10 @@ app.use('*', async (c, next) => {
 // 错误处理
 app.onError(errorHandler);
 
+// JWT_SECRET 必填守卫：后台/商户接口（登录签发与鉴权）缺失密钥时直接 500（fail-fast）
+app.use('/api/admin/*', jwtSecretGuard);
+app.use('/api/merchant/*', jwtSecretGuard);
+
 // 登录接口防护（安全整改：原 rateLimitMiddleware 只 import 未挂载，登录可被无限爆破）
 // 顺序：通用 IP 限流 → 登录更严格的 IP 限流 → 失败计数 + 临时锁定
 app.use('/api/admin/login', rateLimitMiddleware, loginRateLimitMiddleware, adminLoginGuard);
@@ -69,6 +75,8 @@ app.get('/api/health', (c) => {
         timestamp: new Date().toISOString(),
         // 限流计数实际使用的存储后端：kv / d1 / memory（KV 未绑定时自动降级）
         throttleBackend: getThrottleStore(c.env).getActiveBackend(),
+        // JWT_SECRET 是否已配置（诊断用，不泄露密钥值）
+        jwtSecretConfigured: isJwtSecretConfigured(c.env),
     });
 });
 

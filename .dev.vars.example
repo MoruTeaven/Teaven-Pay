@@ -6,7 +6,8 @@
 # 生成: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ENCRYPTION_KEY=
 
-# JWT 签名密钥
+# JWT 签名密钥（必填：缺失时登录签发与鉴权直接 500，不再回退默认密钥）
+# 生成: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 JWT_SECRET=
 
 # 管理员密码
