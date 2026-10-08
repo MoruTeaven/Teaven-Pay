@@ -4,6 +4,7 @@
 
 import { Context, Next } from 'hono';
 import { Env } from '../types/env';
+import { isJwtSecretMissingError, resolveJwtSecret, JWT_SECRET_MISSING_MSG } from '../utils/jwtSecret';
 
 /**
  * JWT 认证中间件
@@ -18,9 +19,8 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     const token = authHeader.substring(7);
     
     try {
-        // 验证 JWT token
-        // TODO: 实现 JWT 验证
-        const payload = await verifyJWT(token, c.env.JWT_SECRET || '');
+        // 验证 JWT token：密钥来源与签发侧一致（c.env.JWT_SECRET，无 fallback）
+        const payload = await verifyJWT(token, resolveJwtSecret(c.env));
         
         if (!payload) {
             return c.json({ code: -2, msg: 'Token 无效或已过期' }, 401);
@@ -31,6 +31,12 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
         
         await next();
     } catch (error) {
+        // JWT_SECRET 缺失属于服务端配置错误：fail-fast 返回 500，
+        // 不伪装成 401（否则会被误判为 token 无效，掩盖真正的配置问题）
+        if (isJwtSecretMissingError(error)) {
+            console.error('[FATAL] JWT_SECRET 未配置，无法校验登录凭证:', error);
+            return c.json({ code: -5, msg: JWT_SECRET_MISSING_MSG }, 500);
+        }
         return c.json({ code: -2, msg: '认证失败' }, 401);
     }
 }
@@ -99,6 +105,7 @@ export async function apiKeyMiddleware(c: Context<{ Bindings: Env }>, next: Next
  * 验证 JWT (HMAC-SHA256)
  */
 async function verifyJWT(token: string, secret: string): Promise<any> {
+    // secret 由 resolveJwtSecret 保证非空；此处仅为 fail-closed 兜底（空密钥一律拒绝）
     if (!secret) return null;
     try {
         const parts = token.split('.');

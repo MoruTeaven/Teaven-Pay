@@ -153,9 +153,11 @@ max_batch_timeout = 30
 ### 4.2 配置 Secrets
 
 ```bash
-# 设置 JWT 密钥
+# 设置 JWT 密钥（必填）
 wrangler secret put JWT_SECRET
-# 输入一个随机字符串，例如: my-super-secret-jwt-key-12345
+# 输入一个随机字符串（建议 ≥32 字节），例如:
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# 未配置时管理后台/商户中心登录与鉴权一律返回 500（fail-fast），不再回退默认密钥
 
 # 设置加密密钥
 wrangler secret put ENCRYPTION_KEY
@@ -200,7 +202,8 @@ wrangler dev
 创建 `.dev.vars` 文件用于本地环境变量:
 
 ```
-JWT_SECRET=dev-secret-key
+# 必填（缺失时登录签发与鉴权直接 500，fail-fast）
+JWT_SECRET=local-dev-jwt-secret-replace-before-deploy
 ENCRYPTION_KEY=dev-encryption-key-32-chars!!
 ADMIN_PASSWORD=admin123
 ```
@@ -547,7 +550,7 @@ if (env.MAINTENANCE_MODE === 'true') {
 |--------|------|------|
 | ENVIRONMENT | 运行环境 | production |
 | DEFAULT_CURRENCY | 默认货币 | CNY |
-| JWT_SECRET | JWT 密钥 | (secret) |
+| JWT_SECRET | **JWT 签名密钥（必填）**：未配置时登录签发与接口鉴权直接返回 500（fail-fast），不再回退默认密钥 | (secret) |
 | ENCRYPTION_KEY | 加密密钥 | (secret) |
 | ADMIN_PASSWORD | 管理员密码 | (secret) |
 | ALLOWED_ORIGINS | CORS 白名单域名（逗号分隔，未配置则不允许跨源） | https://yourdomain.com,https://admin.yourdomain.com |

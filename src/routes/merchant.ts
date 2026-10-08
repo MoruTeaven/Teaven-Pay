@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import { Env } from '../types/env';
 import { authMiddleware, merchantMiddleware, signJWT } from '../middleware/auth';
+import { isJwtSecretMissingError, resolveJwtSecret, JWT_SECRET_MISSING_MSG } from '../utils/jwtSecret';
 import { hashPassword, verifyPassword } from '../utils/crypto';
 import { generateUUIDv7 } from '../utils/uuid';
 import { getRequestLogMeta, logAuditEvent, logOrderEvent } from '../utils/logging';
@@ -41,7 +42,8 @@ merchantRouter.post('/login', async (c) => {
             return c.json({ code: -2, msg: '账号已被禁用' });
         }
 
-        const secret = c.env.JWT_SECRET || 'default-secret-change-me';
+        // JWT_SECRET 必填：缺失即 fail-fast，不再回退默认密钥
+        const secret = resolveJwtSecret(c.env);
         const token = await signJWT(
             { id: (user as any).id, username: (user as any).username, role: 'merchant' },
             secret,
@@ -77,6 +79,10 @@ merchantRouter.post('/login', async (c) => {
             }
         });
     } catch (error) {
+        if (isJwtSecretMissingError(error)) {
+            console.error('[FATAL] JWT_SECRET 未配置，无法签发商户登录凭证:', error);
+            return c.json({ code: -5, msg: JWT_SECRET_MISSING_MSG }, 500);
+        }
         console.error('Merchant login error:', error);
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }

@@ -592,7 +592,7 @@ ENVIRONMENT = "production"
 DEFAULT_CURRENCY = "CNY"
 
 # Secrets (使用 wrangler secret set)
-# JWT_SECRET
+# JWT_SECRET (必填，缺失即 fail-fast)
 # ENCRYPTION_KEY
 ```
 

@@ -93,7 +93,7 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 - 签名类型统一为 `hmac-sha256`；`md5` 已废弃，仅保留存量商户验签兼容，不再允许新建 MD5 密钥。
 - 密码哈希使用 PBKDF2，迭代次数为 `77777`。
 - 密码哈希与签名比较一律走 `src/utils/constantTime.ts` 的常数时间比较，禁止使用 `===`。
-- 管理后台使用 JWT，`JWT_SECRET` 必须通过 Wrangler secret 或本地 `.dev.vars` 提供。
+- 管理后台使用 JWT，`JWT_SECRET` 必填，通过 Wrangler secret 或本地 `.dev.vars` 提供；未配置时登录签发与接口鉴权一律 500（fail-fast），签发与验证走 `src/utils/jwtSecret.ts` 的 `resolveJwtSecret()`，无任何默认密钥回退。
 
 ### 出站请求安全（SSRF）
 

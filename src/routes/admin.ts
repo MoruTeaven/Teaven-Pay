@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { clearSiteUrlCache } from '../utils/site';
 import { Env } from '../types/env';
 import { authMiddleware, adminMiddleware, signJWT } from '../middleware/auth';
+import { isJwtSecretMissingError, resolveJwtSecret, JWT_SECRET_MISSING_MSG } from '../utils/jwtSecret';
 import { generateUUIDv7 } from '../utils/uuid';
 import { hashPassword, verifyPassword, encryptChannelConfig, decryptChannelConfig } from '../utils/crypto';
 import { getPlugin, getPluginList } from '../plugins';
@@ -50,7 +51,8 @@ adminRouter.post('/login', async (c) => {
         }
 
         // 签发 JWT
-        const secret = c.env.JWT_SECRET || 'default-secret-change-me';
+        // JWT_SECRET 必填：缺失即 fail-fast，不再回退默认密钥
+        const secret = resolveJwtSecret(c.env);
         const token = await signJWT(
             { id: (user as any).id, username: (user as any).username, role: 'admin' },
             secret,
@@ -78,6 +80,10 @@ adminRouter.post('/login', async (c) => {
             }
         });
     } catch (error) {
+        if (isJwtSecretMissingError(error)) {
+            console.error('[FATAL] JWT_SECRET 未配置，无法签发管理员登录凭证:', error);
+            return c.json({ code: -5, msg: JWT_SECRET_MISSING_MSG }, 500);
+        }
         console.error('Admin login error:', error);
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }
@@ -488,7 +494,8 @@ adminRouter.post('/merchants/:id/login-token', async (c) => {
             return c.json({ code: -1, msg: '商户账号状态异常，无法登录用户中心' });
         }
 
-        const secret = c.env.JWT_SECRET || 'default-secret-change-me';
+        // JWT_SECRET 必填：缺失即 fail-fast，不再回退默认密钥
+        const secret = resolveJwtSecret(c.env);
         const token = await signJWT(
             {
                 id: (merchant as any).id,
@@ -521,6 +528,10 @@ adminRouter.post('/merchants/:id/login-token', async (c) => {
             }
         });
     } catch (error) {
+        if (isJwtSecretMissingError(error)) {
+            console.error('[FATAL] JWT_SECRET 未配置，无法签发生成登录链接:', error);
+            return c.json({ code: -5, msg: JWT_SECRET_MISSING_MSG }, 500);
+        }
         console.error('Generate merchant login token error:', error);
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }
