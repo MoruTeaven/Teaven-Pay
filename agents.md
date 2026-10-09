@@ -125,7 +125,7 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 - 入口：用户中心 `/user` 登录页的「忘记密码？」，重置落地页 `/reset-password?token=...`。
 - 令牌：32 字节随机 base64url，只存 HMAC-SHA256 摘要（`migrations/0006_password_resets.sql`），30 分钟过期、一次性、同一用户同时只保留最新一条。
 - 防枚举：邮箱不存在 / 账号被禁用时返回与成功一致的文案，且不发信。
-- 发信：统一走 Teaven Email（`POST /v1/mail/send`，分类 `VERIFY`），密钥 `TEAVEN_EMAIL_API_KEY`；未配置时接口返回 503，绝不静默假装已发送。
+- 发信：统一走 Teaven Email（默认 `https://email.chenyande.com/v1/mail/send`，分类 `VERIFY`），密钥 `TEAVEN_EMAIL_API_KEY`；未配置时接口返回 503，绝不静默假装已发送。
 - 限流：`/api/password-reset/*` 有 IP 维度限流（907 秒 / 7 次），路由内另有 IP + 邮箱双维度限流。
 
 ## 校验建议

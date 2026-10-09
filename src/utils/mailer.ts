@@ -15,7 +15,7 @@ import type { Env } from '../types/env';
 import { isSafeOutboundUrl } from './netSecurity';
 
 /** Teaven Email 默认发信端点（可用 TEAVEN_EMAIL_ENDPOINT 覆盖） */
-export const DEFAULT_TEAVEN_EMAIL_ENDPOINT = 'https://email.teaven.email/v1/mail/send';
+export const DEFAULT_TEAVEN_EMAIL_ENDPOINT = 'https://email.chenyande.com/v1/mail/send';
 /** 默认分类：发件账号按分类匹配（逗号分隔，如 "VERIFY,NOTIFY"） */
 export const DEFAULT_MAIL_CATEGORY = 'NOTIFY';
 /** 单次请求超时（毫秒），避免拖垮 Worker 请求 */
