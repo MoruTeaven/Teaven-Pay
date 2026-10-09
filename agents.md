@@ -20,10 +20,14 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 - `src/routes/merchant.ts`：商户相关 API
 - `src/routes/admin.ts`：管理后台 API 和管理员登录逻辑
 - `src/routes/notify.ts`：支付渠道异步通知入口和支付成功后的订单/余额更新
+- `src/routes/password-reset.ts`：商户密码找回（`/api/password-reset/request` 发信、`/confirm` 用一次性令牌改密）
 - `src/plugins/`：支付插件实现与注册表，新增插件需实现 `PaymentPlugin`
 - `src/middleware/`：认证、限流、错误处理等中间件
 - `src/types/`：Cloudflare 绑定、数据库行、支付插件类型定义
-- `src/utils/`：签名、密码哈希、AES、UUID 等工具函数,  - `constantTime.ts`：常数时间字符串比较,  - `netSecurity.ts`：出站 URL 安全（SSRF）校验与 DNS 二次校验,  - `cors.ts`：`ALLOWED_ORIGINS` 白名单解析与来源判定,  - `cashierAuth.ts`：公开收银台下单票据与签名
+- `src/utils/`：签名、密码哈希、AES、UUID 等工具函数,  - `constantTime.ts`：常数时间字符串比较,  - `netSecurity.ts`：出站 URL 安全（SSRF）校验与 DNS 二次校验,  - `cors.ts`：`ALLOWED_ORIGINS` 白名单解析与来源判定,  - `cashierAuth.ts`：公开收银台下单票据与签名,
+  - `passwordReset.ts`：密码找回令牌生成与摘要（HMAC-SHA256，密钥复用 JWT_SECRET）,
+  - `mailer.ts`：Teaven Email 发信客户端（`TEAVEN_EMAIL_API_KEY` 未配置即视为未启用）,
+  - `mailTemplates.ts`：邮件模板（纯字符串拼接，动态内容必须转义）
 - `migrations/`：D1 初始化和修复 SQL
 - `docs/`：API、部署、插件开发和后台设计文档
 - `admin/index.html`：独立管理后台静态页面/原型，当前主要后台页面也内联在 `src/index.ts`
@@ -115,6 +119,14 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 - 签名 = HMAC-SHA256(密钥, `amount=..&merchant_id=..&timestamp=..&type=..[&name=..]`)，字段名按字典序拼接。
 - 带 `ticket` 时以票据原文为密钥（页面模式）；不带 `ticket` 时以商户 API 密钥为密钥（服务端直连）。
 - `timestamp` 与服务器时间偏差超过 5 分钟拒绝，防重放。
+
+### 密码找回（忘记密码）
+
+- 入口：用户中心 `/user` 登录页的「忘记密码？」，重置落地页 `/reset-password?token=...`。
+- 令牌：32 字节随机 base64url，只存 HMAC-SHA256 摘要（`migrations/0006_password_resets.sql`），30 分钟过期、一次性、同一用户同时只保留最新一条。
+- 防枚举：邮箱不存在 / 账号被禁用时返回与成功一致的文案，且不发信。
+- 发信：统一走 Teaven Email（`POST /v1/mail/send`，分类 `VERIFY`），密钥 `TEAVEN_EMAIL_API_KEY`；未配置时接口返回 503，绝不静默假装已发送。
+- 限流：`/api/password-reset/*` 有 IP 维度限流（907 秒 / 7 次），路由内另有 IP + 邮箱双维度限流。
 
 ## 校验建议
 

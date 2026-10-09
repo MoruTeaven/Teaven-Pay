@@ -61,5 +61,10 @@ head_sampling_rate = 1
 
 # Secrets — 通过 wrangler secret put <NAME> 设置，不在此明文存储
 # ENCRYPTION_KEY  渠道配置 AES-GCM 加密密钥（32 字节随机串，必填）
-# JWT_SECRET      JWT 签名密钥（必填，缺失即 fail-fast）
+# JWT_SECRET      JWT 签名密钥（必填，缺失即 fail-fast；同时用于密码找回令牌摘要）
 # ADMIN_PASSWORD  管理员密码
+# TEAVEN_EMAIL_API_KEY  Teaven Email 发信密钥（需 SEND_MAIL 权限）；未配置时密码找回接口返回 503
+
+# 邮件发信（Teaven Email 服务）：非密钥配置
+# [vars]
+# TEAVEN_EMAIL_ENDPOINT = "https://email.teaven.email"   # 可只填根地址，自动补 /v1/mail/send

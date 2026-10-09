@@ -12,3 +12,10 @@ JWT_SECRET=
 
 # 管理员密码
 ADMIN_PASSWORD=
+
+# 邮件发信（Teaven Email 服务）：商户找回密码依赖
+# 在 Teaven Email 后台创建 API Key（需 SEND_MAIL 权限）后填入
+TEAVEN_EMAIL_API_KEY=
+# 可选：Teaven Email 服务地址，默认 https://email.teaven.email/v1/mail/send
+# 也可只填服务根地址（如 https://email.teaven.email），会自动补 /v1/mail/send
+TEAVEN_EMAIL_ENDPOINT=

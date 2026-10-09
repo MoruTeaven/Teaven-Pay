@@ -15,10 +15,11 @@ import { merchantRouter } from './routes/merchant';
 import { adminRouter } from './routes/admin';
 import { notifyRouter } from './routes/notify';
 import { apiKeyRouter } from './routes/api-key';
+import { passwordResetRouter } from './routes/password-reset';
 
 // 中间件
 import { authMiddleware } from './middleware/auth';
-import { rateLimitMiddleware, loginRateLimitMiddleware } from './middleware/rateLimit';
+import { rateLimitMiddleware, loginRateLimitMiddleware, createRateLimitMiddleware } from './middleware/rateLimit';
 import { adminLoginGuard, merchantLoginGuard } from './middleware/loginGuard';
 import { errorHandler } from './middleware/errorHandler';
 import { jwtSecretGuard } from './middleware/jwtSecretGuard';
@@ -67,6 +68,16 @@ app.use('/api/merchant/*', jwtSecretGuard);
 app.use('/api/admin/login', rateLimitMiddleware, loginRateLimitMiddleware, adminLoginGuard);
 app.use('/api/merchant/login', rateLimitMiddleware, loginRateLimitMiddleware, merchantLoginGuard);
 
+// 密码找回接口防护：IP 维度限流（路由内另有邮箱维度限流与一次性令牌约束）
+// 找回涉及发信，阈值收得比登录更紧：907 秒窗口内同一 IP 最多 7 次
+const passwordResetLimitMiddleware = createRateLimitMiddleware({
+    scope: 'password_reset',
+    limit: 7,
+    windowSeconds: 907,
+});
+app.use('/api/password-reset/request', passwordResetLimitMiddleware);
+app.use('/api/password-reset/confirm', passwordResetLimitMiddleware);
+
 // 健康检查
 app.get('/api/health', (c) => {
     return c.json({
@@ -84,6 +95,7 @@ app.get('/api/health', (c) => {
 app.route('/api/pay', payRouter);
 app.route('/api/merchant', merchantRouter);
 app.route('/api/merchant/api-keys', apiKeyRouter);
+app.route('/api/password-reset', passwordResetRouter);
 app.route('/api/admin', adminRouter);
 
 // 兼容易支付标准接口
@@ -5787,6 +5799,104 @@ app.get('/admin/', (c) => {
     return c.redirect('/admin', 301);
 });
 
+// 密码重置页面（邮件链接落地页，令牌从 query 读取，无需登录）
+app.get('/reset-password', async (c) => {
+    return c.html(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex,nofollow">
+    <title>Teaven Pay - 重置密码</title>
+    <style>
+        :root{--primary-500:#f59e0b;--primary-600:#d97706;--bg-secondary:#f9fafb;--bg-primary:#fff;--text-primary:#111827;--text-tertiary:#9ca3af;--border-color:#e5e7eb;--shadow-md:0 4px 6px -1px rgba(0,0,0,0.1);}
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg-secondary);color:var(--text-primary);}
+        .wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}
+        .card{background:var(--bg-primary);border:1px solid var(--border-color);border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:var(--shadow-md);}
+        .logo{text-align:center;margin-bottom:28px;}.logo h1{font-size:22px;font-weight:700;color:var(--primary-600);}
+        .logo p{font-size:13px;color:var(--text-tertiary);margin-top:4px;}
+        .err{background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none;}
+        .ok{background:#d1fae5;color:#065f46;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none;}
+        .fg{margin-bottom:16px;}
+        label{display:block;font-size:13px;color:#4b5563;margin-bottom:6px;}
+        input{width:100%;padding:10px 12px;border:1px solid var(--border-color);border-radius:8px;font-size:14px;outline:none;}
+        input:focus{border-color:var(--primary-500);}
+        button{width:100%;padding:11px;background:var(--primary-500);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+        button:hover{background:var(--primary-600);}
+        button:disabled{opacity:0.6;cursor:not-allowed;}
+        .link{text-align:center;margin-top:14px;font-size:13px;}
+        a{color:var(--primary-600);text-decoration:none;}
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="card">
+            <div class="logo"><h1>Teaven Pay</h1><p>设置新密码</p></div>
+            <div class="err" id="errBox"></div>
+            <div class="ok" id="okBox"></div>
+            <div id="formArea">
+                <div class="fg"><label>新密码</label><input type="password" id="pw1" placeholder="至少 6 位" autocomplete="new-password"></div>
+                <div class="fg"><label>确认新密码</label><input type="password" id="pw2" placeholder="再次输入新密码" autocomplete="new-password"></div>
+                <div class="fg"><button id="submitBtn">确认重置</button></div>
+            </div>
+            <div class="link"><a href="/user">返回登录</a></div>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var token = new URLSearchParams(window.location.search).get('token') || '';
+        var errBox = document.getElementById('errBox');
+        var okBox = document.getElementById('okBox');
+        var submitBtn = document.getElementById('submitBtn');
+        var formArea = document.getElementById('formArea');
+
+        function showErr(msg) { errBox.textContent = msg; errBox.style.display = 'block'; }
+        function showOk(msg) { okBox.textContent = msg; okBox.style.display = 'block'; }
+
+        if (!token) {
+            showErr('链接无效或已过期，请重新发起找回');
+            formArea.style.display = 'none';
+            return;
+        }
+
+        async function submit() {
+            var pw1 = document.getElementById('pw1').value;
+            var pw2 = document.getElementById('pw2').value;
+            errBox.style.display = 'none';
+            if (!pw1 || pw1.length < 6) { showErr('新密码长度不能少于 6 位'); return; }
+            if (pw1 !== pw2) { showErr('两次输入的密码不一致'); return; }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = '提交中...';
+            try {
+                var body = new URLSearchParams();
+                body.set('token', token);
+                body.set('new_password', pw1);
+                var res = await fetch('/api/password-reset/confirm', { method: 'POST', body: body });
+                var data = await res.json();
+                if (data.code === 0) {
+                    formArea.style.display = 'none';
+                    showOk(data.msg || '密码重置成功，请使用新密码登录');
+                    setTimeout(function() { window.location.href = '/user'; }, 2000);
+                    return;
+                }
+                showErr(data.msg || '重置失败');
+            } catch (e) {
+                showErr('网络错误，请稍后重试');
+            }
+            submitBtn.disabled = false;
+            submitBtn.textContent = '确认重置';
+        }
+
+        submitBtn.onclick = submit;
+        document.getElementById('pw2').onkeydown = function(e) { if (e.key === 'Enter') submit(); };
+    })();
+    </script>
+</body>
+</html>`);
+});
+
 // 用户中心页面
 app.get('/user', async (c) => {
     return c.html(`<!DOCTYPE html>
@@ -6006,9 +6116,54 @@ app.get('/user', async (c) => {
                 '<div class="form-group"><label class="form-label">用户名 / 邮箱</label><input type="text" class="form-input" id="loginUsername" placeholder="请输入用户名或邮箱"></div>' +
                 '<div class="form-group"><label class="form-label">密码</label><input type="password" class="form-input" id="loginPassword" placeholder="请输入密码"></div>' +
                 '<div class="form-group"><button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;" id="loginBtn">登录</button></div>' +
+                '<div style="text-align:center;margin-top:4px;"><a href="javascript:void(0)" id="forgotLink" style="font-size:13px;">忘记密码？</a></div>' +
                 '</div></div>';
             document.getElementById('loginBtn').onclick = doLogin;
             document.getElementById('loginPassword').onkeydown = function(e) { if (e.key === 'Enter') doLogin(); };
+            document.getElementById('forgotLink').onclick = renderForgotPassword;
+        }
+
+        // 找回密码：输入注册邮箱，由服务端发送一次性重置链接
+        function renderForgotPassword() {
+            app.innerHTML =
+                '<div class="login-container"><div class="login-card">' +
+                '<div class="login-logo"><h1>Teaven Pay</h1><p>找回密码</p></div>' +
+                '<div class="login-error" id="loginError"></div>' +
+                '<div class="form-group"><label class="form-label">注册邮箱</label><input type="email" class="form-input" id="forgotEmail" placeholder="请输入账号绑定的邮箱"></div>' +
+                '<div class="form-group"><button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;" id="forgotBtn">发送重置链接</button></div>' +
+                '<div style="text-align:center;"><a href="javascript:void(0)" id="backToLogin" style="font-size:13px;">返回登录</a></div>' +
+                '</div></div>';
+            document.getElementById('forgotBtn').onclick = doForgotRequest;
+            document.getElementById('forgotEmail').onkeydown = function(e) { if (e.key === 'Enter') doForgotRequest(); };
+            document.getElementById('backToLogin').onclick = renderLogin;
+        }
+
+        async function doForgotRequest() {
+            var email = document.getElementById('forgotEmail').value.trim();
+            var errEl = document.getElementById('loginError');
+            if (!email) { errEl.textContent = '请输入注册邮箱'; errEl.style.display = 'block'; return; }
+            errEl.style.display = 'none';
+            var btn = document.getElementById('forgotBtn');
+            btn.textContent = '发送中...';
+            btn.disabled = true;
+            try {
+                var body = new URLSearchParams();
+                body.set('email', email);
+                var res = await fetch('/api/password-reset/request', { method: 'POST', body: body });
+                var data = await res.json();
+                if (data.code === 0) {
+                    toast(data.msg || '重置链接已发送，请查收邮件');
+                    renderLogin();
+                    return;
+                }
+                errEl.textContent = data.msg || '发送失败';
+                errEl.style.display = 'block';
+            } catch (e) {
+                errEl.textContent = '网络错误';
+                errEl.style.display = 'block';
+            }
+            btn.textContent = '发送重置链接';
+            btn.disabled = false;
         }
 
         async function doLogin() {

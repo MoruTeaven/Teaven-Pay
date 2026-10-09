@@ -29,6 +29,12 @@ export interface Env {
     JWT_SECRET?: string;
     ENCRYPTION_KEY?: string;
     ADMIN_PASSWORD?: string;
+
+    // 邮件发信（Teaven Email 服务）：密码找回等功能依赖
+    // 未配置 TEAVEN_EMAIL_API_KEY 时邮件能力视为未启用，相关接口明确报错而不是静默失败
+    TEAVEN_EMAIL_API_KEY?: string;
+    // Teaven Email 发信端点，可只填服务根地址（自动补 /v1/mail/send）
+    TEAVEN_EMAIL_ENDPOINT?: string;
     
     // 支付渠道配置
     ALIPAY_APP_ID?: string;
@@ -184,6 +190,18 @@ export interface RefundRow {
     error_message: string | null;
     created_at: string;
     completed_at: string | null;
+}
+
+export interface PasswordResetRow {
+    id: string;
+    user_id: string;
+    token_hash: string;
+    expires_at: number;
+    used_at: number | null;
+    attempts: number;
+    ip: string | null;
+    user_agent: string | null;
+    created_at: string;
 }
 
 export interface ConfigRow {
