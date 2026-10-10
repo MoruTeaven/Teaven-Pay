@@ -7,7 +7,7 @@
  * 安全设计：
  *  1. 防账号枚举：无论邮箱是否存在，/request 都返回同一句话与同一状态码；
  *  2. 令牌只存摘要、一次性、30 分钟过期、单令牌限次（见 utils/passwordReset.ts 与 0006 迁移）；
- *  3. 邮件统一由 Teaven Email 服务投递（utils/mailer.ts），未配置 API Key 时明确报错而不是静默失败；
+ *  3. 邮件统一经 @moruteaven/email SDK 投递（utils/mailer.ts），未配置 API Key 时明确报错而不是静默失败；
  *  4. 发送与校验都挂 IP / 邮箱双维度限流，且每次操作写审计日志。
  */
 

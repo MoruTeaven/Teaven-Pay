@@ -33,7 +33,9 @@ export interface Env {
     // 邮件发信（Teaven Email 服务）：密码找回等功能依赖
     // 未配置 TEAVEN_EMAIL_API_KEY 时邮件能力视为未启用，相关接口明确报错而不是静默失败
     TEAVEN_EMAIL_API_KEY?: string;
-    // Teaven Email 发信端点，可只填服务根地址（自动补 /v1/mail/send）
+    // Teaven Email 服务根地址（走 @moruteaven/email SDK，默认 https://email.chenyande.com）
+    TEAVEN_EMAIL_BASE_URL?: string;
+    // 兼容旧配置名：等价于 TEAVEN_EMAIL_BASE_URL，写完整的 /v1/mail/send 也会被归一化
     TEAVEN_EMAIL_ENDPOINT?: string;
     
     // 支付渠道配置

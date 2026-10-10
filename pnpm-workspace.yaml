@@ -1,0 +1,9 @@
+# pnpm 11 起，包管理器配置从 package.json 的 "pnpm" 字段迁移到本文件。
+# allowBuilds 等价于旧版的 pnpm.onlyBuiltDependencies：允许这些依赖执行安装脚本。
+allowBuilds:
+  esbuild: true
+  workerd: true
+
+# 私有源上的 @moruteaven/* 均为刚发布的 dev 版本，跳过最小发布年龄检查
+minimumReleaseAgeExclude:
+  - '@moruteaven/email'
