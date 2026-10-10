@@ -66,6 +66,14 @@ function reasonFromError(error: unknown): string {
     return 'unknown_error';
 }
 
+/** 提取底层错误描述，仅用于服务端日志排障（不含邮件正文与密钥） */
+function describeError(error: unknown): string {
+    if (!(error instanceof Error)) return String(error);
+    const cause = (error as { cause?: unknown }).cause;
+    if (cause instanceof Error && cause.message) return error.message + ' | cause: ' + cause.message;
+    return error.message;
+}
+
 /**
  * 通过 Teaven Email 发送一封邮件
  * 不抛异常：失败以 { ok: false, reason } 返回，由调用方决定是否重试或提示。
@@ -90,6 +98,10 @@ export async function sendMail(env: Env, options: SendMailOptions): Promise<Send
             apiKey: (env.TEAVEN_EMAIL_API_KEY || '').trim(),
             baseUrl,
             timeoutMs: MAIL_REQUEST_TIMEOUT_MS,
+            // SDK 会把 fetch 存进配置对象再以方法形式调用（this.options.fetchImpl(...)），
+            // 在 Workers 里这会让 fetch 的 this 指向配置对象，触发 "Illegal invocation"。
+            // 包一层箭头函数，恢复成裸调用 fetch(...) 的正确形式。
+            fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init),
         });
     } catch (error) {
         // 例如 Key 缺少 sk_ 前缀：属于配置错误，明确区分于发送失败
@@ -111,7 +123,7 @@ export async function sendMail(env: Env, options: SendMailOptions): Promise<Send
         return { ok: true, mailId: data.mailId };
     } catch (error) {
         // 超时、网络错误、HTTP 错误都在这里收敛；不把邮件正文写入日志
-        console.error('mailer: send failed:', reasonFromError(error));
+        console.error('mailer: send failed:', reasonFromError(error), describeError(error));
         return { ok: false, reason: reasonFromError(error) };
     }
 }
