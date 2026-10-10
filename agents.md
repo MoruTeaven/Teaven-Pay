@@ -26,7 +26,7 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 - `src/types/`：Cloudflare 绑定、数据库行、支付插件类型定义
 - `src/utils/`：签名、密码哈希、AES、UUID 等工具函数,  - `constantTime.ts`：常数时间字符串比较,  - `netSecurity.ts`：出站 URL 安全（SSRF）校验与 DNS 二次校验,  - `cors.ts`：`ALLOWED_ORIGINS` 白名单解析与来源判定,  - `cashierAuth.ts`：公开收银台下单票据与签名,
   - `passwordReset.ts`：密码找回令牌生成与摘要（HMAC-SHA256，密钥复用 JWT_SECRET）,
-  - `mailer.ts`：Teaven Email 发信客户端（`TEAVEN_EMAIL_API_KEY` 未配置即视为未启用）,
+  - `mailer.ts`：Teaven Email 发信客户端，内部使用 `@moruteaven/email` SDK（`TEAVEN_EMAIL_API_KEY` 未配置即视为未启用；发信前仍走 SSRF 校验）,
   - `mailTemplates.ts`：邮件模板（纯字符串拼接，动态内容必须转义）
 - `migrations/`：D1 初始化和修复 SQL
 - `docs/`：API、部署、插件开发和后台设计文档
@@ -125,7 +125,8 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 - 入口：用户中心 `/user` 登录页的「忘记密码？」，重置落地页 `/reset-password?token=...`。
 - 令牌：32 字节随机 base64url，只存 HMAC-SHA256 摘要（`migrations/0006_password_resets.sql`），30 分钟过期、一次性、同一用户同时只保留最新一条。
 - 防枚举：邮箱不存在 / 账号被禁用时返回与成功一致的文案，且不发信。
-- 发信：统一走 Teaven Email（默认 `https://email.chenyande.com/v1/mail/send`，分类 `VERIFY`），密钥 `TEAVEN_EMAIL_API_KEY`；未配置时接口返回 503，绝不静默假装已发送。
+- 发信：统一经 `@moruteaven/email` SDK 调用 Teaven Email（默认服务地址 `https://email.chenyande.com`，分类 `VERIFY`），密钥 `TEAVEN_EMAIL_API_KEY`；未配置时接口返回 503，绝不静默假装已发送。
+- 发信依赖私有源：`@moruteaven/*` 由仓库根目录 `.npmrc` 指向阿里云私有源，安装前需在用户级 `~/.npmrc` 配置该源的认证。
 - 限流：`/api/password-reset/*` 有 IP 维度限流（907 秒 / 7 次），路由内另有 IP + 邮箱双维度限流。
 
 ## 校验建议

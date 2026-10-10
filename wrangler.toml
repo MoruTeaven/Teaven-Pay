@@ -67,4 +67,5 @@ head_sampling_rate = 1
 
 # 邮件发信（Teaven Email 服务）：非密钥配置
 # [vars]
-# TEAVEN_EMAIL_ENDPOINT = "https://email.chenyande.com"   # 可只填根地址，自动补 /v1/mail/send
+# TEAVEN_EMAIL_BASE_URL = "https://email.chenyande.com"   # 服务根地址，不填即用该默认值
+# TEAVEN_EMAIL_ENDPOINT 为旧配置名，仍兼容（写完整的 /v1/mail/send 会被自动归一化）
