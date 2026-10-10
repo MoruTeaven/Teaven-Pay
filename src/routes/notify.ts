@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { Env, OrderRow } from '../types/env';
 import { getPlugin } from '../plugins';
 import { decryptChannelConfig } from '../utils/crypto';
+import { signOutboundPayload } from '../utils/apiKeyAuth';
 import { getRequestLogMeta, headersToLogObject, logOrderEvent, logPaymentEvent, logWebhookEvent } from '../utils/logging';
 import { CREDIT_OUTCOME, CREDIT_SOURCE, CreditOutcome, creditOrder } from '../utils/credit';
 import { isSafeOutboundUrl } from '../utils/netSecurity';
@@ -428,15 +429,6 @@ async function sendMerchantNotification(env: Env, order: any) {
     }
     
     try {
-        // 查询商户信息
-        const user = await env.DB.prepare(
-            'SELECT * FROM users WHERE id = ?'
-        ).bind(order.user_id).first();
-        
-        if (!user) {
-            return;
-        }
-        
         // 构建通知参数
         const notifyParams: Record<string, any> = {
             pid: order.user_id,
@@ -449,11 +441,27 @@ async function sendMerchantNotification(env: Env, order: any) {
             trade_status: 'TRADE_SUCCESS'
         };
         
-        // 生成签名
-        const { generateSignAsync } = await import('../utils/crypto');
-        const signType = (user as any).api_key_type || 'hmac-sha256';
-        notifyParams.sign = await generateSignAsync(notifyParams, (user as any).api_key, signType);
-        notifyParams.sign_type = signType === 'md5' ? 'MD5' : 'HMAC-SHA256';
+        // 生成签名：密钥来源与入站验签统一为 api_keys 表（status = 1 的主密钥），
+        // 因此商户在面板重置密钥后，入站验签与出站通知签名始终使用同一把 key。
+        // 原实现读取 users.api_key 旧字段，重置后与 api_keys 表不一致，导致商户验签失败。
+        const signed = await signOutboundPayload(env.DB, order.user_id, notifyParams);
+        if (!signed) {
+            console.error('[Notify] no active api key, skip merchant notification:', order.user_id);
+            await logWebhookEvent(env, {
+                orderId: order.id,
+                userId: order.user_id,
+                plugin: order.plugin,
+                webhookType: 'merchant_notify',
+                direction: 'outbound',
+                url: order.notify_url,
+                method: 'POST',
+                success: false,
+                errorMessage: '商户未配置可用的 API 密钥，未发送通知',
+            });
+            return;
+        }
+        notifyParams.sign = signed.sign;
+        notifyParams.sign_type = signed.signingKey.signTypeLabel;
         
         // 发送通知
         const response = await fetch(order.notify_url, {

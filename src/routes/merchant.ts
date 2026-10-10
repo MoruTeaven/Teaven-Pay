@@ -10,6 +10,8 @@ import { hashPassword, verifyPassword } from '../utils/crypto';
 import { generateUUIDv7 } from '../utils/uuid';
 import { getRequestLogMeta, logAuditEvent, logOrderEvent } from '../utils/logging';
 import { isSafeOutboundUrl } from '../utils/netSecurity';
+import { generateApiKey } from '../utils/crypto';
+import { getPrimaryApiKey } from '../utils/apiKeyAuth';
 
 export const merchantRouter = new Hono<{ Bindings: Env }>();
 
@@ -116,10 +118,14 @@ merchantRouter.get('/profile', async (c) => {
             return c.json({ code: -2, msg: '用户不存在' }, 401);
         }
 
-        // 获取用户的 API 密钥列表
+        // 获取用户的 API 密钥列表（密钥来源统一为 api_keys 表）
         const apiKeysResult = await c.env.DB.prepare(
             'SELECT id, name, api_key_type, status, last_used_at, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC'
         ).bind(payload.id).all();
+
+        // 主密钥（启用记录中创建时间最早的一条）：用户中心展示/重置都以它为准，
+        // 与入站验签、出站通知签名的取键口径完全一致
+        const primaryKey = await getPrimaryApiKey(c.env.DB, payload.id);
 
         const u = user as any;
 
@@ -134,6 +140,10 @@ merchantRouter.get('/profile', async (c) => {
                 balance: u.balance,
                 frozen_balance: u.frozen_balance,
                 api_keys: apiKeysResult.results || [],
+                // 旧字段 users.api_key 已废弃：主密钥信息一律取自 api_keys 表
+                api_key: primaryKey?.api_key || '',
+                api_key_type: primaryKey?.api_key_type || '',
+                rsa_public_key: primaryKey?.rsa_public_key || '',
                 notify_url: u.notify_url,
                 return_url: u.return_url,
                 contact_qq: u.contact_qq,
@@ -799,6 +809,112 @@ merchantRouter.put('/developer/urls', async (c) => {
         return c.json({ code: 0, msg: '更新成功' });
     } catch (error) {
         console.error('Update developer urls error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 更新签名配置
+ * PUT /api/merchant/developer/signature
+ *
+ * 只改主密钥（api_keys 表 status = 1 中创建时间最早的一条）的签名方式，
+ * 保证用户中心展示的签名配置与入站验签、出站通知签名取的是同一把 key。
+ */
+merchantRouter.put('/developer/signature', async (c) => {
+    const payload = c.get('user') as any;
+    const body = await c.req.parseBody();
+
+    const apiKeyType = (body.api_key_type as string || '').trim();
+    const rsaPublicKey = (body.rsa_public_key as string || '').trim();
+
+    if (!['hmac-sha256', 'rsa'].includes(apiKeyType)) {
+        return c.json({ code: -1, msg: '签名类型不合法，MD5 已废弃，请使用 HMAC-SHA256 或 RSA' });
+    }
+    if (apiKeyType === 'rsa' && !rsaPublicKey) {
+        return c.json({ code: -1, msg: 'RSA 签名类型需要提供公钥' });
+    }
+
+    try {
+        const primaryKey = await getPrimaryApiKey(c.env.DB, payload.id);
+        if (!primaryKey) {
+            return c.json({ code: -1, msg: '商户未配置 API 密钥，请先创建密钥' });
+        }
+
+        await c.env.DB.prepare(
+            "UPDATE api_keys SET api_key_type = ?, rsa_public_key = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+        ).bind(apiKeyType, apiKeyType === 'rsa' ? rsaPublicKey : null, primaryKey.id, payload.id).run();
+
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'merchant_update_signature',
+            target: primaryKey.id,
+            detail: { key_id: primaryKey.id, api_key_type: apiKeyType },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
+        return c.json({ code: 0, msg: '签名配置已保存' });
+    } catch (error) {
+        console.error('Update signature error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 重置主密钥
+ * POST /api/merchant/developer/api-key/reset
+ *
+ * 只更新 api_keys 表中的主密钥。入站验签（pay.ts / middleware/auth.ts）
+ * 与出站通知签名（notify.ts）都从同一张表取 key，因此重置后两侧自动一致，
+ * 不会再出现「商户重置密钥后通知验签失败」。
+ */
+merchantRouter.post('/developer/api-key/reset', async (c) => {
+    const payload = c.get('user') as any;
+    const body = await c.req.parseBody();
+    const password = body.password as string;
+
+    if (!password) {
+        return c.json({ code: -1, msg: '请输入当前密码' });
+    }
+
+    try {
+        const user = await c.env.DB.prepare(
+            'SELECT * FROM users WHERE id = ? AND role = ?'
+        ).bind(payload.id, 'merchant').first();
+
+        if (!user) {
+            return c.json({ code: -2, msg: '用户不存在' }, 401);
+        }
+
+        const valid = await verifyPassword(password, (user as any).password_hash, (user as any).salt);
+        if (!valid) {
+            return c.json({ code: -1, msg: '密码错误' });
+        }
+
+        const primaryKey = await getPrimaryApiKey(c.env.DB, payload.id);
+        if (!primaryKey) {
+            return c.json({ code: -1, msg: '商户未配置 API 密钥，请先创建密钥' });
+        }
+
+        const newApiKey = await generateApiKey();
+        await c.env.DB.prepare(
+            "UPDATE api_keys SET api_key = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+        ).bind(newApiKey, primaryKey.id, payload.id).run();
+
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'reset_api_key',
+            target: primaryKey.id,
+            detail: { key_id: primaryKey.id, name: primaryKey.name },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
+        return c.json({
+            code: 0,
+            msg: 'API 密钥重置成功',
+            data: { id: primaryKey.id, api_key: newApiKey }
+        });
+    } catch (error) {
+        console.error('Reset api key error:', error);
         return c.json({ code: -5, msg: '系统错误' }, 500);
     }
 });

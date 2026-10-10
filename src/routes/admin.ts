@@ -270,6 +270,26 @@ adminRouter.get('/merchants', async (c) => {
         }
         const count = await c.env.DB.prepare(countQuery).bind(...countParams).first();
         
+        // 密钥来源统一为 api_keys 表：列表页只展示主密钥前缀与签名方式
+        const merchantIds = merchants.results.map((row: any) => row.id);
+        const keyByUser = new Map<string, { preview: string; api_key_type: string }>();
+        if (merchantIds.length > 0) {
+            const placeholders = merchantIds.map(() => '?').join(', ');
+            const keyRows = await c.env.DB.prepare(
+                `SELECT user_id, api_key, api_key_type FROM api_keys
+                 WHERE status = 1 AND user_id IN (${placeholders})
+                 ORDER BY created_at ASC, id ASC`
+            ).bind(...merchantIds).all();
+            for (const key of keyRows.results as any[]) {
+                if (!keyByUser.has(key.user_id)) {
+                    keyByUser.set(key.user_id, {
+                        preview: String(key.api_key || '').substring(0, 12),
+                        api_key_type: key.api_key_type || 'hmac-sha256',
+                    });
+                }
+            }
+        }
+
         // 转换为驼峰命名，避免前端 undefined
         const mapped = merchants.results.map((row: any) => ({
             id: row.id,
@@ -278,6 +298,8 @@ adminRouter.get('/merchants', async (c) => {
             status: row.status,
             balance: row.balance || 0,
             frozenBalance: row.frozen_balance || 0,
+            apiKeyPreview: keyByUser.get(row.id)?.preview || '',
+            apiKeyType: keyByUser.get(row.id)?.api_key_type || '',
             notifyUrl: row.notify_url || '',
             returnUrl: row.return_url || '',
             settleType: row.settle_type || '',
@@ -445,6 +467,8 @@ adminRouter.get('/merchants/:id', async (c) => {
                 balance: m.balance || 0,
                 frozenBalance: m.frozen_balance || 0,
                 apiKeys: apiKeys.results || [],
+                // 密钥类型取自 api_keys 表主密钥，不再读取 users.api_key_type 旧字段
+                apiKeyType: (apiKeys.results as any[])?.[0]?.api_key_type || '',
                 notifyUrl: m.notify_url || '',
                 returnUrl: m.return_url || '',
                 contactQq: m.contact_qq || '',

@@ -87,6 +87,27 @@ async function generateHmacSign(params, apiKey) {
 
 请求时带上 `sign_type=HMAC-SHA256`（不传时默认即为 HMAC-SHA256）。
 
+### 密钥传递方式（安全要求）
+
+> **明文密钥禁止放在 URL query 中。** 密钥出现在 URL 会进入访问日志、CDN 日志、
+> 浏览器历史与 Referer，属于确定性的泄露面。原 `key=` 查询参数模式已废弃。
+
+密钥只能通过以下两种方式之一提供：
+
+| 方式 | 位置 | 说明 |
+|------|------|------|
+| 签名（推荐） | `sign` 参数 | 按上面的算法生成，服务端用商户密钥验签 |
+| 明文密钥 | `Authorization: Bearer <api_key>` 请求头 | 仅用于服务端直连的临时调用 |
+| 明文密钥 | `X-API-Key: <api_key>` 请求头 | 同上 |
+| 明文密钥 | POST body 的 `key` 字段 | 仅退款、关闭订单等 POST 接口接受 |
+
+查询类接口（`query` / `orders` / `refundquery`）还要求携带 `timestamp`
+（毫秒时间戳，与服务器偏差 5 分钟内），用于防重放。
+
+**密钥来源**：服务端只认商户后台「API 密钥」列表中的启用密钥（`api_keys` 表）。
+异步通知签名与接口验签使用同一把主密钥（创建时间最早的一条启用密钥），
+因此在用户中心重置密钥后，入站验签与出站通知签名会同步切换，无需额外配置。
+
 ---
 
 ## 公开收银台下单（需签名）
@@ -273,8 +294,11 @@ function generateRSASign(params, privateKey) {
 | pid | int | 是 | 商户ID |
 | trade_no | string | 否 | 平台订单号 (与 out_trade_no 二选一) |
 | out_trade_no | string | 否 | 商户订单号 |
-| sign | string | 是 | 签名 |
+| sign | string | 是 | 签名（密钥不可放 URL） |
+| timestamp | string | 是 | 毫秒时间戳，与服务器偏差需在 5 分钟内 |
 | sign_type | string | 否 | 签名类型 |
+
+**待签串**：`out_trade_no=<值>&pid=<值>&timestamp=<值>&trade_no=<值>`（按字段名升序，空值不参与）
 
 **响应:**
 
@@ -308,10 +332,16 @@ function generateRSASign(params, privateKey) {
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
 | pid | int | 是 | 商户ID |
-| key | string | 是 | 商户密钥 |
+| sign | string | 是 | 签名（原 `key=` 明文模式已废弃，不再接受） |
+| timestamp | string | 是 | 毫秒时间戳，与服务器偏差需在 5 分钟内 |
 | limit | int | 否 | 每页数量，默认 10，最大 50 |
 | offset | int | 否 | 偏移量，默认 0 |
 | status | int | 否 | 订单状态筛选 |
+
+> 也可改用请求头 `Authorization: Bearer <api_key>` 或 `X-API-Key: <api_key>`
+> 代替 `sign`，但密钥**不得**出现在 URL query 中。
+
+**待签串**：`limit=<值>&offset=<值>&pid=<值>&status=<值>&timestamp=<值>`（按字段名升序，空值不参与）
 
 **响应:**
 
@@ -360,7 +390,7 @@ function generateRSASign(params, privateKey) {
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
 | pid | int | 是 | 商户ID |
-| key | string | 是 | 商户密钥 |
+| key | string | 是 | 商户密钥（**仅限 POST body 或请求头**，不可放 URL） |
 
 **响应:**
 
@@ -426,7 +456,8 @@ function generateRSASign(params, privateKey) {
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
 | pid | int | 是 | 商户ID |
-| key | string | 是 | 商户密钥 |
+| sign | string | 二选一 | 签名（推荐；待签串 `money=<值>&out_trade_no=<值>&pid=<值>&trade_no=<值>`） |
+| key | string | 二选一 | 商户密钥（**仅限 POST body 或请求头**，不可放 URL） |
 | trade_no | string | 否 | 平台订单号 (与 out_trade_no 二选一) |
 | out_trade_no | string | 否 | 商户订单号 |
 | money | decimal | 是 | 退款金额 |
@@ -456,14 +487,20 @@ function generateRSASign(params, privateKey) {
 
 **GET** `/api.php?act=refundquery`
 
+> **需要认证。** 原实现只校验 `pid` + 单号，任何人知道商户 ID 即可枚举退款记录
+> （金额 / 状态 / 时间），属于越权信息泄露。现已要求与退款申请同一套签名机制。
+
 **请求参数:**
 
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
 | pid | int | 是 | 商户ID |
-| key | string | 是 | 商户密钥 |
+| sign | string | 是 | 签名（待签串 `out_trade_no=<值>&pid=<值>&refund_no=<值>&timestamp=<值>`） |
+| timestamp | string | 是 | 毫秒时间戳，与服务器偏差需在 5 分钟内 |
 | refund_no | string | 否 | 退款单号 (与 out_trade_no 二选一) |
 | out_trade_no | string | 否 | 商户订单号 |
+
+> 也可用请求头 `Authorization: Bearer <api_key>` 或 `X-API-Key: <api_key>` 代替 `sign`。
 
 **响应:**
 
@@ -491,7 +528,8 @@ function generateRSASign(params, privateKey) {
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
 | pid | int | 是 | 商户ID |
-| key | string | 是 | 商户密钥 |
+| sign | string | 二选一 | 签名（待签串 `out_trade_no=<值>&pid=<值>&trade_no=<值>`） |
+| key | string | 二选一 | 商户密钥（**仅限 POST body 或请求头**，不可放 URL） |
 | trade_no | string | 否 | 平台订单号 (与 out_trade_no 二选一) |
 | out_trade_no | string | 否 | 商户订单号 |
 
@@ -513,6 +551,15 @@ function generateRSASign(params, privateKey) {
 1. 支付成功后，系统会向商户提供的 `notify_url` 发送 POST 请求
 2. 商户收到通知后必须返回字符串 `success`，否则系统会重复通知
 3. 重复通知策略：1分钟、5分钟、30分钟、1小时、6小时，共 5 次
+
+### 签名密钥来源
+
+通知签名与接口验签使用**同一把密钥**：商户后台「API 密钥」列表中创建时间最早的
+一条启用密钥（主密钥）。在用户中心重置密钥后，入站验签与出站通知签名会同时切换
+到新密钥，商户只需更新本地保存的密钥即可，不需要分别配置。
+
+> 历史问题：早期版本的出站通知签名读取的是 `users.api_key` 旧字段，与接口验签使用的
+> `api_keys` 表不是同一份数据，商户重置密钥后通知验签必然失败。该读取点已移除。
 
 ### 通知参数
 
@@ -579,7 +626,9 @@ app.post('/notify', (req, res) => {
 | 错误信息 | 原因 | 解决方案 |
 |----------|------|----------|
 | 商户ID不存在 | pid 错误 | 检查商户ID是否正确 |
-| 商户密钥错误 | key 错误 | 检查商户密钥是否正确 |
+| 商户密钥错误 | key 错误 | 检查商户密钥是否正确（密钥不可放 URL，需用 body / 请求头 / 签名） |
+| 缺少签名参数 sign | 未传 sign 或请求头密钥 | 改用 `sign` 签名或 `Authorization` / `X-API-Key` 请求头 |
+| 请求已过期 | timestamp 偏差超过 5 分钟 | 校准服务器时间后重新签名 |
 | 签名错误 | sign 计算错误 | 检查签名算法实现 |
 | 订单号已存在 | 重复下单 | 更换订单号 |
 | 金额不合法 | money 格式错误 | 检查金额格式 |
@@ -589,6 +638,9 @@ app.post('/notify', (req, res) => {
 ---
 
 ## SDK
+
+> 下方 SDK 示例中的 `key` 由 SDK 内部按签名算法使用，不会拼进 URL。
+> 自行实现调用时，请确保密钥只出现在请求头或 POST body，绝不放 URL query。
 
 ### PHP SDK
 

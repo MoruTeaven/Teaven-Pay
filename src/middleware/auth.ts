@@ -5,6 +5,7 @@
 import { Context, Next } from 'hono';
 import { Env } from '../types/env';
 import { isJwtSecretMissingError, resolveJwtSecret, JWT_SECRET_MISSING_MSG } from '../utils/jwtSecret';
+import { matchApiKey, readApiKeyFromHeaders } from '../utils/apiKeyAuth';
 
 /**
  * JWT 认证中间件
@@ -69,31 +70,41 @@ export async function merchantMiddleware(c: Context<{ Bindings: Env }>, next: Ne
 
 /**
  * API Key 认证中间件
+ *
+ * 安全整改（任务 t-mukt085p）：
+ *   - 密钥来源统一为 api_keys 表，不再比对 users.api_key 旧字段；
+ *   - 明文密钥不再从 URL query 读取，只接受 X-API-Key / Authorization 请求头，
+ *     避免密钥进入访问日志、CDN 日志与 Referer；
+ *   - 密钥比对走常数时间比较，避免时序侧信道。
  */
 export async function apiKeyMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
     const pid = c.req.query('pid') || c.req.header('X-PID');
-    const apiKey = c.req.query('key') || c.req.header('X-API-Key');
+    const apiKey = readApiKeyFromHeaders(c.req.raw.headers);
     
     if (!pid || !apiKey) {
         return c.json({ code: -3, msg: '缺少认证参数' }, 401);
     }
     
     try {
-        // 查询商户
-        const user = await c.env.DB.prepare(
-            'SELECT id, role, status FROM users WHERE id = ? AND api_key = ? AND role = ?'
-        ).bind(pid, apiKey, 'merchant').first();
+        const merchant = await c.env.DB.prepare(
+            'SELECT id, role, status FROM users WHERE id = ? AND role = ?'
+        ).bind(pid, 'merchant').first<{ id: string; role: string; status: number }>();
         
-        if (!user) {
+        if (!merchant) {
             return c.json({ code: -3, msg: '商户不存在或密钥错误' }, 401);
         }
         
-        if (user.status !== 1) {
+        if (merchant.status !== 1) {
             return c.json({ code: -2, msg: '商户已被封禁' }, 403);
         }
         
+        const matched = await matchApiKey(c.env.DB, merchant.id, apiKey);
+        if (!matched) {
+            return c.json({ code: -3, msg: '商户不存在或密钥错误' }, 401);
+        }
+        
         // 将用户信息添加到上下文
-        c.set('user', user);
+        c.set('user', merchant);
         
         await next();
     } catch (error) {

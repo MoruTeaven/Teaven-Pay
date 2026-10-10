@@ -34,7 +34,13 @@ function createMockDb(options: { channelPlugin?: string } = {}) {
                 }
                 return null;
             },
-            all: async () => ({ results: [] }),
+            all: async () => {
+                // 密钥来源统一为 api_keys 表后，认证走 listActiveApiKeys()（.all()）
+                if (sql.includes('FROM api_keys')) {
+                    return { results: [{ id: 'key-1', user_id: MERCHANT_ID, api_key: API_KEY, name: '默认密钥', api_key_type: 'hmac-sha256', rsa_public_key: null }] };
+                }
+                return { results: [] };
+            },
             run: async () => ({ success: true }),
         }),
         first: async () => null,

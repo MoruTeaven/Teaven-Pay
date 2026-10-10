@@ -30,6 +30,7 @@ import { getThrottleStore } from './utils/throttleStore';
 // 工具
 import { parseAllowedOrigins, resolveAllowedOrigin } from './utils/cors';
 import { issueCashierTicket } from './utils/cashierAuth';
+import { getPrimaryApiKey } from './utils/apiKeyAuth';
 
 // 类型
 import { Env } from './types/env';
@@ -332,16 +333,15 @@ app.get('/pay/:merchantId', async (c) => {
             return c.html(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>收银台</title></head><body style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#6b7280;"><div style="text-align:center;"><h2>商户不存在或已停用</h2></div></body></html>`);
         }
 
-        // 收银台下单票据：只有加载过本页面的客户端才能拿到，用于下单签名
-        const apiKeyRow = await env.DB.prepare(
-            'SELECT api_key FROM api_keys WHERE user_id = ? AND status = 1 ORDER BY created_at LIMIT 1'
-        ).bind(merchantId).first() as any;
+        // 收银台下单票据：只有加载过本页面的客户端才能拿到，用于下单签名。
+        // 主密钥统一经 getPrimaryApiKey 取，与入站验签、出站通知签名同源。
+        const primaryKey = await getPrimaryApiKey(env.DB, merchantId);
 
-        if (!apiKeyRow || !apiKeyRow.api_key) {
+        if (!primaryKey) {
             return c.html(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>收银台</title></head><body style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#6b7280;"><div style="text-align:center;"><h2>商户未配置 API 密钥，暂无法下单</h2></div></body></html>`);
         }
 
-        const { ticket, expiresAt } = await issueCashierTicket(merchantId, apiKeyRow.api_key as string);
+        const { ticket, expiresAt } = await issueCashierTicket(merchantId, primaryKey.api_key);
 
         const channels = await env.DB.prepare(
             `SELECT pt.id, pt.name, pt.display_name, pt.icon FROM payment_types pt
@@ -3324,7 +3324,7 @@ app.get('/admin', async (c) => {
                         '<td>' + escapeHtml(merchant.email) + '</td>' +
                         '<td>' + getStatusBadge(merchant.status, 'merchant') + '</td>' +
                         '<td>' + formatMoney(merchant.balance) + '</td>' +
-                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">' + (merchant.apiKey ? escapeHtml(merchant.apiKey.substring(0, 12)) + '...' : '-') + '</code></td>' +
+                        '<td><code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px;">' + (merchant.apiKeyPreview ? escapeHtml(merchant.apiKeyPreview) + '...' : '-') + '</code></td>' +
                         '<td>' + formatDate(merchant.createdAt) + '</td>' +
                         '<td>' +
                         '    <div style="display: flex; gap: 8px;">' +
@@ -3405,8 +3405,8 @@ app.get('/admin', async (c) => {
                 detailItem('最后登录', formatDate(merchant.lastLoginAt)) +
                 '    </div></div></div>' +
                 '    <div class="card fade-in"><div class="card-header"><h3 class="card-title">API 配置</h3></div><div class="card-body">' +
-                detailItem('API Key', '<code style="word-break: break-all;">' + escapeHtml(merchant.apiKey || '-') + '</code>') +
-                detailItem('签名方式', merchant.apiKeyType === 'md5' ? 'MD5' : 'HMAC-SHA256') +
+                detailItem('API 密钥', '<span style="font-size:12px;color:var(--text-tertiary);">密钥明文不再下发到后台页面，请在用户中心「接口信息」查看或重置</span>') +
+                detailItem('签名方式', merchant.apiKeyType === 'md5' ? 'MD5' : merchant.apiKeyType === 'rsa' ? 'RSA' : 'HMAC-SHA256') +
                 detailItem('异步通知地址', escapeHtml(merchant.notifyUrl || '-')) +
                 detailItem('同步返回地址', escapeHtml(merchant.returnUrl || '-')) +
                 detailItem('分组ID', escapeHtml(merchant.groupId || '-')) +
@@ -6678,12 +6678,13 @@ app.get('/user', async (c) => {
             if (!data || data.code !== 0) return;
             var u = data.data;
 
-            var maskedKey = u.api_key || '未设置';
+            // 主密钥来自 api_keys 表（/profile 返回），与入站验签、出站通知签名同源
+            var apiKeyValue = u.api_key || '未设置';
 
             content.innerHTML =
                 '<div class="card"><div class="card-header"><h3 class="card-title">接口信息</h3></div><div class="card-body">' +
                 '<div class="form-group"><label class="form-label">商户 ID (PID)</label><div style="display:flex;align-items:center;gap:8px;"><code style="background:var(--bg-tertiary);padding:6px 12px;border-radius:6px;font-size:14px;flex:1;">' + escapeHtml(u.id) + '</code><button class="copy-btn" onclick="navigator.clipboard.writeText(\\'' + escapeHtml(u.id) + '\\');showToast(\\'已复制\\')"><i class="ri-file-copy-line"></i></button></div></div>' +
-                '<div class="form-group"><label class="form-label">API Key</label><div style="display:flex;align-items:center;gap:8px;"><code style="background:var(--bg-tertiary);padding:6px 12px;border-radius:6px;font-size:14px;flex:1;word-break:break-all;">' + escapeHtml(maskedKey) + '</code><button class="btn btn-sm btn-danger" onclick="window._resetApiKey()"><i class="ri-refresh-line"></i>重置</button></div><div class="form-hint">重置后旧密钥立即失效，请谨慎操作</div></div>' +
+                '<div class="form-group"><label class="form-label">API Key</label><div style="display:flex;align-items:center;gap:8px;"><code style="background:var(--bg-tertiary);padding:6px 12px;border-radius:6px;font-size:14px;flex:1;word-break:break-all;">' + escapeHtml(apiKeyValue) + '</code><button class="btn btn-sm btn-danger" onclick="window._resetApiKey()"><i class="ri-refresh-line"></i>重置</button></div><div class="form-hint">入站验签与异步通知签名共用这把密钥；重置后旧密钥立即失效，请谨慎操作</div></div>' +
                 '</div></div>' +
 
                 '<div class="card"><div class="card-header"><h3 class="card-title">签名配置</h3></div><div class="card-body">' +
