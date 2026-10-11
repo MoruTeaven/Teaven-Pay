@@ -7,8 +7,20 @@
  *
  *   KV(env.CACHE) → D1(throttle_counters 计数表) → Worker  isolate 内存 Map
  *
+ * ## 为什么本场景以 D1 为准（而不是 KV）
+ *
+ * 防爆破要求「每一次尝试都被计数」，KV 做不到：
+ *  1. KV 没有原子自增。KV 后端是「读 → 内存 +1 → 写回」，两个并发请求会
+ *     读到同一个 count 再各自写回，实际发生 N 次却只记 1 次；
+ *  2. KV 是最终一致的。官方文档明确写入落到中心存储后不会自动推送到各地缓存，
+ *     写完之后其他节点仍可能读到旧值。
+ *
+ * D1 后端的自增是一条 INSERT ... ON CONFLICT DO UPDATE ... RETURNING，
+ * 由数据库保证原子性，因此是这里正确的选择。KV 仅适用于能容忍误差的
+ * 「软限流」（如防刷免费额度），不适用于登录爆破、密码找回爆破这类场景。
+ *
  * 内存兜底只在单个 isolate 内生效，是最后一道防线（仍能挡住绝大多数爆破），
- * 一旦 KV 或 D1 可用就自动回到跨实例一致的计数。
+ * D1 可用时即回到跨实例一致的计数。
  */
 
 import type { Env } from '../types/env';
@@ -36,12 +48,20 @@ export interface ThrottleStore {
     read(key: string): Promise<CounterState | null>;
     increment(key: string, windowSeconds: number): Promise<CounterState>;
     remove(key: string): Promise<void>;
-    /** 最近一次成功使用的后端，便于排障与 /api/health 暴露 */
-    getActiveBackend(): ThrottleBackend;
+    /**
+     * 最近一次**真实成功执行过**的后端，便于排障与 /api/health 暴露。
+     * 从未成功执行过任何操作时为 null（区别于「配置上打算用哪个后端」）。
+     */
+    getActiveBackend(): ThrottleBackend | null;
 }
 
 /** KV 的最小 TTL（Cloudflare KV 不接受小于 60 秒的 expirationTtl） */
 const KV_MIN_TTL_SECONDS = 60;
+/**
+ * 健康探测用的键：/api/health 会对它做一次 read（只读、不写入），
+ * 以此判断「此刻真正生效的后端」是哪一个。业务计数不会使用该键。
+ */
+export const THROTTLE_HEALTH_PROBE_KEY = '__health_probe__';
 /** 后端失败后的重试冷却时间 */
 const BACKEND_RETRY_MS = 77_000;
 /** 内存兜底表的容量上限，超过后先清理过期项再清理最旧项 */
@@ -221,7 +241,9 @@ export function createThrottleStore(env: ThrottleBindings): ThrottleStore {
     backends.push(createMemoryBackend());
 
     const health = getHealth(env);
-    let active: ThrottleBackend = backends[0].name;
+    // 只记录「真正成功执行过」的后端；初始为 null，避免把「配置的首选」
+    // 误报成「实际生效」。首个成功操作会把这里填成事实值。
+    let active: ThrottleBackend | null = null;
 
     const isCoolingDown = (name: ThrottleBackend) =>
         Date.now() - health[name].failedAt < BACKEND_RETRY_MS;
@@ -231,7 +253,8 @@ export function createThrottleStore(env: ThrottleBindings): ThrottleStore {
         fallback: T,
     ): Promise<T> {
         for (const backend of backends) {
-            if (backend.name !== active && isCoolingDown(backend.name)) continue;
+            // 首个成功前 active 为 null：此时不跳过任何后端，按优先级依次尝试
+            if (active !== null && backend.name !== active && isCoolingDown(backend.name)) continue;
             try {
                 const value = await op(backend);
                 health[backend.name].failedAt = 0;

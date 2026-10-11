@@ -37,7 +37,10 @@ database_id = "7de39fde-b84c-46bd-bb0c-01004b6f5200"
 # KV 命名空间配置 (用于缓存) - 暂时禁用
 # 未绑定时限流不会失效：计数自动降级到 D1(throttle_counters, 需执行
 # migrations/0005_throttle_counters.sql) → isolate 内存 Map。
-# 建议尽快创建 KV 并解除注释，以获得跨实例一致的限流计数。
+# 注意：本项目的限流**不建议**改用 KV。KV 没有原子自增（其实现是
+# 「读→内存+1→写回」，并发下会丢计数），且写入是最终一致的（写完后其他
+# 节点仍可能读到旧值）。防登录爆破/密码找回爆破要求每次尝试都被计数，
+# 因此 D1 的原子 upsert 才是这里的正确后端。KV 只适合能容忍误差的软限流。
 # [[kv_namespaces]]
 # binding = "CACHE"
 # id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

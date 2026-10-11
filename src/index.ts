@@ -26,7 +26,7 @@ import { jwtSecretGuard } from './middleware/jwtSecretGuard';
 import { isJwtSecretConfigured } from './utils/jwtSecret';
 
 // 限流存储（用于健康检查暴露当前生效的计数后端）
-import { getThrottleStore } from './utils/throttleStore';
+import { getThrottleStore, THROTTLE_HEALTH_PROBE_KEY } from './utils/throttleStore';
 // 工具
 import { parseAllowedOrigins, resolveAllowedOrigin } from './utils/cors';
 import { issueCashierTicket } from './utils/cashierAuth';
@@ -80,13 +80,19 @@ app.use('/api/password-reset/request', passwordResetLimitMiddleware);
 app.use('/api/password-reset/confirm', passwordResetLimitMiddleware);
 
 // 健康检查
-app.get('/api/health', (c) => {
+app.get('/api/health', async (c) => {
+    // 对限流后端做一次真实探测（read 一个不存在的键，只读不写，成本极低），
+    // 这样 throttleBackend 报的是「此刻实际生效的后端」而非「配置上打算用的后端」。
+    // 此前 D1 表缺失时该字段仍报 d1，与实际已降级到内存不符，容易误导排障。
+    const throttle = getThrottleStore(c.env);
+    await throttle.read(THROTTLE_HEALTH_PROBE_KEY);
+
     return c.json({
         status: 'ok',
         version: '1.0.0',
         timestamp: new Date().toISOString(),
-        // 限流计数实际使用的存储后端：kv / d1 / memory（KV 未绑定时自动降级）
-        throttleBackend: getThrottleStore(c.env).getActiveBackend(),
+        // 限流计数实际使用的存储后端：kv / d1 / memory（按优先级自动降级）
+        throttleBackend: throttle.getActiveBackend(),
         // JWT_SECRET 是否已配置（诊断用，不泄露密钥值）
         jwtSecretConfigured: isJwtSecretConfigured(c.env),
     });

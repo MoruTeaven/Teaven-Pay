@@ -93,3 +93,36 @@ describe('throttleStore 后端选择', () => {
         expect(next.resetAt).toBeGreaterThan(first.resetAt - 1000);
     });
 });
+
+describe('getActiveBackend 语义：报「实际生效」而非「配置首选」', () => {
+    it('未执行任何操作时为 null，而不是把首选后端当成事实', () => {
+        const store = createThrottleStore({ CACHE: createFakeKv(createFakeKvState()), DB: createFakeD1(createFakeD1State()) });
+        // 关键：此时并未真的用过任何后端，不应报 kv
+        expect(store.getActiveBackend()).toBeNull();
+    });
+
+    it('首次成功后才填成事实值', async () => {
+        const store = createThrottleStore({ DB: createFakeD1(createFakeD1State()) });
+        expect(store.getActiveBackend()).toBeNull();
+
+        await store.read('k');
+        expect(store.getActiveBackend()).toBe('d1');
+    });
+
+    it('首选后端失败并降级后，报的是真正成功的那个', async () => {
+        const d1State = createFakeD1State();
+        d1State.tableMissing = true;
+        // 只有 D1 和内存，D1 表缺失 → 应报 memory
+        const store = createThrottleStore({ DB: createFakeD1(d1State) });
+        await store.increment('k', 60);
+
+        expect(store.getActiveBackend()).toBe('memory');
+    });
+
+    it('KV 可用并成功时如实报 kv', async () => {
+        const store = createThrottleStore({ CACHE: createFakeKv(createFakeKvState()) });
+        await store.increment('k', 60);
+
+        expect(store.getActiveBackend()).toBe('kv');
+    });
+});
