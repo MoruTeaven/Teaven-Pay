@@ -15,6 +15,34 @@ import { getPrimaryApiKey } from '../utils/apiKeyAuth';
 
 export const merchantRouter = new Hono<{ Bindings: Env }>();
 
+/**
+ * 保证商户至少有一条启用中的 API 密钥。
+ *
+ * 背景：收银台 GET /pay/:merchantId 与支付 API 都只从 api_keys 表读取
+ * status = 1 的密钥，读不到即返回「商户未配置 API 密钥」。
+ * 历史遗留商户（或密钥被误停用/清空的商户）会因此完全无法下单。
+ *
+ * 幂等：仅在「该商户没有任何启用密钥」时补种一条默认密钥，
+ * 不会覆盖商户已有密钥，也不会重置商户自行创建的密钥。
+ */
+async function ensureMerchantHasApiKey(db: D1Database, userId: string): Promise<void> {
+    try {
+        const existing = await db.prepare(
+            'SELECT id FROM api_keys WHERE user_id = ? AND status = 1 LIMIT 1'
+        ).bind(userId).first();
+
+        if (existing) return;
+
+        await db.prepare(`
+            INSERT INTO api_keys (id, user_id, api_key, name, api_key_type, status, created_at, updated_at)
+            VALUES (?, ?, ?, '默认密钥', 'hmac-sha256', 1, datetime('now'), datetime('now'))
+        `).bind(generateUUIDv7(), userId, await generateApiKey()).run();
+    } catch (error) {
+        // 自愈失败不应阻断登录：商户仍可登录，并由管理后台补建密钥
+        console.error('Ensure merchant api key error:', error);
+    }
+}
+
 // 登录接口（无需认证）
 merchantRouter.post('/login', async (c) => {
     try {
@@ -43,6 +71,12 @@ merchantRouter.post('/login', async (c) => {
         if ((user as any).status !== 1) {
             return c.json({ code: -2, msg: '账号已被禁用' });
         }
+
+        // 自愈：老商户（创建于「创建商户即建默认密钥」逻辑之前）可能没有任何密钥，
+        // 会让收银台与支付 API 一律返回「商户未配置 API 密钥」而无法下单。
+        // 登录时若发现无启用密钥则补一条默认密钥，保证商户始终有可用密钥。
+        // 幂等：仅在「无启用密钥」时插入，不会覆盖商户已有或自行重置过的密钥。
+        await ensureMerchantHasApiKey(c.env.DB, (user as any).id);
 
         // JWT_SECRET 必填：缺失即 fail-fast，不再回退默认密钥
         const secret = resolveJwtSecret(c.env);

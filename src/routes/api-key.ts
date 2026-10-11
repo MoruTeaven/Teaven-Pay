@@ -209,6 +209,19 @@ apiKeyRouter.put('/:id', async (c) => {
         }
 
         if (status !== undefined && [0, 1].includes(status)) {
+            // 停用最后一个启用中的密钥会让商户失去全部可用密钥，
+            // 收银台与支付 API 随即返回「商户未配置 API 密钥」而无法下单。
+            // 与 DELETE 的「不能删除最后一个 API 密钥」保持同一约束。
+            if (status === 0) {
+                const activeCount = await c.env.DB.prepare(
+                    'SELECT COUNT(*) as count FROM api_keys WHERE user_id = ? AND status = 1'
+                ).bind(payload.id).first();
+
+                if (((activeCount as any)?.count || 0) <= 1) {
+                    return c.json({ code: -1, msg: '不能停用最后一个启用中的 API 密钥，请先创建新密钥' });
+                }
+            }
+
             updates.push('status = ?');
             params.push(status);
         }
