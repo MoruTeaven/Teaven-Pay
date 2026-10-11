@@ -185,7 +185,8 @@ app.get('/cashier/:tradeNo', async (c) => {
     let orderInfo: any = null;
     try {
         orderInfo = await env.DB.prepare(
-            'SELECT o.*, pt.display_name as type_name FROM orders o LEFT JOIN payment_types pt ON o.payment_type = pt.name WHERE o.id = ?'
+            // orders.payment_type 存的是 payment_types.id（如 pt_wxpay），历史数据可能存 name（如 wxpay），两种都兼容
+            'SELECT o.*, pt.display_name as type_name FROM orders o LEFT JOIN payment_types pt ON o.payment_type = pt.id OR o.payment_type = pt.name WHERE o.id = ?'
         ).bind(tradeNo).first() as any;
     } catch {}
 

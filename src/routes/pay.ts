@@ -567,9 +567,10 @@ payRouter.get('/query', async (c) => {
         }
         
         // 获取支付方式名称
+        // orders.payment_type 存的是 payment_types.id（如 pt_wxpay），历史数据可能存 name（如 wxpay），两种都兼容
         const paymentType = await env.DB.prepare(
-            'SELECT display_name FROM payment_types WHERE name = ?'
-        ).bind(order.payment_type).first();
+            'SELECT display_name FROM payment_types WHERE id = ? OR name = ?'
+        ).bind(order.payment_type, order.payment_type).first();
         
         return c.json({
             code: 1,
@@ -633,7 +634,7 @@ payRouter.get('/orders', async (c) => {
         }
         
         // 构建查询
-        let query = 'SELECT o.*, pt.display_name as type_name FROM orders o LEFT JOIN payment_types pt ON o.payment_type = pt.name WHERE o.user_id = ?';
+        let query = 'SELECT o.*, pt.display_name as type_name FROM orders o LEFT JOIN payment_types pt ON o.payment_type = pt.id OR o.payment_type = pt.name WHERE o.user_id = ?';
         const params: any[] = [pid];
         
         if (status !== undefined) {

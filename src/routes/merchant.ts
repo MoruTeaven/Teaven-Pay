@@ -409,7 +409,7 @@ merchantRouter.get('/orders', async (c) => {
     const keyword = c.req.query('keyword');
 
     try {
-        let query = 'SELECT o.*, pt.display_name as type_name FROM orders o LEFT JOIN payment_types pt ON o.payment_type = pt.name WHERE o.user_id = ?';
+        let query = 'SELECT o.*, pt.display_name as type_name FROM orders o LEFT JOIN payment_types pt ON o.payment_type = pt.id OR o.payment_type = pt.name WHERE o.user_id = ?';
         const params: any[] = [payload.id];
 
         if (status !== undefined && status !== '') {
@@ -487,7 +487,7 @@ merchantRouter.get('/orders/:id', async (c) => {
 
     try {
         const order = await c.env.DB.prepare(
-            'SELECT o.*, pt.display_name as type_name FROM orders o LEFT JOIN payment_types pt ON o.payment_type = pt.name WHERE o.id = ? AND o.user_id = ?'
+            'SELECT o.*, pt.display_name as type_name FROM orders o LEFT JOIN payment_types pt ON o.payment_type = pt.id OR o.payment_type = pt.name WHERE o.id = ? AND o.user_id = ?'
         ).bind(orderId, payload.id).first();
 
         if (!order) {

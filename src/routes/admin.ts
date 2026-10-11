@@ -690,7 +690,7 @@ adminRouter.get('/orders', async (c) => {
             SELECT o.*, u.username, pt.display_name as payment_type_name 
             FROM orders o 
             LEFT JOIN users u ON o.user_id = u.id 
-            LEFT JOIN payment_types pt ON o.payment_type = pt.name 
+            LEFT JOIN payment_types pt ON o.payment_type = pt.id OR o.payment_type = pt.name 
             WHERE 1=1
         `;
         const params: any[] = [];
@@ -763,7 +763,7 @@ adminRouter.get('/orders/:id', async (c) => {
             SELECT o.*, u.username, pt.display_name as payment_type_name, c.name as channel_name
             FROM orders o
             LEFT JOIN users u ON o.user_id = u.id
-            LEFT JOIN payment_types pt ON o.payment_type = pt.name
+            LEFT JOIN payment_types pt ON o.payment_type = pt.id OR o.payment_type = pt.name
             LEFT JOIN channels c ON o.channel_id = c.id
             WHERE o.id = ?
         `).bind(id).first();
