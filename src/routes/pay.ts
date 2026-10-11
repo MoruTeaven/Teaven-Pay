@@ -157,11 +157,15 @@ payRouter.post('/submit', async (c) => {
                 createdAt: now
             },
             {
+                // 先展开通道配置，再用显式字段覆盖。
+                // 原写法把 ...channelConfig 放最后，通道配置里的 returnUrl 会盖掉
+                // 开发者下单时传入的 return_url —— 回跳地址必须以下单参数为准。
+                ...channelConfig,
                 appId: channelConfig.appId || '',
                 appSecret: channelConfig.appSecret || '',
                 notifyUrl: channelConfig.notifyUrl || defaultNotifyUrl,
-                returnUrl: returnUrl || `${siteUrl}/cashier/${tradeNo}`,
-                ...channelConfig
+                // 优先级：开发者下单传入 > 通道配置兜底 > 平台结果页
+                returnUrl: returnUrl || channelConfig.returnUrl || `${siteUrl}/cashier/${tradeNo}`,
             }
         );
 
@@ -337,11 +341,13 @@ payRouter.post('/cashier', async (c) => {
                 createdAt: now
             },
             {
+                // 同 /submit：展开放前面，避免通道配置覆盖显式回跳地址
+                ...channelConfig,
                 appId: channelConfig.appId || '',
                 appSecret: channelConfig.appSecret || '',
                 notifyUrl: channelConfig.notifyUrl || user.notify_url || defaultNotifyUrl,
-                returnUrl: user.return_url || `${siteUrl}/cashier/${tradeNo}`,
-                ...channelConfig
+                // 优先级：商户配置 > 通道配置兜底 > 平台结果页
+                returnUrl: user.return_url || channelConfig.returnUrl || `${siteUrl}/cashier/${tradeNo}`,
             }
         );
 

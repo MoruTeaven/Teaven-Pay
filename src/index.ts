@@ -5581,7 +5581,7 @@ app.get('/admin', async (c) => {
                         '        <div class="form-group">' +
                         '            <label class="form-label">同步跳转地址 (return_url)</label>' +
                         '            <input type="text" class="form-input" id="config_returnUrl" value="' + (config.returnUrl || '') + '" placeholder="留空使用平台默认结果页">' +
-                        '            <div class="form-hint">用户支付成功后跳回的网址。留空则回平台结果页，需自行点击返回</div>' +
+                        '            <div class="form-hint">仅在下单方未传 return_url 时作为兜底；下单参数优先</div>' +
                         '        </div>' +
                         '        <div class="form-group">' +
                         '            <label class="form-label">取消支付跳转地址 (callback_url)</label>' +
