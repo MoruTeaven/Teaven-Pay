@@ -6861,6 +6861,7 @@ app.get('/user', async (c) => {
                 '<div class="form-group"><label class="form-label">当前密码</label><input type="password" class="form-input" id="setOldPwd" style="max-width:300px;"></div>' +
                 '<div class="form-group"><label class="form-label">新密码</label><input type="password" class="form-input" id="setNewPwd" style="max-width:300px;"><div class="form-hint">不少于 6 位</div></div>' +
                 '<button class="btn btn-primary" onclick="window._changePwd()"><i class="ri-lock-line"></i>修改密码</button>' +
+                '<div class="form-hint" style="margin-top:12px;">忘记当前密码？<a href="javascript:void(0)" id="setForgotPwdLink">用注册邮箱重置</a></div>' +
                 '</div></div>' +
 
                 '<div class="card"><div class="card-header"><h3 class="card-title">登录信息</h3></div><div class="card-body">' +
@@ -6906,6 +6907,45 @@ app.get('/user', async (c) => {
                     showToast(res.msg || '修改失败', 'error');
                 }
             };
+
+            // 忘记当前密码：走与登录页「忘记密码？」同一条邮件重置链路，
+            // 因此无需输入旧密码，也复用同一套令牌与限流策略
+            window._forgotPwd = function() {
+                var accountEmail = u.email || '';
+                showModal('重置密码',
+                    '<p style="margin-bottom:16px;color:var(--text-secondary);font-size:13px;line-height:1.7;">无需输入当前密码。我们会向你的注册邮箱发送一封含一次性链接的邮件，打开链接即可设置新密码。</p>' +
+                    '<div class="form-group"><label class="form-label">注册邮箱</label><input type="email" class="form-input" id="forgotPwdEmail" placeholder="请输入注册邮箱" value="' + escapeHtml(accountEmail) + '"></div>' +
+                    (accountEmail ? '' : '<div class="form-hint" style="color:var(--error);">当前账号未绑定邮箱，请先在「基本信息」中填写并保存邮箱后再试。</div>') +
+                    '<div class="form-hint">重置链接 30 分钟内有效；重复发送时仅最新一封邮件可用。</div>',
+                    '<button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-primary" id="forgotPwdSendBtn">发送重置链接</button>'
+                );
+                var sendBtn = document.getElementById('forgotPwdSendBtn');
+                if (sendBtn) sendBtn.onclick = async function() {
+                    var target = (document.getElementById('forgotPwdEmail').value || '').trim();
+                    if (!target) { showToast('请输入注册邮箱', 'error'); return; }
+                    sendBtn.disabled = true;
+                    sendBtn.textContent = '发送中...';
+                    try {
+                        var body = new URLSearchParams();
+                        body.set('email', target);
+                        var res = await fetch('/api/password-reset/request', { method: 'POST', body: body });
+                        var data = await res.json();
+                        if (data && data.code === 0) {
+                            closeModal();
+                            showToast(data.msg || '重置链接已发送，请查收邮件');
+                        } else {
+                            showToast((data && data.msg) || '发送失败', 'error');
+                            sendBtn.disabled = false;
+                            sendBtn.textContent = '发送重置链接';
+                        }
+                    } catch (e) {
+                        showToast('网络错误', 'error');
+                        sendBtn.disabled = false;
+                        sendBtn.textContent = '发送重置链接';
+                    }
+                };
+            };
+            document.getElementById('setForgotPwdLink').onclick = window._forgotPwd;
         }
 
         // 初始化主题
