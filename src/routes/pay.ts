@@ -29,15 +29,19 @@ payRouter.post('/submit', async (c) => {
     const pid = body.pid as string;
     const type = body.type as string;
     const outTradeNo = body.out_trade_no as string;
-    const notifyUrl = body.notify_url as string;
-    const returnUrl = body.return_url as string;
+    const notifyUrl = (body.notify_url as string) || '';
+    const returnUrl = (body.return_url as string) || '';
     const name = body.name as string;
     const money = body.money as string;
     const sign = body.sign as string;
     // sign_type 由服务端按商户密钥记录决定，客户端传入的 sign_type 不参与验签
-    const param = body.param as string;
-    const clientIp = body.clientip as string;
-    const device = body.device as string || 'pc';
+    //
+    // 注意：`as string` 只是编译期断言，不传时运行时仍是 undefined，
+    // 直接 bind 给 D1 会抛 D1_TYPE_ERROR（Type 'undefined' not supported）→ 500。
+    // 开发者 API 下单时 clientip / param / return_url 都是可选参数，必须给默认值。
+    const param = (body.param as string) || '';
+    const clientIp = (body.clientip as string) || '127.0.0.1';
+    const device = (body.device as string) || 'pc';
     
     // 参数验证
     if (!pid) return c.json({ code: -1, msg: '商户ID不能为空' });

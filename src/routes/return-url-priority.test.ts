@@ -49,11 +49,26 @@ vi.mock('../plugins', () => ({
     }),
 }));
 
+/**
+ * 模拟真实 D1 的行为：bind 收到 undefined 会抛 D1_TYPE_ERROR。
+ *
+ * 生产上 /api/pay/submit 曾因此 500——可选参数（clientip/param）用 `as string`
+ * 断言后运行时仍是 undefined，直接 bind 就炸。mock 若不校验，这类 bug 测不出来。
+ */
+function assertBindable(args: any[]) {
+    for (const a of args) {
+        if (a === undefined) {
+            throw new Error("D1_TYPE_ERROR: Type 'undefined' not supported for value 'undefined'");
+        }
+    }
+}
+
 /** 通道 config 为明文 JSON（decryptChannelConfig 兼容明文） */
 function createEnv(channelConfig: Record<string, unknown>): Env {
     const channel = { id: 'ch-1', plugin: 'xunhupay', config: JSON.stringify(channelConfig) };
     const prepare = (sql: string) => ({
         bind: (...args: any[]) => ({
+            __args: assertBindable(args),
             first: async () => {
                 if (sql.includes('FROM users')) {
                     return { id: MERCHANT_ID, status: 1, notify_url: '', return_url: null };
@@ -131,6 +146,17 @@ describe('回跳地址优先级（开发者传入的 return_url 必须赢）', (
         await postSubmit(env, null);
 
         expect(captured.configs[0].returnUrl).toBe(CHANNEL_RETURN_URL);
+    });
+
+    it('不传可选参数（clientip/param）时不再 500（D1_TYPE_ERROR 回归）', async () => {
+        const env = createEnv({ appId: 'appid-1', appSecret: 'secret-1' });
+
+        // postSubmit 不传 clientip / param，正是触发 D1_TYPE_ERROR 的场景
+        const res = await postSubmit(env, null);
+        const data: any = await res.json();
+
+        expect(res.status).not.toBe(500);
+        expect(data.code).toBe(1);
     });
 
     it('两者都没有时回退到平台结果页', async () => {
