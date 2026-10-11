@@ -72,6 +72,17 @@ export class XunhupayPlugin implements PaymentPlugin {
                 nonce_str: nonceStr
             };
             
+            // 同步跳转地址：用户支付成功后由虎皮椒把浏览器带回该地址。
+            // 不传 return_url 时虎皮椒会停留在自己的支付成功页（api.xunhupay.com/payments/home/success），
+            // 商户就永远拿不到「回到自己站点」的体验，因此这里必须透传。
+            if (config.returnUrl) {
+                params.return_url = config.returnUrl;
+            }
+            // 取消支付后引导用户回到的地址（可选）
+            if (config.callbackUrl) {
+                params.callback_url = config.callbackUrl;
+            }
+            
             // 可选参数
             if (order.body) {
                 params.attach = order.body;

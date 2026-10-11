@@ -188,12 +188,45 @@ app.get('/cashier/:tradeNo', async (c) => {
     const typeName = orderInfo ? (orderInfo.type_name || orderInfo.payment_type) : '';
     const returnUrl = orderInfo ? (orderInfo.return_url || '') : '';
 
+    // 该页面把订单字段内插进 HTML/JS，必须转义（name 来自下单方，return_url 来自商户配置）
+    const isSafeHttpUrl = (value: unknown): boolean => {
+        if (typeof value !== 'string' || !value) return false;
+        try {
+            const parsed = new URL(value);
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch {
+            return false;
+        }
+    };
+    const escapeHtml = (value: unknown): string => String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    const escapeJsString = (value: unknown): string => String(value == null ? '' : value)
+        .replace(/\\/g, '\\\\')
+        .replace(/\//g, '\\/')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029')
+        .replace(/"/g, '\\"')
+        .replace(/'/g, "\\'")
+        .replace(/</g, '\\x3C')
+        .replace(/>/g, '\\x3E')
+        .replace(/&/g, '\\x26');
+
+    // 仅允许 http/https，拒绝 javascript:/data: 等可执行协议
+    const safeReturnUrl = isSafeHttpUrl(returnUrl) ? returnUrl : '';
+
     return c.html(`<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>收银台 - ${name}</title>
+    <title>收银台 - ${escapeHtml(name)}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.9.1/fonts/remixicon.css">
     <style>
         :root{--primary:#f59e0b;--bg:#f9fafb;--card:#fff;--border:#e5e7eb;--text:#111827;--text2:#4b5563;--text3:#9ca3af;--success:#10b981;--error:#ef4444;--radius:12px;}
@@ -226,16 +259,16 @@ app.get('/cashier/:tradeNo', async (c) => {
             <div class="status-desc" id="statusDesc">请尽快完成支付</div>
             <div class="amount"><small>¥</small><span id="amount">${amount}</span></div>
             <div class="order-info">
-                <div><span>订单名称</span><strong>${name}</strong></div>
-                <div><span>支付方式</span><strong>${typeName}</strong></div>
-                <div><span>订单号</span><strong style="font-size:12px;word-break:break-all;">${tradeNo}</strong></div>
+                <div><span>订单名称</span><strong>${escapeHtml(name)}</strong></div>
+                <div><span>支付方式</span><strong>${escapeHtml(typeName)}</strong></div>
+                <div><span>订单号</span><strong style="font-size:12px;word-break:break-all;">${escapeHtml(tradeNo)}</strong></div>
             </div>
             <div id="actionArea"></div>
         </div>
     </div>
     <script>
-        var tradeNo = '${tradeNo}';
-        var returnUrl = '${returnUrl}';
+        var tradeNo = '${escapeJsString(tradeNo)}';
+        var returnUrl = '${escapeJsString(safeReturnUrl)}';
         var pollCount = 0;
         var maxPolls = 120;
 
@@ -251,7 +284,37 @@ app.get('/cashier/:tradeNo', async (c) => {
                 title.textContent = '支付成功';
                 desc.textContent = '支付已完成';
                 if (returnUrl) {
-                    action.innerHTML = '<a href="' + returnUrl + '" class="btn">返回</a>';
+                    var a = document.createElement('a');
+                    a.href = returnUrl;
+                    a.className = 'btn';
+                    a.textContent = '返回';
+                    action.appendChild(a);
+
+                    // 渠道成功页不会自己跳回来，这里支付完成后自动带回商户站点；
+                    // 同一订单只自动跳一次，防止商户回跳地址指回本页时来回弹跳
+                    var guardKey = 'tp_returned_' + tradeNo;
+                    var alreadyReturned = false;
+                    try { alreadyReturned = sessionStorage.getItem(guardKey) === '1'; } catch (err) {}
+                    // 未配置商户跳转地址时回跳目标就是本页，无需自动跳转
+                    var sameAsThisPage = returnUrl.indexOf('/cashier/' + tradeNo) !== -1;
+                    if (!alreadyReturned && !sameAsThisPage) {
+                        var seconds = 3;
+                        var tip = document.createElement('div');
+                        tip.className = 'status-desc';
+                        tip.style.marginTop = '12px';
+                        tip.textContent = seconds + ' 秒后自动返回…';
+                        action.appendChild(tip);
+                        var timer = setInterval(function() {
+                            seconds--;
+                            if (seconds > 0) {
+                                tip.textContent = seconds + ' 秒后自动返回…';
+                                return;
+                            }
+                            clearInterval(timer);
+                            try { sessionStorage.setItem(guardKey, '1'); } catch (err) {}
+                            window.location.replace(returnUrl);
+                        }, 1000);
+                    }
                 }
             } else if (status === 2) {
                 icon.className = 'status-icon status-failed';
@@ -5514,6 +5577,16 @@ app.get('/admin', async (c) => {
                         '            <label class="form-label">通知地址</label>' +
                         '            <input type="text" class="form-input" id="config_notifyUrl" value="' + (config.notifyUrl || '') + '" placeholder="留空使用系统默认">' +
                         '            <div class="form-hint">留空则使用系统默认通知地址</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">同步跳转地址 (return_url)</label>' +
+                        '            <input type="text" class="form-input" id="config_returnUrl" value="' + (config.returnUrl || '') + '" placeholder="留空使用平台默认结果页">' +
+                        '            <div class="form-hint">用户支付成功后跳回的网址。留空则回平台结果页，需自行点击返回</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">取消支付跳转地址 (callback_url)</label>' +
+                        '            <input type="text" class="form-input" id="config_callbackUrl" value="' + (config.callbackUrl || '') + '" placeholder="可选，留空则不跳转">' +
+                        '            <div class="form-hint">用户取消支付后引导其重新付款的网址</div>' +
                         '        </div>';
                 } else {
                     configFields =
@@ -5582,6 +5655,8 @@ app.get('/admin', async (c) => {
                     config.wxpayPublicKey = document.getElementById('config_wxpayPublicKey').value;
                 } else if (plugin === 'xunhupay') {
                     config.notifyUrl = document.getElementById('config_notifyUrl').value;
+                    config.returnUrl = document.getElementById('config_returnUrl').value;
+                    config.callbackUrl = document.getElementById('config_callbackUrl').value;
                 }
             } else {
                 var jsonStr = document.getElementById('config_json').value;
