@@ -747,24 +747,30 @@ payRouter.post('/refund', async (c) => {
         // 创建退款记录
         const refundNo = generateUUIDv7();
         const now = new Date().toISOString();
-        
+        const isFullRefund = refundAmount >= remainingRefundAmount;
+
+        // CAS 守卫：仅在订单仍为已支付且退款后累计不超订单金额时累加 refund_amount
+        // 并发退款 / 重复回调时，只有抢到这次 CAS 的请求才继续，其余 changes=0 直接拒绝
+        const accum = await env.DB.prepare(
+            `UPDATE orders SET refund_amount = refund_amount + ? WHERE id = ? AND status = 1 AND refund_amount + ? <= amount`
+        ).bind(refundAmount, order.id, refundAmount).run();
+
+        if ((accum?.meta?.changes ?? 0) <= 0) {
+            return c.json({ code: -1, msg: '订单状态已变更或退款金额超出可退金额，请刷新后重试' });
+        }
+
+        // 全额退款时翻转订单状态（CAS：仅 status=1 → 2）
+        if (isFullRefund) {
+            await env.DB.prepare(
+                'UPDATE orders SET status = 2 WHERE id = ? AND status = 1'
+            ).bind(order.id).run();
+        }
+
+        // 退款记录写入（在 CAS 守卫成功之后）
         await env.DB.prepare(`
             INSERT INTO refunds (id, refund_no, order_id, user_id, amount, status, created_at)
             VALUES (?, ?, ?, ?, ?, 0, ?)
         `).bind(refundNo, refundNo, order.id, pid, refundAmount, now).run();
-        
-        // 更新订单退款金额
-        await env.DB.prepare(`
-            UPDATE orders SET refund_amount = refund_amount + ? WHERE id = ?
-        `).bind(refundAmount, order.id).run();
-        
-        // 如果全额退款，更新订单状态
-        const isFullRefund = refundAmount >= remainingRefundAmount;
-        if (isFullRefund) {
-            await env.DB.prepare(
-                'UPDATE orders SET status = 2 WHERE id = ?'
-            ).bind(order.id).run();
-        }
 
         await logOrderEvent(env, {
             orderId: order.id,

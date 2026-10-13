@@ -679,6 +679,15 @@ merchantRouter.post('/settle/apply', async (c) => {
         const settleId = generateUUIDv7();
         const now = new Date().toISOString();
 
+        // CAS 守卫：仅在余额足够时扣减，防止并发结算申请导致负余额
+        const deduct = await c.env.DB.prepare(`
+            UPDATE users SET balance = balance - ?, frozen_balance = frozen_balance + ? WHERE id = ? AND balance >= ?
+        `).bind(amount, amount, payload.id, amount).run();
+
+        if ((deduct?.meta?.changes ?? 0) <= 0) {
+            return c.json({ code: -1, msg: '余额不足，结算申请失败' });
+        }
+
         await c.env.DB.prepare(`
             INSERT INTO settlements (
                 id, user_id, amount, settle_type, settle_account,
@@ -690,10 +699,6 @@ merchantRouter.post('/settle/apply', async (c) => {
             settleName || (user as any).settle_name,
             bankName, now
         ).run();
-
-        await c.env.DB.prepare(`
-            UPDATE users SET balance = balance - ?, frozen_balance = frozen_balance + ? WHERE id = ?
-        `).bind(amount, amount, payload.id).run();
 
         await logAuditEvent(c.env, {
             userId: payload.id,

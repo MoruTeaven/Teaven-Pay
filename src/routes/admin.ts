@@ -913,31 +913,26 @@ adminRouter.put('/settlements/:id', async (c) => {
         }
         
         const now = new Date().toISOString();
-        
+        const targetStatus = action === 'approve' ? 2 : 3;
+
+        // CAS 守卫：仅把 status=0 翻转为目标状态，抢到 changes>0 的那次才动余额
+        const flip = await c.env.DB.prepare(
+            `UPDATE settlements SET status = ?, reject_reason = ?, processed_at = ? WHERE id = ? AND status = 0`
+        ).bind(targetStatus, action === 'reject' ? (reason || null) : null, now, id).run();
+
+        if ((flip?.meta?.changes ?? 0) <= 0) {
+            return c.json({ code: -4, msg: '结算记录不存在或已处理' });
+        }
+
         if (action === 'approve') {
-            // 批准结算
+            // 批准：扣除冻结余额
             await c.env.DB.prepare(`
-                UPDATE settlements SET status = 2, processed_at = ? WHERE id = ?
-            `).bind(now, id).run();
-            
-            // 扣除冻结余额
-            await c.env.DB.prepare(`
-                UPDATE users SET 
-                    frozen_balance = frozen_balance - ?
-                WHERE id = ?
+                UPDATE users SET frozen_balance = frozen_balance - ? WHERE id = ?
             `).bind(settlement.amount, settlement.user_id).run();
         } else {
-            // 拒绝结算
+            // 拒绝：退回余额
             await c.env.DB.prepare(`
-                UPDATE settlements SET status = 3, reject_reason = ?, processed_at = ? WHERE id = ?
-            `).bind(reason, now, id).run();
-            
-            // 退回余额
-            await c.env.DB.prepare(`
-                UPDATE users SET 
-                    balance = balance + ?,
-                    frozen_balance = frozen_balance - ?
-                WHERE id = ?
+                UPDATE users SET balance = balance + ?, frozen_balance = frozen_balance - ? WHERE id = ?
             `).bind(settlement.amount, settlement.amount, settlement.user_id).run();
         }
 
