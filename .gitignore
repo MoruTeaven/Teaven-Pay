@@ -81,3 +81,16 @@ coverage/
 # Test scratch directories
 # (compile output, runtime DBs etc)
 tests/.tmp/
+
+# 临时探针/工作区残留（并行会话或脚本产生，防 git add -A 误提交）
+_probe_*
+_verify*
+_smoke*
+_diag*
+_publish*
+_recover*
+_rebuild_backup*
+_premerge_snapshot*
+_git_corrupt_bak*
+_corrupted/
+*.tmp
