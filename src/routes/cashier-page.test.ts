@@ -10,10 +10,16 @@ import { Env } from '../types/env';
  *  2) 页面里内插的 name / return_url 必须转义，且 return_url 只允许 http(s)。
  */
 function createEnv(order: Record<string, unknown> | null): Env {
-    const prepare = () => ({
+    const prepare = (sql: string) => ({
         bind: () => ({
             first: async () => order,
-            all: async () => ({ results: [] }),
+            all: async () => {
+                // 订单票据签发需要商户主密钥（api_keys 表）
+                if (sql.includes('FROM api_keys')) {
+                    return { results: [{ id: 'key-1', user_id: 'u-1', api_key: 'cashier-page-test-key', api_key_type: 'hmac-sha256', rsa_public_key: null }] };
+                }
+                return { results: [] };
+            },
             run: async () => ({ success: true }),
         }),
         first: async () => order,
@@ -72,5 +78,30 @@ describe('收银台 /cashier/:tradeNo', () => {
         const html = await renderCashier({ ...BASE_ORDER, return_url: '' });
         expect(html).toContain("var returnUrl = ''");
         expect(html).not.toContain('merchant.example.com');
+    });
+
+    it('签发订单访问票据，轮询带上它（B-3：状态接口已需凭证）', async () => {
+        const html = await renderCashier(BASE_ORDER);
+        // 票据格式 v1.<tradeNo>.<expiresAt>.<hmacHex>
+        expect(html).toMatch(/var orderToken = 'v1\.T777777\.\d+\.[0-9a-f]{64}'/);
+        expect(html).toContain("url += '?token=' + encodeURIComponent(orderToken)");
+    });
+
+    it('票据签发失败时留空，页面不会降级为匿名可读', async () => {
+        // 商户无启用密钥 → 签不出票据
+        const prepare = () => ({
+            bind: () => ({
+                first: async () => BASE_ORDER,
+                all: async () => ({ results: [] }),
+                run: async () => ({ success: true }),
+            }),
+            first: async () => BASE_ORDER,
+            all: async () => ({ results: [] }),
+            run: async () => ({ success: true }),
+        });
+        const env = { DB: { prepare } as unknown as D1Database } as unknown as Env;
+        const res = await worker.fetch(new Request('https://pay.example.com/cashier/T777777'), env, {} as ExecutionContext);
+        const html = await res.text();
+        expect(html).toContain("var orderToken = ''");
     });
 });

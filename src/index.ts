@@ -31,6 +31,7 @@ import { getThrottleStore, THROTTLE_HEALTH_PROBE_KEY } from './utils/throttleSto
 import { parseAllowedOrigins, resolveAllowedOrigin } from './utils/cors';
 import { issueCashierTicket } from './utils/cashierAuth';
 import { getPrimaryApiKey } from './utils/apiKeyAuth';
+import { issueOrderStatusToken } from './utils/orderStatusAuth';
 
 // 类型
 import { Env } from './types/env';
@@ -139,8 +140,9 @@ app.all('/api.php', async (c) => {
             return payRouter.fetch(queryReq, c.env);
             
         case 'settle':
-            // 转发到结算接口
-            const settleReq = new Request(c.req.url.replace('/api.php', '/api/merchant/settle'), {
+            // 转发到结算记录接口（B-4）：商户路由器上只有 /settle/list，
+            // 此前转发到 /api/merchant/settle 必然 404
+            const settleReq = new Request(c.req.url.replace('/api.php', '/api/merchant/settle/list'), {
                 method: 'GET',
                 headers: c.req.raw.headers,
             });
@@ -194,6 +196,22 @@ app.get('/cashier/:tradeNo', async (c) => {
     const name = orderInfo ? (orderInfo.name || '在线支付') : '订单';
     const typeName = orderInfo ? (orderInfo.type_name || orderInfo.payment_type) : '';
     const returnUrl = orderInfo ? (orderInfo.return_url || '') : '';
+
+    // 订单状态接口已加认证（B-3），页面轮询必须带上服务端签发的单订单票据。
+    // 票据用订单归属商户的主密钥签发，只绑定这一个 tradeNo，过期后需刷新页面。
+    // 签发失败时留空，页面会收到 401 并停止轮询——不降级为匿名可读。
+    let orderToken = '';
+    if (orderInfo) {
+        try {
+            const primaryKey = await getPrimaryApiKey(env.DB, orderInfo.user_id);
+            if (primaryKey) {
+                const issued = await issueOrderStatusToken(tradeNo, primaryKey.api_key);
+                orderToken = issued.token;
+            }
+        } catch (error) {
+            console.error('[Cashier] 订单访问票据签发失败:', error);
+        }
+    }
 
     // 该页面把订单字段内插进 HTML/JS，必须转义（name 来自下单方，return_url 来自商户配置）
     const isSafeHttpUrl = (value: unknown): boolean => {
@@ -275,6 +293,7 @@ app.get('/cashier/:tradeNo', async (c) => {
     </div>
     <script>
         var tradeNo = '${escapeJsString(tradeNo)}';
+        var orderToken = '${escapeJsString(orderToken)}';
         var returnUrl = '${escapeJsString(safeReturnUrl)}';
         var pollCount = 0;
         var maxPolls = 120;
@@ -346,7 +365,9 @@ app.get('/cashier/:tradeNo', async (c) => {
             if (pollCount > maxPolls) return;
 
             try {
-                var res = await fetch('/api/pay/status/' + tradeNo);
+                var url = '/api/pay/status/' + encodeURIComponent(tradeNo);
+                if (orderToken) url += '?token=' + encodeURIComponent(orderToken);
+                var res = await fetch(url);
                 var data = await res.json();
 
                 if (data.code === 1) {
@@ -354,6 +375,9 @@ app.get('/cashier/:tradeNo', async (c) => {
                     if (data.status !== 1 && data.status !== 2 && data.status !== 3) {
                         setTimeout(checkStatus, 3000);
                     }
+                } else if (data.code === -2) {
+                    // 票据无效或已过期：继续轮询也不会成功，提示刷新页面重新取票
+                    document.getElementById('statusDesc').textContent = '页面已过期，请刷新后重试';
                 } else {
                     setTimeout(checkStatus, 5000);
                 }
