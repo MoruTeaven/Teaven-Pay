@@ -1,0 +1,534 @@
+[
+  {
+    "results": [
+      {
+        "type": "index",
+        "name": "idx_api_keys_api_key",
+        "tbl_name": "api_keys",
+        "sql": "CREATE INDEX idx_api_keys_api_key ON api_keys(api_key)"
+      },
+      {
+        "type": "index",
+        "name": "idx_api_keys_user_id",
+        "tbl_name": "api_keys",
+        "sql": "CREATE INDEX idx_api_keys_user_id ON api_keys(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_daily_stats_date",
+        "tbl_name": "daily_stats",
+        "sql": "CREATE INDEX idx_daily_stats_date ON daily_stats(date)"
+      },
+      {
+        "type": "index",
+        "name": "idx_daily_stats_user_id",
+        "tbl_name": "daily_stats",
+        "sql": "CREATE INDEX idx_daily_stats_user_id ON daily_stats(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_operation_logs_action",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE INDEX idx_operation_logs_action ON operation_logs(action)"
+      },
+      {
+        "type": "index",
+        "name": "idx_operation_logs_created_at",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE INDEX idx_operation_logs_created_at ON operation_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_operation_logs_target",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE INDEX idx_operation_logs_target ON operation_logs(target)"
+      },
+      {
+        "type": "index",
+        "name": "idx_operation_logs_user_id",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE INDEX idx_operation_logs_user_id ON operation_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_order_logs_action",
+        "tbl_name": "order_logs",
+        "sql": "CREATE INDEX idx_order_logs_action ON order_logs(action)"
+      },
+      {
+        "type": "index",
+        "name": "idx_order_logs_created_at",
+        "tbl_name": "order_logs",
+        "sql": "CREATE INDEX idx_order_logs_created_at ON order_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_order_logs_order_id",
+        "tbl_name": "order_logs",
+        "sql": "CREATE INDEX idx_order_logs_order_id ON order_logs(order_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_order_logs_user_id",
+        "tbl_name": "order_logs",
+        "sql": "CREATE INDEX idx_order_logs_user_id ON order_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_created_at",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_created_at ON orders(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_out_trade_no",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_out_trade_no ON orders(out_trade_no)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_payment_type",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_payment_type ON orders(payment_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_status",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_status ON orders(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_user_id",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_user_id ON orders(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_password_resets_expires_at",
+        "tbl_name": "password_resets",
+        "sql": "CREATE INDEX idx_password_resets_expires_at ON password_resets(expires_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_password_resets_token_hash",
+        "tbl_name": "password_resets",
+        "sql": "CREATE INDEX idx_password_resets_token_hash ON password_resets(token_hash)"
+      },
+      {
+        "type": "index",
+        "name": "idx_password_resets_user_id",
+        "tbl_name": "password_resets",
+        "sql": "CREATE INDEX idx_password_resets_user_id ON password_resets(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_action",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_action ON payment_logs(action)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_created_at",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_created_at ON payment_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_order_id",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_order_id ON payment_logs(order_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_plugin",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_plugin ON payment_logs(plugin)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_status",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_status ON payment_logs(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_user_id",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_user_id ON payment_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_created_at",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_created_at ON reconciliation_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_date",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_date ON reconciliation_logs(date)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_payment_type",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_payment_type ON reconciliation_logs(payment_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_status",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_status ON reconciliation_logs(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_user_id",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_user_id ON reconciliation_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_refunds_order_id",
+        "tbl_name": "refunds",
+        "sql": "CREATE INDEX idx_refunds_order_id ON refunds(order_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_refunds_user_id",
+        "tbl_name": "refunds",
+        "sql": "CREATE INDEX idx_refunds_user_id ON refunds(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_settlements_user_id",
+        "tbl_name": "settlements",
+        "sql": "CREATE INDEX idx_settlements_user_id ON settlements(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_throttle_counters_reset_at",
+        "tbl_name": "throttle_counters",
+        "sql": "CREATE INDEX idx_throttle_counters_reset_at ON throttle_counters(reset_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_created_at",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_created_at ON webhook_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_order_id",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_order_id ON webhook_logs(order_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_plugin",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_plugin ON webhook_logs(plugin)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_success",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_success ON webhook_logs(success)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_type",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_type ON webhook_logs(webhook_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_user_id",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_user_id ON webhook_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_api_keys_1",
+        "tbl_name": "api_keys",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_api_keys_2",
+        "tbl_name": "api_keys",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_blacklist_1",
+        "tbl_name": "blacklist",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_channels_1",
+        "tbl_name": "channels",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_daily_stats_1",
+        "tbl_name": "daily_stats",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_domain_whitelist_1",
+        "tbl_name": "domain_whitelist",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_order_logs_1",
+        "tbl_name": "order_logs",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_orders_1",
+        "tbl_name": "orders",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_password_resets_1",
+        "tbl_name": "password_resets",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_payment_logs_1",
+        "tbl_name": "payment_logs",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_payment_types_1",
+        "tbl_name": "payment_types",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_payment_types_2",
+        "tbl_name": "payment_types",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_reconciliation_logs_1",
+        "tbl_name": "reconciliation_logs",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_refunds_1",
+        "tbl_name": "refunds",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_refunds_2",
+        "tbl_name": "refunds",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_settlements_1",
+        "tbl_name": "settlements",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_system_config_1",
+        "tbl_name": "system_config",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_throttle_counters_1",
+        "tbl_name": "throttle_counters",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_user_groups_1",
+        "tbl_name": "user_groups",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_users_1",
+        "tbl_name": "users",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_users_2",
+        "tbl_name": "users",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_users_3",
+        "tbl_name": "users",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_webhook_logs_1",
+        "tbl_name": "webhook_logs",
+        "sql": null
+      },
+      {
+        "type": "table",
+        "name": "_cf_KV",
+        "tbl_name": "_cf_KV",
+        "sql": "CREATE TABLE _cf_KV (\n        key TEXT PRIMARY KEY,\n        value BLOB\n      ) WITHOUT ROWID"
+      },
+      {
+        "type": "table",
+        "name": "api_keys",
+        "tbl_name": "api_keys",
+        "sql": "CREATE TABLE api_keys (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    user_id TEXT NOT NULL,                            -- 商户ID\n    api_key TEXT NOT NULL UNIQUE,                     -- API密钥\n    name TEXT NOT NULL DEFAULT '默认密钥',             -- 备注名称\n    api_key_type TEXT DEFAULT 'hmac-sha256',          -- 签名类型: md5/hmac-sha256/rsa\n    rsa_public_key TEXT,                              -- RSA公钥\n    status INTEGER DEFAULT 1,                         -- 状态: 0禁用 1启用\n    last_used_at TEXT,                                -- 最后使用时间\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    updated_at TEXT DEFAULT (datetime('now')),        -- 更新时间\n    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE\n)"
+      },
+      {
+        "type": "table",
+        "name": "blacklist",
+        "tbl_name": "blacklist",
+        "sql": "CREATE TABLE blacklist (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    type TEXT NOT NULL,                               -- 类型: ip/email/phone/domain\n    content TEXT NOT NULL,                            -- 内容\n    reason TEXT,                                      -- 原因\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    UNIQUE(type, content)\n)"
+      },
+      {
+        "type": "table",
+        "name": "channels",
+        "tbl_name": "channels",
+        "sql": "CREATE TABLE channels (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    payment_type_id TEXT NOT NULL,                    -- 支付方式ID\n    name TEXT NOT NULL,                               -- 通道名称\n    plugin TEXT NOT NULL,                             -- 插件标识\n    config TEXT,                                      -- 配置 (JSON, 加密存储)\n    fee_rate REAL DEFAULT 0,                          -- 费率 (%)\n    min_amount REAL DEFAULT 0,                        -- 最小金额\n    max_amount REAL DEFAULT 0,                        -- 最大金额\n    daily_limit REAL DEFAULT 0,                       -- 每日限额\n    time_start INTEGER,                               -- 开始时间 (小时)\n    time_stop INTEGER,                                -- 结束时间 (小时)\n    sort_order INTEGER DEFAULT 0,                     -- 排序\n    status INTEGER DEFAULT 1,                         -- 状态: 0禁用 1启用\n    description TEXT,                                 -- 描述\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    updated_at TEXT DEFAULT (datetime('now')),        -- 更新时间\n    FOREIGN KEY (payment_type_id) REFERENCES payment_types(id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "daily_stats",
+        "tbl_name": "daily_stats",
+        "sql": "CREATE TABLE daily_stats (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    date TEXT NOT NULL,                               -- 日期\n    user_id TEXT,                                     -- 商户ID (NULL表示全局)\n    payment_type TEXT,                                -- 支付方式\n    order_count INTEGER DEFAULT 0,                    -- 订单数\n    success_count INTEGER DEFAULT 0,                  -- 成功订单数\n    total_amount REAL DEFAULT 0,                      -- 总金额\n    success_amount REAL DEFAULT 0,                    -- 成功金额\n    fee REAL DEFAULT 0,                               -- 手续费\n    profit REAL DEFAULT 0,                            -- 利润\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    UNIQUE(date, user_id, payment_type)\n)"
+      },
+      {
+        "type": "table",
+        "name": "domain_whitelist",
+        "tbl_name": "domain_whitelist",
+        "sql": "CREATE TABLE domain_whitelist (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    user_id TEXT NOT NULL,                            -- 商户ID\n    domain TEXT NOT NULL,                             -- 域名\n    status INTEGER DEFAULT 1,                         -- 状态: 0禁用 1启用\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    FOREIGN KEY (user_id) REFERENCES users(id),\n    UNIQUE(user_id, domain)\n)"
+      },
+      {
+        "type": "table",
+        "name": "operation_logs",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE TABLE operation_logs (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    user_id TEXT,                                     -- 操作用户ID\n    action TEXT NOT NULL,                             -- 操作类型\n    target TEXT,                                      -- 操作目标\n    detail TEXT,                                      -- 详细信息 (JSON)\n    ip TEXT,                                          -- 操作IP\n    user_agent TEXT,                                  -- User Agent\n    created_at TEXT DEFAULT (datetime('now'))         -- 创建时间\n)"
+      },
+      {
+        "type": "table",
+        "name": "order_logs",
+        "tbl_name": "order_logs",
+        "sql": "CREATE TABLE order_logs (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    order_id TEXT NOT NULL,                           -- 平台订单号\n    user_id TEXT,                                     -- 商户ID\n    out_trade_no TEXT,                                -- 商户订单号\n    action TEXT NOT NULL,                             -- 动作: created/paid/closed/refund_requested/status_changed\n    from_status INTEGER,                              -- 变更前状态\n    to_status INTEGER,                                -- 变更后状态\n    amount REAL,                                      -- 关联金额\n    detail TEXT,                                      -- 详情(JSON, 已脱敏)\n    ip TEXT,                                          -- 操作来源IP\n    user_agent TEXT,                                  -- User Agent\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    FOREIGN KEY (order_id) REFERENCES orders(id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "orders",
+        "tbl_name": "orders",
+        "sql": "CREATE TABLE orders (\n    id TEXT PRIMARY KEY,                              -- UUID v7 (平台订单号 trade_no)\n    user_id TEXT NOT NULL,                            -- 商户ID\n    out_trade_no TEXT NOT NULL,                       -- 商户订单号\n    payment_type TEXT NOT NULL,                       -- 支付方式: alipay/wxpay/qqpay\n    channel_id TEXT,                                  -- 支付通道ID\n    sub_channel_id TEXT,                              -- 子通道ID\n    plugin TEXT,                                      -- 支付插件标识\n    amount REAL NOT NULL,                             -- 订单金额\n    actual_amount REAL,                               -- 实际支付金额\n    fee REAL DEFAULT 0,                               -- 手续费\n    profit REAL DEFAULT 0,                            -- 利润\n    status INTEGER DEFAULT 0,                         -- 状态: 0未支付 1已支付 2已退款 3已关闭\n    name TEXT,                                        -- 商品名称\n    body TEXT,                                        -- 商品描述\n    param TEXT,                                       -- 自定义参数\n    buyer TEXT,                                       -- 买家信息\n    buyer_ip TEXT,                                    -- 买家IP\n    notify_url TEXT,                                  -- 异步通知地址\n    return_url TEXT,                                  -- 同步跳转地址\n    notify_status INTEGER DEFAULT 0,                  -- 通知状态: 0未通知 1已通知 2通知失败\n    notify_count INTEGER DEFAULT 0,                   -- 通知次数\n    last_notify_at TEXT,                              -- 最后通知时间\n    domain TEXT,                                      -- 来源域名\n    device TEXT,                                      -- 设备类型\n    cert_no TEXT,                                     -- 身份证号\n    cert_name TEXT,                                   -- 身份证姓名\n    api_trade_no TEXT,                                -- 第三方交易号\n    refund_amount REAL DEFAULT 0,                     -- 已退款金额\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    paid_at TEXT,                                     -- 支付时间\n    closed_at TEXT,                                   -- 关闭时间\n    FOREIGN KEY (user_id) REFERENCES users(id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "password_resets",
+        "tbl_name": "password_resets",
+        "sql": "CREATE TABLE password_resets (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    user_id TEXT NOT NULL,                            -- 用户ID（users.id）\n    token_hash TEXT NOT NULL,                         -- 令牌摘要 HMAC-SHA256(secret, token)\n    expires_at INTEGER NOT NULL,                      -- 过期时间（epoch 毫秒）\n    used_at INTEGER,                                  -- 使用时间（epoch 毫秒），NULL 表示未使用\n    attempts INTEGER NOT NULL DEFAULT 0,              -- 校验失败次数\n    ip TEXT,                                          -- 发起找回的 IP\n    user_agent TEXT,                                  -- 发起找回的 User Agent\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE\n)"
+      },
+      {
+        "type": "table",
+        "name": "payment_logs",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE TABLE payment_logs (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    order_id TEXT,                                    -- 平台订单号\n    user_id TEXT,                                     -- 商户ID\n    channel_id TEXT,                                  -- 支付通道ID\n    plugin TEXT,                                      -- 支付插件\n    direction TEXT NOT NULL,                          -- 方向: request/response/internal\n    action TEXT NOT NULL,                             -- 动作: create_payment/query_order/refund/reconcile\n    status TEXT NOT NULL,                             -- 结果: success/failed/pending/accepted/error\n    amount REAL,                                      -- 关联金额\n    third_party_trade_no TEXT,                        -- 第三方交易号\n    request_data TEXT,                                -- 请求摘要(JSON, 已脱敏)\n    response_data TEXT,                               -- 响应摘要(JSON, 已脱敏)\n    error_message TEXT,                               -- 错误信息\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    FOREIGN KEY (order_id) REFERENCES orders(id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "payment_types",
+        "tbl_name": "payment_types",
+        "sql": "CREATE TABLE payment_types (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    name TEXT NOT NULL UNIQUE,                        -- 标识: alipay/wxpay/qqpay\n    display_name TEXT NOT NULL,                       -- 显示名称\n    icon TEXT,                                        -- 图标URL\n    description TEXT,                                 -- 描述\n    sort_order INTEGER DEFAULT 0,                     -- 排序\n    status INTEGER DEFAULT 1,                         -- 状态: 0禁用 1启用\n    config TEXT,                                      -- 配置 (JSON)\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    updated_at TEXT DEFAULT (datetime('now'))         -- 更新时间\n)"
+      },
+      {
+        "type": "table",
+        "name": "reconciliation_logs",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE TABLE reconciliation_logs (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    user_id TEXT,                                     -- 对账商户ID，NULL表示全部\n    payment_type TEXT,                                -- 支付方式，NULL表示全部\n    date TEXT NOT NULL,                               -- 对账日期 YYYY-MM-DD\n    status TEXT NOT NULL,                             -- 结果: running/success/failed\n    checked_count INTEGER DEFAULT 0,                  -- 检查订单数\n    matched_count INTEGER DEFAULT 0,                  -- 一致订单数\n    mismatch_count INTEGER DEFAULT 0,                 -- 差异订单数\n    fixed_count INTEGER DEFAULT 0,                    -- 已修复订单数\n    operator_id TEXT,                                 -- 操作人ID\n    detail TEXT,                                      -- 差异详情(JSON, 已脱敏)\n    error_message TEXT,                               -- 错误信息\n    started_at TEXT,                                  -- 开始时间\n    finished_at TEXT,                                 -- 结束时间\n    created_at TEXT DEFAULT (datetime('now'))         -- 创建时间\n)"
+      },
+      {
+        "type": "table",
+        "name": "refunds",
+        "tbl_name": "refunds",
+        "sql": "CREATE TABLE refunds (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    refund_no TEXT NOT NULL UNIQUE,                   -- 退款单号\n    order_id TEXT NOT NULL,                           -- 订单ID\n    user_id TEXT NOT NULL,                            -- 商户ID\n    amount REAL NOT NULL,                             -- 退款金额\n    reason TEXT,                                      -- 退款原因\n    status INTEGER DEFAULT 0,                         -- 状态: 0处理中 1成功 2失败\n    third_party_refund_no TEXT,                       -- 第三方退款号\n    error_message TEXT,                               -- 错误信息\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    completed_at TEXT,                                -- 完成时间\n    FOREIGN KEY (order_id) REFERENCES orders(id),\n    FOREIGN KEY (user_id) REFERENCES users(id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "settlements",
+        "tbl_name": "settlements",
+        "sql": "CREATE TABLE settlements (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    user_id TEXT NOT NULL,                            -- 商户ID\n    amount REAL NOT NULL,                             -- 结算金额\n    fee REAL DEFAULT 0,                               -- 手续费\n    actual_amount REAL,                               -- 实际到账金额\n    settle_type TEXT,                                 -- 结算方式\n    settle_account TEXT,                              -- 结算账号\n    settle_name TEXT,                                 -- 结算姓名\n    bank_name TEXT,                                   -- 银行名称\n    bank_branch TEXT,                                 -- 支行名称\n    status INTEGER DEFAULT 0,                         -- 状态: 0待处理 1处理中 2已处理 3已拒绝\n    reject_reason TEXT,                               -- 拒绝原因\n    processed_at TEXT,                                -- 处理时间\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    FOREIGN KEY (user_id) REFERENCES users(id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "sqlite_sequence",
+        "tbl_name": "sqlite_sequence",
+        "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+      },
+      {
+        "type": "table",
+        "name": "system_config",
+        "tbl_name": "system_config",
+        "sql": "CREATE TABLE system_config (\n    key TEXT PRIMARY KEY,                             -- 配置键\n    value TEXT,                                       -- 配置值\n    description TEXT,                                 -- 描述\n    updated_at TEXT DEFAULT (datetime('now'))         -- 更新时间\n)"
+      },
+      {
+        "type": "table",
+        "name": "throttle_counters",
+        "tbl_name": "throttle_counters",
+        "sql": "CREATE TABLE throttle_counters (\r\n    key TEXT PRIMARY KEY,                           -- 计数键（含作用域与 IP/账号）\r\n    count INTEGER NOT NULL DEFAULT 1,               -- 当前窗口内的累计次数\r\n    reset_at INTEGER NOT NULL,                      -- 窗口结束时间（epoch 毫秒）\r\n    updated_at INTEGER NOT NULL                     -- 最后更新时间（epoch 毫秒）\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "user_groups",
+        "tbl_name": "user_groups",
+        "sql": "CREATE TABLE user_groups (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    name TEXT NOT NULL,                               -- 组名\n    description TEXT,                                 -- 描述\n    fee_rate REAL DEFAULT 0,                          -- 默认费率\n    min_amount REAL DEFAULT 0,                        -- 最小金额\n    max_amount REAL DEFAULT 0,                        -- 最大金额\n    daily_limit REAL DEFAULT 0,                       -- 每日限额\n    permissions TEXT,                                 -- 权限 (JSON)\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    updated_at TEXT DEFAULT (datetime('now'))         -- 更新时间\n)"
+      },
+      {
+        "type": "table",
+        "name": "users",
+        "tbl_name": "users",
+        "sql": "CREATE TABLE \"users\" (\n    id TEXT PRIMARY KEY,\n    username TEXT NOT NULL UNIQUE,\n    email TEXT UNIQUE,\n    password_hash TEXT NOT NULL,\n    salt TEXT NOT NULL,\n    role TEXT NOT NULL DEFAULT 'merchant',\n    status INTEGER DEFAULT 1,\n    balance REAL DEFAULT 0,\n    frozen_balance REAL DEFAULT 0,\n    notify_url TEXT,\n    return_url TEXT,\n    contact_qq TEXT,\n    contact_wechat TEXT,\n    contact_phone TEXT,\n    group_id TEXT,\n    settle_type TEXT DEFAULT 'alipay',\n    settle_account TEXT,\n    settle_name TEXT,\n    deposit REAL DEFAULT 0,\n    today_income REAL DEFAULT 0,\n    total_income REAL DEFAULT 0,\n    today_orders INTEGER DEFAULT 0,\n    total_orders INTEGER DEFAULT 0,\n    last_login_at TEXT,\n    last_login_ip TEXT,\n    created_at TEXT DEFAULT (datetime('now')),\n    updated_at TEXT DEFAULT (datetime('now'))\n)"
+      },
+      {
+        "type": "table",
+        "name": "webhook_logs",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE TABLE webhook_logs (\n    id TEXT PRIMARY KEY,                              -- UUID v7\n    order_id TEXT,                                    -- 平台订单号\n    user_id TEXT,                                     -- 商户ID\n    plugin TEXT,                                      -- 支付插件\n    webhook_type TEXT NOT NULL,                       -- 类型: channel_notify/merchant_notify\n    direction TEXT NOT NULL,                          -- 方向: inbound/outbound\n    url TEXT,                                         -- 回调URL\n    method TEXT,                                      -- HTTP 方法\n    http_status INTEGER,                              -- HTTP 状态码\n    success INTEGER DEFAULT 0,                        -- 是否成功: 0否 1是\n    request_headers TEXT,                             -- 请求头摘要(JSON, 已脱敏)\n    request_body TEXT,                                -- 请求体摘要(JSON, 已脱敏)\n    response_body TEXT,                               -- 响应摘要(JSON, 已脱敏)\n    error_message TEXT,                               -- 错误信息\n    ip TEXT,                                          -- 来源IP\n    user_agent TEXT,                                  -- User Agent\n    created_at TEXT DEFAULT (datetime('now')),        -- 创建时间\n    FOREIGN KEY (order_id) REFERENCES orders(id)\n)"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.7397
+      },
+      "duration": 0.7397,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 442368,
+      "rows_read": 170,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

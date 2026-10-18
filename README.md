@@ -106,14 +106,19 @@ CREATE TABLE users (
     role TEXT NOT NULL DEFAULT 'merchant', -- admin/merchant
     status INTEGER DEFAULT 1,         -- 0禁用 1正常 2待审核
     balance REAL DEFAULT 0,           -- 余额
-    api_key TEXT UNIQUE,              -- 商户密钥
-    api_rsa_public TEXT,              -- RSA公钥
+    api_key TEXT UNIQUE,              -- 旧密钥列，已废弃（唯一密钥来源见 api_keys 表）
+    api_key_type TEXT DEFAULT 'md5',  -- 旧密钥列，已废弃
+    rsa_public_key TEXT,              -- 旧密钥列，已废弃
     notify_url TEXT,                  -- 异步通知地址
     return_url TEXT,                  -- 同步跳转地址
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
 ```
+
+> ⚠️ 商户 API 密钥存放在独立的 `api_keys` 表（见下文「API 密钥表」），
+> `users` 表中的 `api_key` / `api_key_type` / `rsa_public_key` 三个旧列
+> 仅为保持与历史库的结构一致而保留，**运行时不再读取或写入**。
 
 ### 订单表 (orders)
 ```sql
@@ -224,16 +229,18 @@ CREATE TABLE logs (
 
 ### 签名算法
 
-#### MD5 签名
+#### HMAC-SHA256 签名（当前标准）
 ```
-sign = md5(pid + out_trade_no + type + name + money + notify_url + return_url + api_key)
+sign = hmac_sha256(pid + out_trade_no + type + name + money + notify_url + return_url + api_key, api_key)
 ```
 
-#### RSA 签名
+#### RSA 签名（存量商户）
 ```
 sign = rsa_sign(待签名字符串, 商户私钥)
 待签名字符串 = 按参数名ASCII排序后拼接
 ```
+
+> MD5 签名已废弃，仅保留存量商户验签兼容，不再允许新建 MD5 密钥。
 
 ---
 
@@ -551,6 +558,13 @@ export class AlipayPlugin implements PaymentPlugin {
 
 ## 部署指南
 
+### 文档索引
+- `docs/api.md`：API 接口说明
+- `docs/deploy.md`：部署细节
+- `docs/plugin.md`：支付插件开发
+- `docs/admin-dashboard-design.md`：管理后台设计
+- `docs/schema-drift-report.md`：**生产库结构漂移的根因与对齐方案**（改结构前必读）
+
 ### 前置条件
 1. Cloudflare 账号
 2. Node.js 18+
@@ -574,8 +588,10 @@ npx wrangler kv:namespace create CACHE
 # 5. 配置 wrangler.toml
 # 填入数据库 ID 和 KV ID
 
-# 6. 初始化数据库
-npx wrangler d1 execute teaven-pay-db --file=./schema.sql
+# 6. 初始化数据库（按编号顺序执行全部迁移）
+for f in migrations/0*.sql; do
+  npx wrangler d1 execute teaven-pay-db --file="./$f"
+done
 
 # 7. 部署 Workers
 npx wrangler deploy
@@ -583,6 +599,11 @@ npx wrangler deploy
 # 8. 部署前端 (可选)
 # 使用 Cloudflare Pages 部署
 ```
+
+> ⚠️ 迁移必须**按编号顺序**执行到最新的 `0009_align_api_key_columns.sql`，
+> 否则得到的库结构会与生产不一致。
+> 仓库未配置 `migrations_dir`，`wrangler d1 migrations apply` 不可用；
+> 初始化后可跑 `npm run db:verify` 校验结构一致性（详见 `docs/schema-drift-report.md`）。
 
 ### 环境变量
 

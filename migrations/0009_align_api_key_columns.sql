@@ -1,0 +1,71 @@
+-- 0009: 把 users 表的三个旧密钥列加回，与生产库真实结构对齐
+--
+-- 背景（任务 t-mv39kad0-1o8elj）：
+--   生产 D1（teaven-pay / 7de39fde-b84c-46bd-bb0c-01004b6f5200）的 users 表只有
+--   27 列，缺少 migrations/0001_initial.sql 第 15-17 行定义的
+--   api_key / api_key_type / rsa_public_key。
+--
+--   根因：migrations/0003_api_keys.sql 在 2026-06-28 16:29 的初版
+--   （提交 2478c94）中含有一段整表重建：
+--       CREATE TABLE users_new (...不含三列...)
+--       INSERT INTO users_new SELECT ...
+--       DROP TABLE users;
+--       ALTER TABLE users_new RENAME TO users;
+--   该重建在生产执行后，三列随旧表一并被删除。生产 sqlite_master 中
+--   users 的建表语句呈现 `CREATE TABLE "users" (`（表名带双引号、列定义剥离
+--   行尾注释），正是 ALTER TABLE ... RENAME TO 重写 sqlite_master 的特征；
+--   其列清单与该提交第 43-71 行的 users_new 定义逐列一致。
+--   该段重建在 17 分钟后（提交 a3752af）被删除，但生产库已受影响。
+--
+--   影响：
+--     - 0003 的数据迁移段（SELECT users.api_key）在生产无法重放；
+--     - 0007（清空旧密钥副本）在生产是静默 no-op：三列不存在，WHERE 恒不成立；
+--     - 0001 在已存在的生产库上完全无效（CREATE TABLE IF NOT EXISTS 直接跳过），
+--       因此「按仓库迁移重建库」会得到与生产不同的结构。
+--
+-- 本迁移做的事：
+--   把三个旧列以 NULL 值加回 users 表（若已存在则不动），使：
+--     1. 生产库结构与仓库定义一致；
+--     2. 0001 → … → 0009 迁移链可以在空库和生产库上重放得到同一结构。
+--
+-- 为什么加回而不是改 0001/0003/0007 让仓库迁就生产：
+--   - 加回是纯加列、不改数据、不动索引与外键，风险最低，且对已存在的生产库可执行；
+--   - 0001 是已发布过的初始化脚本，改写它不会影响已存在的库（CREATE TABLE IF NOT EXISTS
+--     对已存在表无效），只会让新建库与生产继续分叉；
+--   - 三列加回后全部为 NULL，不构成第二份密钥副本；运行时唯一密钥来源仍是
+--     api_keys 表（src/utils/apiKeyAuth.ts 的 getPrimaryApiKey），
+--     任何代码都不得再读这三列（0007 已把读取点全部移除）。
+--     NULL 值不会触发 api_key 的 UNIQUE 约束（SQLite 允许多个 NULL）。
+--
+-- 安全性与幂等性：
+--   - 幂等：加列前先用 PRAGMA table_info 检测，列已存在则整段跳过，
+--     重复执行不报错、不重复加列；
+--   - 不写任何业务数据：新列为 NULL，users 现有 2 行数据完全不受影响；
+--   - 不改 users 现有列的类型、默认值、约束，也不改任何索引与外键；
+--   - 可在生产安全执行，也可在空库上重放（此时三列已由 0001 建出，本迁移整段跳过）。
+--
+-- 执行方式：
+--   wrangler d1 execute teaven-pay --remote --file=./migrations/0009_align_api_key_columns.sql
+--   或在全新环境重建：按 0001 → 0009 顺序执行。
+--
+-- 验证：
+--   SELECT name FROM pragma_table_info('users') WHERE name IN
+--     ('api_key','api_key_type','rsa_public_key');
+--   期望返回 3 行。
+--
+-- 注：SQLite 的 DDL 不支持 IF NOT EXISTS 形式的 ADD COLUMN，因此下面的
+--     「条件加列」由配套脚本 scripts/apply-0009-align-users.mjs 完成：
+--     它先读 PRAGMA table_info 判断缺哪几列，再按需执行对应的 ALTER TABLE。
+--     本文件保留等价的无条件语句，供全新环境与人工审查使用。
+
+-- api_key：带唯一语义（与 0001_initial.sql 第 15 行的 UNIQUE 等价）
+-- 注意：SQLite 不允许 ALTER TABLE ADD COLUMN 添加 UNIQUE 约束的列，
+--       因此加普通列后用唯一索引补齐等价语义。
+ALTER TABLE users ADD COLUMN api_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key);
+
+-- api_key_type：与 0001_initial.sql 第 16 行一致，默认 'md5'（与 0001 现状一致）
+ALTER TABLE users ADD COLUMN api_key_type TEXT DEFAULT 'md5';
+
+-- rsa_public_key：与 0001_initial.sql 第 17 行一致
+ALTER TABLE users ADD COLUMN rsa_public_key TEXT;
