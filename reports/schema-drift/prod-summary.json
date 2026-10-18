@@ -1,5 +1,5 @@
 {
-    "captured_at":  "2026-10-18T10:36:06.3845376+08:00",
+    "captured_at":  "2026-10-18T14:02:03.9205194+08:00",
     "source":  "wrangler d1 execute teaven-pay --remote --json (read-only)",
     "database_id":  "7de39fde-b84c-46bd-bb0c-01004b6f5200",
     "table_count":  20,
@@ -9,7 +9,7 @@
     "tables":  [
                    {
                        "name":  "api_keys",
-                       "column_count":  10,
+                       "column_count":  9,
                        "columns":  [
                                        "id",
                                        "user_id",
@@ -19,7 +19,6 @@
                                        "rsa_public_key",
                                        "status",
                                        "last_used_at",
-                                       "created_at",
                                        "updated_at"
                                    ]
                    },
@@ -36,7 +35,7 @@
                    },
                    {
                        "name":  "channels",
-                       "column_count":  16,
+                       "column_count":  14,
                        "columns":  [
                                        "id",
                                        "payment_type_id",
@@ -45,8 +44,6 @@
                                        "config",
                                        "fee_rate",
                                        "min_amount",
-                                       "max_amount",
-                                       "daily_limit",
                                        "time_start",
                                        "time_stop",
                                        "sort_order",
@@ -58,18 +55,14 @@
                    },
                    {
                        "name":  "daily_stats",
-                       "column_count":  11,
+                       "column_count":  7,
                        "columns":  [
                                        "id",
                                        "date",
                                        "user_id",
                                        "payment_type",
                                        "order_count",
-                                       "success_count",
-                                       "total_amount",
-                                       "success_amount",
                                        "fee",
-                                       "profit",
                                        "created_at"
                                    ]
                    },
@@ -100,16 +93,12 @@
                    },
                    {
                        "name":  "order_logs",
-                       "column_count":  12,
+                       "column_count":  8,
                        "columns":  [
                                        "id",
                                        "order_id",
-                                       "user_id",
                                        "out_trade_no",
-                                       "action",
                                        "from_status",
-                                       "to_status",
-                                       "amount",
                                        "detail",
                                        "ip",
                                        "user_agent",
@@ -118,24 +107,20 @@
                    },
                    {
                        "name":  "orders",
-                       "column_count":  31,
+                       "column_count":  25,
                        "columns":  [
                                        "id",
                                        "user_id",
                                        "out_trade_no",
-                                       "payment_type",
                                        "channel_id",
                                        "sub_channel_id",
                                        "plugin",
                                        "amount",
                                        "actual_amount",
                                        "fee",
-                                       "profit",
                                        "status",
-                                       "name",
                                        "body",
                                        "param",
-                                       "buyer",
                                        "buyer_ip",
                                        "notify_url",
                                        "return_url",
@@ -146,23 +131,18 @@
                                        "device",
                                        "cert_no",
                                        "cert_name",
-                                       "api_trade_no",
                                        "refund_amount",
-                                       "created_at",
                                        "paid_at",
                                        "closed_at"
                                    ]
                    },
                    {
                        "name":  "password_resets",
-                       "column_count":  9,
+                       "column_count":  6,
                        "columns":  [
                                        "id",
                                        "user_id",
-                                       "token_hash",
                                        "expires_at",
-                                       "used_at",
-                                       "attempts",
                                        "ip",
                                        "user_agent",
                                        "created_at"
@@ -170,11 +150,10 @@
                    },
                    {
                        "name":  "payment_logs",
-                       "column_count":  14,
+                       "column_count":  13,
                        "columns":  [
                                        "id",
                                        "order_id",
-                                       "user_id",
                                        "channel_id",
                                        "plugin",
                                        "direction",
@@ -206,7 +185,7 @@
                    },
                    {
                        "name":  "reconciliation_logs",
-                       "column_count":  15,
+                       "column_count":  13,
                        "columns":  [
                                        "id",
                                        "user_id",
@@ -216,26 +195,21 @@
                                        "checked_count",
                                        "matched_count",
                                        "mismatch_count",
-                                       "fixed_count",
                                        "operator_id",
                                        "detail",
                                        "error_message",
                                        "started_at",
-                                       "finished_at",
                                        "created_at"
                                    ]
                    },
                    {
                        "name":  "refunds",
-                       "column_count":  11,
+                       "column_count":  8,
                        "columns":  [
                                        "id",
                                        "refund_no",
-                                       "order_id",
                                        "user_id",
                                        "amount",
-                                       "reason",
-                                       "status",
                                        "third_party_refund_no",
                                        "error_message",
                                        "created_at",
@@ -244,20 +218,18 @@
                    },
                    {
                        "name":  "settlements",
-                       "column_count":  14,
+                       "column_count":  12,
                        "columns":  [
                                        "id",
                                        "user_id",
                                        "amount",
                                        "fee",
-                                       "actual_amount",
                                        "settle_type",
                                        "settle_account",
                                        "settle_name",
                                        "bank_name",
                                        "bank_branch",
                                        "status",
-                                       "reject_reason",
                                        "processed_at",
                                        "created_at"
                                    ]
@@ -271,11 +243,9 @@
                    },
                    {
                        "name":  "system_config",
-                       "column_count":  4,
+                       "column_count":  2,
                        "columns":  [
                                        "key",
-                                       "value",
-                                       "description",
                                        "updated_at"
                                    ]
                    },
@@ -291,15 +261,13 @@
                    },
                    {
                        "name":  "user_groups",
-                       "column_count":  10,
+                       "column_count":  8,
                        "columns":  [
                                        "id",
                                        "name",
                                        "description",
                                        "fee_rate",
                                        "min_amount",
-                                       "max_amount",
-                                       "daily_limit",
                                        "permissions",
                                        "created_at",
                                        "updated_at"
@@ -340,11 +308,10 @@
                    },
                    {
                        "name":  "webhook_logs",
-                       "column_count":  17,
+                       "column_count":  15,
                        "columns":  [
                                        "id",
                                        "order_id",
-                                       "user_id",
                                        "plugin",
                                        "webhook_type",
                                        "direction",
@@ -352,7 +319,6 @@
                                        "method",
                                        "http_status",
                                        "success",
-                                       "request_headers",
                                        "request_body",
                                        "response_body",
                                        "error_message",
