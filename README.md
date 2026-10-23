@@ -566,7 +566,7 @@ npm install
 npx wrangler login
 
 # 3. 创建 D1 数据库
-npx wrangler d1 create teaven-pay-db
+npx wrangler d1 create teaven-pay
 
 # 4. 创建 KV 命名空间
 npx wrangler kv:namespace create CACHE
@@ -575,7 +575,7 @@ npx wrangler kv:namespace create CACHE
 # 填入数据库 ID 和 KV ID
 
 # 6. 初始化数据库
-npx wrangler d1 execute teaven-pay-db --file=./schema.sql
+npx wrangler d1 execute teaven-pay --file=./migrations/0001_initial.sql
 
 # 7. 部署 Workers
 npx wrangler deploy
