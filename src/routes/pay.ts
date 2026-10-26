@@ -7,14 +7,77 @@ import { Env, OrderRow } from '../types/env';
 import { generateUUIDv7 } from '../utils/uuid';
 import { decryptChannelConfig } from '../utils/crypto';
 import { isTimestampFresh, verifyCashierSign, verifyCashierTicket } from '../utils/cashierAuth';
-import { authorizeKeyOrSign, authorizeSignedRequest, getPrimaryApiKey, matchApiKey, readApiKeyFromHeaders } from '../utils/apiKeyAuth';
+import { authorizeKeyOrSign, authorizeSignedRequest, getPrimaryApiKey, listActiveApiKeys, matchApiKey, readApiKeyFromHeaders } from '../utils/apiKeyAuth';
 import { isSafeOutboundUrl } from '../utils/netSecurity';
+import { verifyOrderStatusToken } from '../utils/orderStatusAuth';
 import { getPlugin } from '../plugins';
+import type { PluginConfig, RefundResult } from '../types/plugin';
 import { getSiteUrl } from '../utils/site';
 import { getRequestLogMeta, logOrderEvent, logPaymentEvent } from '../utils/logging';
 import { CREDIT_OUTCOME, CREDIT_SOURCE, creditOrder } from '../utils/credit';
 
 export const payRouter = new Hono<{ Bindings: Env }>();
+
+/** 订单状态接口的认证结果 */
+interface OrderStatusAuthResult {
+    ok: boolean;
+    code?: number;
+    msg?: string;
+    status?: 200 | 401 | 403;
+}
+
+/**
+ * 订单状态查询的访问控制（B-3）
+ *
+ * 两条合法路径：
+ *   1. 订单票据：由收银台页面服务端签发，只绑定这一个 tradeNo，供浏览器轮询；
+ *   2. 商户签名：pid + trade_no + timestamp + sign，用于服务端直连。
+ *
+ * 两条都不满足时返回 401，不再返回订单状态与金额。
+ */
+async function authorizeOrderStatusRequest(
+    c: any,
+    env: Env,
+    order: any
+): Promise<OrderStatusAuthResult> {
+    const tradeNo: string = order.id;
+    const token = c.req.query('token') || c.req.header('X-Order-Token') || '';
+    const pid = c.req.query('pid') || '';
+    const sign = c.req.query('sign') || '';
+    const timestamp = c.req.query('timestamp') || '';
+
+    // 路径 A：订单票据
+    if (token) {
+        const keys = (await listActiveApiKeys(env.DB, order.user_id)).map((row) => row.api_key);
+        const valid = await verifyOrderStatusToken(token, tradeNo, keys);
+        if (!valid) {
+            return { ok: false, code: -2, msg: '订单访问凭证无效或已过期', status: 401 };
+        }
+        return { ok: true };
+    }
+
+    // 路径 B：商户签名（必须带 pid/sign/timestamp）
+    if (!pid && !sign) {
+        return { ok: false, code: -1, msg: '缺少订单访问凭证：请使用 token 签名或商户签名', status: 401 };
+    }
+
+    const auth = await authorizeSignedRequest(env.DB, {
+        pid,
+        sign,
+        timestamp,
+        params: { trade_no: tradeNo },
+    });
+    if (!auth.ok) {
+        return { ok: false, code: auth.code, msg: auth.msg, status: 401 };
+    }
+
+    // 签名有效，但订单必须属于该商户：防止 A 商户拿自己的密钥查 B 商户的订单
+    if (order.user_id !== pid) {
+        return { ok: false, code: -4, msg: '订单不存在', status: 403 };
+    }
+
+    return { ok: true };
+}
 
 /**
  * 发起支付 - API 模式
@@ -392,8 +455,16 @@ payRouter.post('/cashier', async (c) => {
 });
 
 /**
- * 查询订单状态（公开接口，供收银台轮询，会主动查询支付渠道）
+ * 查询订单状态（订单维度受限接口，供收银台轮询，会主动查询支付渠道）
  * GET /api/pay/status/:tradeNo
+ *
+ * 认证（二选一，B-3 整改）：
+ *   A. 订单票据：收银台页面 URL / 响应头 `X-Order-Token` 携带的单订单凭证，
+ *      由 `GET /cashier/:tradeNo` 服务端签发，只能查这一个单号。
+ *   B. 商户签名：`pid` + `trade_no` + `timestamp` + `sign`（服务端直连场景）。
+ *
+ * 整改前该接口无任何校验，任何人拿到平台订单号即可查询订单状态与金额；
+ * 订单号会出现在收银台 URL 与商户回跳地址中，等同于半公开信息。
  */
 payRouter.get('/status/:tradeNo', async (c) => {
     const { tradeNo } = c.req.param();
@@ -406,6 +477,12 @@ payRouter.get('/status/:tradeNo', async (c) => {
 
         if (!order) {
             return c.json({ code: -1, msg: '订单不存在' });
+        }
+
+        // 认证：订单票据（页面轮询）或商户签名（服务端直连）
+        const authorized = await authorizeOrderStatusRequest(c, env, order);
+        if (!authorized.ok) {
+            return c.json({ code: authorized.code, msg: authorized.msg }, authorized.status);
         }
 
         // 如果订单未支付，主动查询支付渠道
@@ -679,9 +756,88 @@ payRouter.get('/orders', async (c) => {
 });
 
 /**
- * 申请退款
- * POST /api/pay/refund
+ * 退款渠道上下文：退款必须打给真实支付渠道，缺一不可
  */
+interface RefundChannelContext {
+    plugin: ReturnType<typeof getPlugin>;
+    config: PluginConfig;
+    channelId: string | null;
+    pluginId: string;
+}
+
+/**
+ * 解析订单对应的支付渠道与插件配置（B-2 前置条件）
+ *
+ * 拿不到渠道 / 插件 / 配置时返回错误，调用方必须拒绝退款，
+ * 不能像整改前那样「只写库就告诉商户退款成功」。
+ */
+async function resolveRefundChannel(env: Env, order: any): Promise<{ ok: true; ctx: RefundChannelContext } | { ok: false; msg: string }> {
+    const pluginId = order.plugin;
+    if (!pluginId) {
+        return { ok: false, msg: '订单未记录支付渠道，无法向渠道发起退款' };
+    }
+
+    let plugin: ReturnType<typeof getPlugin>;
+    try {
+        plugin = getPlugin(pluginId);
+    } catch {
+        return { ok: false, msg: `支付渠道插件不存在: ${pluginId}` };
+    }
+
+    let config: Record<string, any> = {};
+    let channelId: string | null = order.channel_id || null;
+    if (channelId) {
+        const channel = await env.DB.prepare(
+            'SELECT * FROM channels WHERE id = ?'
+        ).bind(channelId).first() as any;
+
+        if (channel) {
+            // 渠道被停用也要能退款：买家已经付过钱，退款不该受运营开关影响
+            config = await decryptChannelConfig(channel.config, env.ENCRYPTION_KEY);
+        } else {
+            channelId = null;
+        }
+    }
+
+    if (!config.appId && !config.appSecret && !config.mchId) {
+        return { ok: false, msg: '支付渠道配置缺失，无法向渠道发起退款' };
+    }
+
+    return {
+        ok: true,
+        ctx: {
+            plugin,
+            config: {
+                ...config,
+                appId: config.appId || '',
+                appSecret: config.appSecret || '',
+            },
+            channelId,
+            pluginId,
+        },
+    };
+}
+
+/**
+ * 回滚「退款占位」：CAS 累加的 refund_amount 与翻转的订单状态
+ *
+ * 只在渠道退款失败时调用。refund_amount 按金额回退，
+ * 订单状态仅在累计退款额归零时由 2 回退为 1，避免误伤其它退款记录。
+ */
+async function rollbackRefundReservation(env: Env, orderId: string, amount: number): Promise<void> {
+    try {
+        await env.DB.prepare(
+            `UPDATE orders SET refund_amount = refund_amount - ? WHERE id = ? AND refund_amount >= ?`
+        ).bind(amount, orderId, amount).run();
+
+        await env.DB.prepare(
+            `UPDATE orders SET status = 1 WHERE id = ? AND status = 2 AND refund_amount <= 0`
+        ).bind(orderId).run();
+    } catch (error) {
+        // 回滚失败必须留痕：此时库里存在「退款占位未释放」的悬空状态，需人工对账
+        console.error(`[Pay/refund] 退款占位回滚失败，需人工对账 order=${orderId} amount=${amount}:`, error);
+    }
+}
 payRouter.post('/refund', async (c) => {
     const body = await c.req.parseBody();
     const env = c.env;
@@ -744,12 +900,19 @@ payRouter.post('/refund', async (c) => {
             return c.json({ code: -1, msg: '退款金额超过可退金额' });
         }
         
-        // 创建退款记录
+        // 退款单号（渠道受理成功后才落库，避免留下「从未向渠道发起」的退款记录）
         const refundNo = generateUUIDv7();
-        const now = new Date().toISOString();
         const isFullRefund = refundAmount >= remainingRefundAmount;
 
-        // CAS 守卫：仅在订单仍为已支付且退款后累计不超订单金额时累加 refund_amount
+        // 先解析真实支付渠道：解析不出来就不允许进入退款流程。
+        // 整改前是「先写库再返回退款成功」，渠道从未收到退款请求（B-2），
+        // 商户看到成功、买家却收不到钱。现在渠道不可达即拒绝，不留悬空成功态。
+        const channelCtx = await resolveRefundChannel(env, order);
+        if (!channelCtx.ok) {
+            return c.json({ code: -1, msg: channelCtx.msg });
+        }
+
+        // 占位：CAS 累加 refund_amount / 翻转状态，占住可退额度，防止并发超额退款
         // 并发退款 / 重复回调时，只有抢到这次 CAS 的请求才继续，其余 changes=0 直接拒绝
         const accum = await env.DB.prepare(
             `UPDATE orders SET refund_amount = refund_amount + ? WHERE id = ? AND status = 1 AND refund_amount + ? <= amount`
@@ -766,11 +929,76 @@ payRouter.post('/refund', async (c) => {
             ).bind(order.id).run();
         }
 
-        // 退款记录写入（在 CAS 守卫成功之后）
+        // 真正调用支付渠道退款接口（B-2）：渠道失败即回滚占位并报错，
+        // 绝不在渠道未受理的情况下告诉商户「退款成功」
+        let refundResult: RefundResult;
+        try {
+            refundResult = await channelCtx.ctx.plugin.refund(
+                {
+                    tradeNo: order.id,
+                    outTradeNo: order.out_trade_no,
+                    amount: order.amount,
+                    actualAmount: order.actual_amount ?? order.amount,
+                    subject: order.name || '',
+                    clientIp: order.buyer_ip || '',
+                    createdAt: order.created_at,
+                },
+                refundAmount,
+                channelCtx.ctx.config
+            );
+        } catch (error) {
+            refundResult = {
+                success: false,
+                message: error instanceof Error ? error.message : '渠道退款请求异常',
+            };
+        }
+
+        if (!refundResult.success) {
+            const failMessage = refundResult.message || '渠道退款失败';
+            await rollbackRefundReservation(env, order.id, refundAmount);
+
+            await logOrderEvent(env, {
+                orderId: order.id,
+                userId: pid,
+                outTradeNo: order.out_trade_no,
+                action: 'refund_failed',
+                fromStatus: 1,
+                toStatus: 1,
+                amount: refundAmount,
+                detail: { refund_no: refundNo, reason: failMessage, plugin: channelCtx.ctx.pluginId },
+                ...requestMeta,
+            });
+
+            await logPaymentEvent(env, {
+                orderId: order.id,
+                userId: pid,
+                channelId: channelCtx.ctx.channelId,
+                plugin: channelCtx.ctx.pluginId,
+                direction: 'response',
+                action: 'refund',
+                status: 'failed',
+                amount: refundAmount,
+                requestData: { refund_no: refundNo, reason: body.reason || '' },
+                errorMessage: failMessage,
+            });
+
+            return c.json({ code: -1, msg: `退款失败：${failMessage}` });
+        }
+
+        // 渠道已受理：落退款记录。渠道未回传第三方退款号时记为处理中（0），
+        // 最终状态由 /api/pay/refund/query 对账补齐。
+        const settledAt = new Date().toISOString();
         await env.DB.prepare(`
-            INSERT INTO refunds (id, refund_no, order_id, user_id, amount, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 0, ?)
-        `).bind(refundNo, refundNo, order.id, pid, refundAmount, now).run();
+            INSERT INTO refunds (id, refund_no, order_id, user_id, amount, reason, status, third_party_refund_no, created_at, completed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+            refundNo, refundNo, order.id, pid, refundAmount,
+            (body.reason as string) || '',
+            refundResult.thirdPartyRefundNo ? 1 : 0,
+            refundResult.thirdPartyRefundNo || null,
+            settledAt,
+            refundResult.thirdPartyRefundNo ? settledAt : null
+        ).run();
 
         await logOrderEvent(env, {
             orderId: order.id,
@@ -780,30 +1008,39 @@ payRouter.post('/refund', async (c) => {
             fromStatus: 1,
             toStatus: isFullRefund ? 2 : 1,
             amount: refundAmount,
-            detail: { refund_no: refundNo, remaining_before_refund: remainingRefundAmount },
+            detail: {
+                refund_no: refundNo,
+                remaining_before_refund: remainingRefundAmount,
+                third_party_refund_no: refundResult.thirdPartyRefundNo || null,
+                plugin: channelCtx.ctx.pluginId,
+            },
             ...requestMeta,
         });
 
         await logPaymentEvent(env, {
             orderId: order.id,
             userId: pid,
-            channelId: order.channel_id,
-            plugin: order.plugin,
-            direction: 'internal',
+            channelId: channelCtx.ctx.channelId,
+            plugin: channelCtx.ctx.pluginId,
+            direction: 'response',
             action: 'refund',
-            status: 'accepted',
+            status: 'success',
             amount: refundAmount,
             requestData: { refund_no: refundNo, reason: body.reason || '' },
+            responseData: {
+                refund_no: refundResult.refundNo || refundNo,
+                third_party_refund_no: refundResult.thirdPartyRefundNo || null,
+            },
         });
-        
-        // TODO: 调用支付渠道退款接口
-        
+
         return c.json({
-            code: 0,
+            code: 1,
             msg: `退款成功！退款金额¥${refundAmount.toFixed(2)}`,
             refund_no: refundNo,
             trade_no: order.id,
-            money: refundAmount
+            money: refundAmount,
+            // 渠道异步退款时不会立即回传第三方退款号，此时记录状态为处理中
+            status: refundResult.thirdPartyRefundNo ? 1 : 0
         });
     } catch (error) {
         console.error('Refund error:', error);
@@ -871,7 +1108,7 @@ payRouter.get('/refund/query', async (c) => {
         }
         
         return c.json({
-            code: 0,
+            code: 1,
             refund_no: refund.refund_no,
             out_trade_no: refund.out_trade_no,
             trade_no: refund.order_id,
@@ -957,9 +1194,12 @@ payRouter.post('/close', async (c) => {
             ...requestMeta,
         });
         
+        // B-1：成功码统一为 1（与 submit / query / orders 一致），
+        // 此前本接口与 refund 返回 0 表示成功，与 docs/api.md 的「0=失败」矛盾
         return c.json({
-            code: 0,
-            msg: '订单关闭成功'
+            code: 1,
+            msg: '订单关闭成功',
+            trade_no: order.id
         });
     } catch (error) {
         console.error('Close order error:', error);
