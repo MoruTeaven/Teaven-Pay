@@ -14,9 +14,9 @@
     "db:diff": "node scripts/compare-schema-snapshots.mjs",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "db:init": "wrangler d1 execute teaven-pay-db --file=./migrations/0001_initial.sql",
-    "db:reset": "wrangler d1 execute teaven-pay-db --file=./migrations/0001_initial.sql --force",
-    "db:console": "wrangler d1 execute teaven-pay-db --command 'SELECT * FROM users LIMIT 10'",
+    "db:init": "wrangler d1 execute teaven-pay --file=./migrations/0001_initial.sql",
+    "db:reset": "wrangler d1 execute teaven-pay --file=./migrations/0001_initial.sql --force",
+    "db:console": "wrangler d1 execute teaven-pay --command 'SELECT * FROM users LIMIT 10'",
     "tail": "wrangler tail",
     "secret:put": "wrangler secret put",
     "test:credit": "node --experimental-sqlite tests/credit-race.test.cjs"

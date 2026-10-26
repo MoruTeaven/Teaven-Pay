@@ -176,7 +176,8 @@ describe('GET /refund/query 认证', () => {
         );
         const res = await callWithDb(db, `/refund/query?pid=${MERCHANT_ID}&refund_no=R1&timestamp=${timestamp}&sign=${sign}`);
         const data = await res.json() as any;
-        expect(data.code).toBe(0);
+        // B-1 整改：成功码统一为 1（原为 0，与 docs/api.md 的「0=失败」矛盾）
+        expect(data.code).toBe(1);
         expect(data.refund_no).toBe('R1');
         expect(data.money).toBe(7.77);
     });

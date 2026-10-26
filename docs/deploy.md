@@ -71,13 +71,13 @@ npm install
 cd workers
 
 # 创建数据库
-wrangler d1 create teaven-pay-db
+wrangler d1 create teaven-pay
 
 # 输出示例:
-# ✅ Successfully created DB 'teaven-pay-db'
+# ✅ Successfully created DB 'teaven-pay'
 # [[d1_databases]]
 # binding = "DB"
-# database_name = "teaven-pay-db"
+# database_name = "teaven-pay"
 # database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 ```
 
@@ -125,7 +125,7 @@ DEFAULT_CURRENCY = "CNY"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "teaven-pay-db"
+database_name = "teaven-pay"
 database_id = "your-database-id"
 preview_database_id = "your-preview-database-id"
 
@@ -172,10 +172,10 @@ wrangler secret put ADMIN_PASSWORD
 
 ```bash
 # 执行数据库迁移
-wrangler d1 execute teaven-pay-db --file=./migrations/0001_initial.sql
+wrangler d1 execute teaven-pay --file=./migrations/0001_initial.sql
 
 # 验证表创建
-wrangler d1 execute teaven-pay-db --command "SELECT name FROM sqlite_master WHERE type='table'"
+wrangler d1 execute teaven-pay --command "SELECT name FROM sqlite_master WHERE type='table'"
 ```
 
 ---
@@ -325,7 +325,7 @@ ENABLE_ACCESS_LOG = "true"
 
 ```bash
 # 导出数据库
-wrangler d1 export teaven-pay-db --output=backup.sql
+wrangler d1 export teaven-pay --output=backup.sql
 
 # 压缩备份
 gzip backup.sql
@@ -338,7 +338,7 @@ gzip backup.sql
 gunzip backup.sql.gz
 
 # 恢复数据库
-wrangler d1 execute teaven-pay-db --file=backup.sql
+wrangler d1 execute teaven-pay --file=backup.sql
 ```
 
 ### 8.3 数据库迁移
@@ -352,7 +352,7 @@ CREATE INDEX idx_orders_created_at ON orders(created_at);
 EOF
 
 # 执行迁移
-wrangler d1 execute teaven-pay-db --file=./migrations/0002_add_index.sql
+wrangler d1 execute teaven-pay --file=./migrations/0002_add_index.sql
 ```
 
 ---
