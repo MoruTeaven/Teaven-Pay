@@ -564,6 +564,7 @@ export class AlipayPlugin implements PaymentPlugin {
 - `docs/plugin.md`：支付插件开发
 - `docs/admin-dashboard-design.md`：管理后台设计
 - `docs/schema-drift-report.md`：**生产库结构漂移的根因与对齐方案**（改结构前必读）
+- `docs/api-key-recovery.md`：**商户无 API 密钥时的诊断与处置**（收银台不可下单时先看这里）
 
 ### 前置条件
 1. Cloudflare 账号
