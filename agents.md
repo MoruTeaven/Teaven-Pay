@@ -80,6 +80,25 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 - `refunds`：退款记录
 - `operation_logs`、`daily_stats`、`system_config`：日志、统计和系统配置
 
+### 迁移与生产库结构漂移（重要）
+
+生产 D1 的真实结构与仓库迁移链曾出现脱节，根因与处置见 `docs/schema-drift-report.md`：
+
+- 生产 `users` 缺 `api_key` / `api_key_type` / `rsa_public_key` 三列，根因是
+  `0003_api_keys.sql` 早期版本中的整表重建（`DROP TABLE users` + `RENAME`），
+  该重建在生产执行后删掉了三列。`migrations/0009_align_api_key_columns.sql`
+  把三列加回。
+- **生产没有 `d1_migrations` 表，也从未配置 `migrations_dir`**：迁移是人工逐个
+  `--file` 执行的，没有迁移记录体系。因此「改已发布的迁移文件」对已存在的库无效
+  （`CREATE TABLE IF NOT EXISTS` 会跳过），结构变更一律**新增迁移**。
+- 改结构前先跑 `node scripts/compare-schema-snapshots.mjs` 比对生产与仓库重放的差异，
+  改完跑 `node scripts/verify-schema-alignment.mjs` 验证幂等与一致性。
+- `api_keys` 表是 API 密钥的唯一来源；`users` 的三个旧密钥列仅保留结构，
+  **运行时不得读取或写入**。
+- SQLite 的 `ALTER TABLE ADD COLUMN` 不支持 `IF NOT EXISTS`，加列必须先查
+  `PRAGMA table_info` 再按需执行（见 `scripts/lib/align-users-columns.mjs`），
+  否则重复执行会报 `duplicate column name`。
+
 ## 支付插件规则
 
 新增支付插件时：

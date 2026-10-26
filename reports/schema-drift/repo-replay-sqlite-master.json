@@ -1,0 +1,526 @@
+[
+  {
+    "results": [
+      {
+        "type": "index",
+        "name": "idx_api_keys_api_key",
+        "tbl_name": "api_keys",
+        "sql": "CREATE INDEX idx_api_keys_api_key ON api_keys(api_key)"
+      },
+      {
+        "type": "index",
+        "name": "idx_api_keys_user_id",
+        "tbl_name": "api_keys",
+        "sql": "CREATE INDEX idx_api_keys_user_id ON api_keys(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_daily_stats_date",
+        "tbl_name": "daily_stats",
+        "sql": "CREATE INDEX idx_daily_stats_date ON daily_stats(date)"
+      },
+      {
+        "type": "index",
+        "name": "idx_daily_stats_user_id",
+        "tbl_name": "daily_stats",
+        "sql": "CREATE INDEX idx_daily_stats_user_id ON daily_stats(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_operation_logs_action",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE INDEX idx_operation_logs_action ON operation_logs(action)"
+      },
+      {
+        "type": "index",
+        "name": "idx_operation_logs_created_at",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE INDEX idx_operation_logs_created_at ON operation_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_operation_logs_target",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE INDEX idx_operation_logs_target ON operation_logs(target)"
+      },
+      {
+        "type": "index",
+        "name": "idx_operation_logs_user_id",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE INDEX idx_operation_logs_user_id ON operation_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_order_logs_action",
+        "tbl_name": "order_logs",
+        "sql": "CREATE INDEX idx_order_logs_action ON order_logs(action)"
+      },
+      {
+        "type": "index",
+        "name": "idx_order_logs_created_at",
+        "tbl_name": "order_logs",
+        "sql": "CREATE INDEX idx_order_logs_created_at ON order_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_order_logs_order_id",
+        "tbl_name": "order_logs",
+        "sql": "CREATE INDEX idx_order_logs_order_id ON order_logs(order_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_order_logs_user_id",
+        "tbl_name": "order_logs",
+        "sql": "CREATE INDEX idx_order_logs_user_id ON order_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_created_at",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_created_at ON orders(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_out_trade_no",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_out_trade_no ON orders(out_trade_no)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_payment_type",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_payment_type ON orders(payment_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_status",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_status ON orders(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_orders_user_id",
+        "tbl_name": "orders",
+        "sql": "CREATE INDEX idx_orders_user_id ON orders(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_password_resets_expires_at",
+        "tbl_name": "password_resets",
+        "sql": "CREATE INDEX idx_password_resets_expires_at ON password_resets(expires_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_password_resets_token_hash",
+        "tbl_name": "password_resets",
+        "sql": "CREATE INDEX idx_password_resets_token_hash ON password_resets(token_hash)"
+      },
+      {
+        "type": "index",
+        "name": "idx_password_resets_user_id",
+        "tbl_name": "password_resets",
+        "sql": "CREATE INDEX idx_password_resets_user_id ON password_resets(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_action",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_action ON payment_logs(action)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_created_at",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_created_at ON payment_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_order_id",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_order_id ON payment_logs(order_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_plugin",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_plugin ON payment_logs(plugin)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_status",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_status ON payment_logs(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_logs_user_id",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE INDEX idx_payment_logs_user_id ON payment_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_created_at",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_created_at ON reconciliation_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_date",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_date ON reconciliation_logs(date)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_payment_type",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_payment_type ON reconciliation_logs(payment_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_status",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_status ON reconciliation_logs(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reconciliation_logs_user_id",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE INDEX idx_reconciliation_logs_user_id ON reconciliation_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_refunds_order_id",
+        "tbl_name": "refunds",
+        "sql": "CREATE INDEX idx_refunds_order_id ON refunds(order_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_refunds_user_id",
+        "tbl_name": "refunds",
+        "sql": "CREATE INDEX idx_refunds_user_id ON refunds(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_settlements_user_id",
+        "tbl_name": "settlements",
+        "sql": "CREATE INDEX idx_settlements_user_id ON settlements(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_throttle_counters_reset_at",
+        "tbl_name": "throttle_counters",
+        "sql": "CREATE INDEX idx_throttle_counters_reset_at ON throttle_counters(reset_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_created_at",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_created_at ON webhook_logs(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_order_id",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_order_id ON webhook_logs(order_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_plugin",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_plugin ON webhook_logs(plugin)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_success",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_success ON webhook_logs(success)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_type",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_type ON webhook_logs(webhook_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_webhook_logs_user_id",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE INDEX idx_webhook_logs_user_id ON webhook_logs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_api_keys_1",
+        "tbl_name": "api_keys",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_api_keys_2",
+        "tbl_name": "api_keys",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_blacklist_1",
+        "tbl_name": "blacklist",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_channels_1",
+        "tbl_name": "channels",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_daily_stats_1",
+        "tbl_name": "daily_stats",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_domain_whitelist_1",
+        "tbl_name": "domain_whitelist",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_order_logs_1",
+        "tbl_name": "order_logs",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_orders_1",
+        "tbl_name": "orders",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_password_resets_1",
+        "tbl_name": "password_resets",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_payment_logs_1",
+        "tbl_name": "payment_logs",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_payment_types_1",
+        "tbl_name": "payment_types",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_payment_types_2",
+        "tbl_name": "payment_types",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_reconciliation_logs_1",
+        "tbl_name": "reconciliation_logs",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_refunds_1",
+        "tbl_name": "refunds",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_refunds_2",
+        "tbl_name": "refunds",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_settlements_1",
+        "tbl_name": "settlements",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_system_config_1",
+        "tbl_name": "system_config",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_throttle_counters_1",
+        "tbl_name": "throttle_counters",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_user_groups_1",
+        "tbl_name": "user_groups",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_users_1",
+        "tbl_name": "users",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_users_2",
+        "tbl_name": "users",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_users_3",
+        "tbl_name": "users",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_users_4",
+        "tbl_name": "users",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_webhook_logs_1",
+        "tbl_name": "webhook_logs",
+        "sql": null
+      },
+      {
+        "type": "table",
+        "name": "_cf_METADATA",
+        "tbl_name": "_cf_METADATA",
+        "sql": "CREATE TABLE _cf_METADATA (\n        key INTEGER PRIMARY KEY,\n        value BLOB\n      )"
+      },
+      {
+        "type": "table",
+        "name": "api_keys",
+        "tbl_name": "api_keys",
+        "sql": "CREATE TABLE api_keys (\r\n    id TEXT PRIMARY KEY,                              \n    user_id TEXT NOT NULL,                            \n    api_key TEXT NOT NULL UNIQUE,                     \n    name TEXT NOT NULL DEFAULT '默认密钥',             \n    api_key_type TEXT DEFAULT 'hmac-sha256',          \n    rsa_public_key TEXT,                              \n    status INTEGER DEFAULT 1,                         \n    last_used_at TEXT,                                \n    created_at TEXT DEFAULT (datetime('now')),        \n    updated_at TEXT DEFAULT (datetime('now')),        \n    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "blacklist",
+        "tbl_name": "blacklist",
+        "sql": "CREATE TABLE blacklist (\r\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n    type TEXT NOT NULL,                               \n    content TEXT NOT NULL,                            \n    reason TEXT,                                      \n    created_at TEXT DEFAULT (datetime('now')),        \n    UNIQUE(type, content)\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "channels",
+        "tbl_name": "channels",
+        "sql": "CREATE TABLE channels (\r\n    id TEXT PRIMARY KEY,                              \n    payment_type_id TEXT NOT NULL,                    \n    name TEXT NOT NULL,                               \n    plugin TEXT NOT NULL,                             \n    config TEXT,                                      \n    fee_rate REAL DEFAULT 0,                          \n    min_amount REAL DEFAULT 0,                        \n    max_amount REAL DEFAULT 0,                        \n    daily_limit REAL DEFAULT 0,                       \n    time_start INTEGER,                               \n    time_stop INTEGER,                                \n    sort_order INTEGER DEFAULT 0,                     \n    status INTEGER DEFAULT 1,                         \n    description TEXT,                                 \n    created_at TEXT DEFAULT (datetime('now')),        \n    updated_at TEXT DEFAULT (datetime('now')),        \n    FOREIGN KEY (payment_type_id) REFERENCES payment_types(id)\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "daily_stats",
+        "tbl_name": "daily_stats",
+        "sql": "CREATE TABLE daily_stats (\r\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n    date TEXT NOT NULL,                               \n    user_id TEXT,                                     \n    payment_type TEXT,                                \n    order_count INTEGER DEFAULT 0,                    \n    success_count INTEGER DEFAULT 0,                  \n    total_amount REAL DEFAULT 0,                      \n    success_amount REAL DEFAULT 0,                    \n    fee REAL DEFAULT 0,                               \n    profit REAL DEFAULT 0,                            \n    created_at TEXT DEFAULT (datetime('now')),        \n    UNIQUE(date, user_id, payment_type)\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "domain_whitelist",
+        "tbl_name": "domain_whitelist",
+        "sql": "CREATE TABLE domain_whitelist (\r\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n    user_id TEXT NOT NULL,                            \n    domain TEXT NOT NULL,                             \n    status INTEGER DEFAULT 1,                         \n    created_at TEXT DEFAULT (datetime('now')),        \n    FOREIGN KEY (user_id) REFERENCES users(id),\r\n    UNIQUE(user_id, domain)\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "operation_logs",
+        "tbl_name": "operation_logs",
+        "sql": "CREATE TABLE operation_logs (\r\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n    user_id TEXT,                                     \n    action TEXT NOT NULL,                             \n    target TEXT,                                      \n    detail TEXT,                                      \n    ip TEXT,                                          \n    user_agent TEXT,                                  \n    created_at TEXT DEFAULT (datetime('now'))         \n)"
+      },
+      {
+        "type": "table",
+        "name": "order_logs",
+        "tbl_name": "order_logs",
+        "sql": "CREATE TABLE order_logs (\r\n    id TEXT PRIMARY KEY,                              \n    order_id TEXT NOT NULL,                           \n    user_id TEXT,                                     \n    out_trade_no TEXT,                                \n    action TEXT NOT NULL,                             \n    from_status INTEGER,                              \n    to_status INTEGER,                                \n    amount REAL,                                      \n    detail TEXT,                                      \n    ip TEXT,                                          \n    user_agent TEXT,                                  \n    created_at TEXT DEFAULT (datetime('now')),        \n    FOREIGN KEY (order_id) REFERENCES orders(id)\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "orders",
+        "tbl_name": "orders",
+        "sql": "CREATE TABLE orders (\r\n    id TEXT PRIMARY KEY,                              \n    user_id TEXT NOT NULL,                            \n    out_trade_no TEXT NOT NULL,                       \n    payment_type TEXT NOT NULL,                       \n    channel_id TEXT,                                  \n    sub_channel_id TEXT,                              \n    plugin TEXT,                                      \n    amount REAL NOT NULL,                             \n    actual_amount REAL,                               \n    fee REAL DEFAULT 0,                               \n    profit REAL DEFAULT 0,                            \n    status INTEGER DEFAULT 0,                         \n    name TEXT,                                        \n    body TEXT,                                        \n    param TEXT,                                       \n    buyer TEXT,                                       \n    buyer_ip TEXT,                                    \n    notify_url TEXT,                                  \n    return_url TEXT,                                  \n    notify_status INTEGER DEFAULT 0,                  \n    notify_count INTEGER DEFAULT 0,                   \n    last_notify_at TEXT,                              \n    domain TEXT,                                      \n    device TEXT,                                      \n    cert_no TEXT,                                     \n    cert_name TEXT,                                   \n    api_trade_no TEXT,                                \n    refund_amount REAL DEFAULT 0,                     \n    created_at TEXT DEFAULT (datetime('now')),        \n    paid_at TEXT,                                     \n    closed_at TEXT,                                   \n    FOREIGN KEY (user_id) REFERENCES users(id)\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "password_resets",
+        "tbl_name": "password_resets",
+        "sql": "CREATE TABLE password_resets (\r\n    id TEXT PRIMARY KEY,                              \n    user_id TEXT NOT NULL,                            \n    token_hash TEXT NOT NULL,                         \n    expires_at INTEGER NOT NULL,                      \n    used_at INTEGER,                                  \n    attempts INTEGER NOT NULL DEFAULT 0,              \n    ip TEXT,                                          \n    user_agent TEXT,                                  \n    created_at TEXT DEFAULT (datetime('now')),        \n    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "payment_logs",
+        "tbl_name": "payment_logs",
+        "sql": "CREATE TABLE payment_logs (\r\n    id TEXT PRIMARY KEY,                              \n    order_id TEXT,                                    \n    user_id TEXT,                                     \n    channel_id TEXT,                                  \n    plugin TEXT,                                      \n    direction TEXT NOT NULL,                          \n    action TEXT NOT NULL,                             \n    status TEXT NOT NULL,                             \n    amount REAL,                                      \n    third_party_trade_no TEXT,                        \n    request_data TEXT,                                \n    response_data TEXT,                               \n    error_message TEXT,                               \n    created_at TEXT DEFAULT (datetime('now')),        \n    FOREIGN KEY (order_id) REFERENCES orders(id)\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "payment_types",
+        "tbl_name": "payment_types",
+        "sql": "CREATE TABLE payment_types (\r\n    id TEXT PRIMARY KEY,                              \n    name TEXT NOT NULL UNIQUE,                        \n    display_name TEXT NOT NULL,                       \n    icon TEXT,                                        \n    description TEXT,                                 \n    sort_order INTEGER DEFAULT 0,                     \n    status INTEGER DEFAULT 1,                         \n    config TEXT,                                      \n    created_at TEXT DEFAULT (datetime('now')),        \n    updated_at TEXT DEFAULT (datetime('now'))         \n)"
+      },
+      {
+        "type": "table",
+        "name": "reconciliation_logs",
+        "tbl_name": "reconciliation_logs",
+        "sql": "CREATE TABLE reconciliation_logs (\r\n    id TEXT PRIMARY KEY,                              \n    user_id TEXT,                                     \n    payment_type TEXT,                                \n    date TEXT NOT NULL,                               \n    status TEXT NOT NULL,                             \n    checked_count INTEGER DEFAULT 0,                  \n    matched_count INTEGER DEFAULT 0,                  \n    mismatch_count INTEGER DEFAULT 0,                 \n    fixed_count INTEGER DEFAULT 0,                    \n    operator_id TEXT,                                 \n    detail TEXT,                                      \n    error_message TEXT,                               \n    started_at TEXT,                                  \n    finished_at TEXT,                                 \n    created_at TEXT DEFAULT (datetime('now'))         \n)"
+      },
+      {
+        "type": "table",
+        "name": "refunds",
+        "tbl_name": "refunds",
+        "sql": "CREATE TABLE refunds (\r\n    id TEXT PRIMARY KEY,                              \n    refund_no TEXT NOT NULL UNIQUE,                   \n    order_id TEXT NOT NULL,                           \n    user_id TEXT NOT NULL,                            \n    amount REAL NOT NULL,                             \n    reason TEXT,                                      \n    status INTEGER DEFAULT 0,                         \n    third_party_refund_no TEXT,                       \n    error_message TEXT,                               \n    created_at TEXT DEFAULT (datetime('now')),        \n    completed_at TEXT,                                \n    FOREIGN KEY (order_id) REFERENCES orders(id),\r\n    FOREIGN KEY (user_id) REFERENCES users(id)\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "settlements",
+        "tbl_name": "settlements",
+        "sql": "CREATE TABLE settlements (\r\n    id TEXT PRIMARY KEY,                              \n    user_id TEXT NOT NULL,                            \n    amount REAL NOT NULL,                             \n    fee REAL DEFAULT 0,                               \n    actual_amount REAL,                               \n    settle_type TEXT,                                 \n    settle_account TEXT,                              \n    settle_name TEXT,                                 \n    bank_name TEXT,                                   \n    bank_branch TEXT,                                 \n    status INTEGER DEFAULT 0,                         \n    reject_reason TEXT,                               \n    processed_at TEXT,                                \n    created_at TEXT DEFAULT (datetime('now')),        \n    FOREIGN KEY (user_id) REFERENCES users(id)\r\n)"
+      },
+      {
+        "type": "table",
+        "name": "sqlite_sequence",
+        "tbl_name": "sqlite_sequence",
+        "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+      },
+      {
+        "type": "table",
+        "name": "system_config",
+        "tbl_name": "system_config",
+        "sql": "CREATE TABLE system_config (\r\n    key TEXT PRIMARY KEY,                             \n    value TEXT,                                       \n    description TEXT,                                 \n    updated_at TEXT DEFAULT (datetime('now'))         \n)"
+      },
+      {
+        "type": "table",
+        "name": "throttle_counters",
+        "tbl_name": "throttle_counters",
+        "sql": "CREATE TABLE throttle_counters (\r\n    key TEXT PRIMARY KEY,                           \n    count INTEGER NOT NULL DEFAULT 1,               \n    reset_at INTEGER NOT NULL,                      \n    updated_at INTEGER NOT NULL                     \n)"
+      },
+      {
+        "type": "table",
+        "name": "user_groups",
+        "tbl_name": "user_groups",
+        "sql": "CREATE TABLE user_groups (\r\n    id TEXT PRIMARY KEY,                              \n    name TEXT NOT NULL,                               \n    description TEXT,                                 \n    fee_rate REAL DEFAULT 0,                          \n    min_amount REAL DEFAULT 0,                        \n    max_amount REAL DEFAULT 0,                        \n    daily_limit REAL DEFAULT 0,                       \n    permissions TEXT,                                 \n    created_at TEXT DEFAULT (datetime('now')),        \n    updated_at TEXT DEFAULT (datetime('now'))         \n)"
+      },
+      {
+        "type": "table",
+        "name": "users",
+        "tbl_name": "users",
+        "sql": "CREATE TABLE users (\r\n    id TEXT PRIMARY KEY,                              \n    username TEXT NOT NULL UNIQUE,                    \n    email TEXT UNIQUE,                                \n    password_hash TEXT NOT NULL,                      \n    salt TEXT NOT NULL,                               \n    role TEXT NOT NULL DEFAULT 'merchant',            \n    status INTEGER DEFAULT 1,                         \n    balance REAL DEFAULT 0,                           \n    frozen_balance REAL DEFAULT 0,                    \n    api_key TEXT UNIQUE,                              \n    api_key_type TEXT DEFAULT 'md5',                  \n    rsa_public_key TEXT,                              \n    notify_url TEXT,                                  \n    return_url TEXT,                                  \n    contact_qq TEXT,                                  \n    contact_wechat TEXT,                              \n    contact_phone TEXT,                               \n    group_id TEXT,                                    \n    settle_type TEXT DEFAULT 'alipay',                \n    settle_account TEXT,                              \n    settle_name TEXT,                                 \n    deposit REAL DEFAULT 0,                           \n    today_income REAL DEFAULT 0,                      \n    total_income REAL DEFAULT 0,                      \n    today_orders INTEGER DEFAULT 0,                   \n    total_orders INTEGER DEFAULT 0,                   \n    last_login_at TEXT,                               \n    last_login_ip TEXT,                               \n    created_at TEXT DEFAULT (datetime('now')),        \n    updated_at TEXT DEFAULT (datetime('now'))         \n)"
+      },
+      {
+        "type": "table",
+        "name": "webhook_logs",
+        "tbl_name": "webhook_logs",
+        "sql": "CREATE TABLE webhook_logs (\r\n    id TEXT PRIMARY KEY,                              \n    order_id TEXT,                                    \n    user_id TEXT,                                     \n    plugin TEXT,                                      \n    webhook_type TEXT NOT NULL,                       \n    direction TEXT NOT NULL,                          \n    url TEXT,                                         \n    method TEXT,                                      \n    http_status INTEGER,                              \n    success INTEGER DEFAULT 0,                        \n    request_headers TEXT,                             \n    request_body TEXT,                                \n    response_body TEXT,                               \n    error_message TEXT,                               \n    ip TEXT,                                          \n    user_agent TEXT,                                  \n    created_at TEXT DEFAULT (datetime('now')),        \n    FOREIGN KEY (order_id) REFERENCES orders(id)\r\n)"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  }
+]

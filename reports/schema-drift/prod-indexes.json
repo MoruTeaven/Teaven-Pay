@@ -1,0 +1,280 @@
+[
+  {
+    "results": [
+      {
+        "name": "idx_api_keys_api_key",
+        "sql": "CREATE INDEX idx_api_keys_api_key ON api_keys(api_key)"
+      },
+      {
+        "name": "idx_api_keys_user_id",
+        "sql": "CREATE INDEX idx_api_keys_user_id ON api_keys(user_id)"
+      },
+      {
+        "name": "idx_daily_stats_date",
+        "sql": "CREATE INDEX idx_daily_stats_date ON daily_stats(date)"
+      },
+      {
+        "name": "idx_daily_stats_user_id",
+        "sql": "CREATE INDEX idx_daily_stats_user_id ON daily_stats(user_id)"
+      },
+      {
+        "name": "idx_operation_logs_action",
+        "sql": "CREATE INDEX idx_operation_logs_action ON operation_logs(action)"
+      },
+      {
+        "name": "idx_operation_logs_created_at",
+        "sql": "CREATE INDEX idx_operation_logs_created_at ON operation_logs(created_at)"
+      },
+      {
+        "name": "idx_operation_logs_target",
+        "sql": "CREATE INDEX idx_operation_logs_target ON operation_logs(target)"
+      },
+      {
+        "name": "idx_operation_logs_user_id",
+        "sql": "CREATE INDEX idx_operation_logs_user_id ON operation_logs(user_id)"
+      },
+      {
+        "name": "idx_order_logs_action",
+        "sql": "CREATE INDEX idx_order_logs_action ON order_logs(action)"
+      },
+      {
+        "name": "idx_order_logs_created_at",
+        "sql": "CREATE INDEX idx_order_logs_created_at ON order_logs(created_at)"
+      },
+      {
+        "name": "idx_order_logs_order_id",
+        "sql": "CREATE INDEX idx_order_logs_order_id ON order_logs(order_id)"
+      },
+      {
+        "name": "idx_order_logs_user_id",
+        "sql": "CREATE INDEX idx_order_logs_user_id ON order_logs(user_id)"
+      },
+      {
+        "name": "idx_orders_created_at",
+        "sql": "CREATE INDEX idx_orders_created_at ON orders(created_at)"
+      },
+      {
+        "name": "idx_orders_out_trade_no",
+        "sql": "CREATE INDEX idx_orders_out_trade_no ON orders(out_trade_no)"
+      },
+      {
+        "name": "idx_orders_payment_type",
+        "sql": "CREATE INDEX idx_orders_payment_type ON orders(payment_type)"
+      },
+      {
+        "name": "idx_orders_status",
+        "sql": "CREATE INDEX idx_orders_status ON orders(status)"
+      },
+      {
+        "name": "idx_orders_user_id",
+        "sql": "CREATE INDEX idx_orders_user_id ON orders(user_id)"
+      },
+      {
+        "name": "idx_password_resets_expires_at",
+        "sql": "CREATE INDEX idx_password_resets_expires_at ON password_resets(expires_at)"
+      },
+      {
+        "name": "idx_password_resets_token_hash",
+        "sql": "CREATE INDEX idx_password_resets_token_hash ON password_resets(token_hash)"
+      },
+      {
+        "name": "idx_password_resets_user_id",
+        "sql": "CREATE INDEX idx_password_resets_user_id ON password_resets(user_id)"
+      },
+      {
+        "name": "idx_payment_logs_action",
+        "sql": "CREATE INDEX idx_payment_logs_action ON payment_logs(action)"
+      },
+      {
+        "name": "idx_payment_logs_created_at",
+        "sql": "CREATE INDEX idx_payment_logs_created_at ON payment_logs(created_at)"
+      },
+      {
+        "name": "idx_payment_logs_order_id",
+        "sql": "CREATE INDEX idx_payment_logs_order_id ON payment_logs(order_id)"
+      },
+      {
+        "name": "idx_payment_logs_plugin",
+        "sql": "CREATE INDEX idx_payment_logs_plugin ON payment_logs(plugin)"
+      },
+      {
+        "name": "idx_payment_logs_status",
+        "sql": "CREATE INDEX idx_payment_logs_status ON payment_logs(status)"
+      },
+      {
+        "name": "idx_payment_logs_user_id",
+        "sql": "CREATE INDEX idx_payment_logs_user_id ON payment_logs(user_id)"
+      },
+      {
+        "name": "idx_reconciliation_logs_created_at",
+        "sql": "CREATE INDEX idx_reconciliation_logs_created_at ON reconciliation_logs(created_at)"
+      },
+      {
+        "name": "idx_reconciliation_logs_date",
+        "sql": "CREATE INDEX idx_reconciliation_logs_date ON reconciliation_logs(date)"
+      },
+      {
+        "name": "idx_reconciliation_logs_payment_type",
+        "sql": "CREATE INDEX idx_reconciliation_logs_payment_type ON reconciliation_logs(payment_type)"
+      },
+      {
+        "name": "idx_reconciliation_logs_status",
+        "sql": "CREATE INDEX idx_reconciliation_logs_status ON reconciliation_logs(status)"
+      },
+      {
+        "name": "idx_reconciliation_logs_user_id",
+        "sql": "CREATE INDEX idx_reconciliation_logs_user_id ON reconciliation_logs(user_id)"
+      },
+      {
+        "name": "idx_refunds_order_id",
+        "sql": "CREATE INDEX idx_refunds_order_id ON refunds(order_id)"
+      },
+      {
+        "name": "idx_refunds_user_id",
+        "sql": "CREATE INDEX idx_refunds_user_id ON refunds(user_id)"
+      },
+      {
+        "name": "idx_settlements_user_id",
+        "sql": "CREATE INDEX idx_settlements_user_id ON settlements(user_id)"
+      },
+      {
+        "name": "idx_throttle_counters_reset_at",
+        "sql": "CREATE INDEX idx_throttle_counters_reset_at ON throttle_counters(reset_at)"
+      },
+      {
+        "name": "idx_webhook_logs_created_at",
+        "sql": "CREATE INDEX idx_webhook_logs_created_at ON webhook_logs(created_at)"
+      },
+      {
+        "name": "idx_webhook_logs_order_id",
+        "sql": "CREATE INDEX idx_webhook_logs_order_id ON webhook_logs(order_id)"
+      },
+      {
+        "name": "idx_webhook_logs_plugin",
+        "sql": "CREATE INDEX idx_webhook_logs_plugin ON webhook_logs(plugin)"
+      },
+      {
+        "name": "idx_webhook_logs_success",
+        "sql": "CREATE INDEX idx_webhook_logs_success ON webhook_logs(success)"
+      },
+      {
+        "name": "idx_webhook_logs_type",
+        "sql": "CREATE INDEX idx_webhook_logs_type ON webhook_logs(webhook_type)"
+      },
+      {
+        "name": "idx_webhook_logs_user_id",
+        "sql": "CREATE INDEX idx_webhook_logs_user_id ON webhook_logs(user_id)"
+      },
+      {
+        "name": "sqlite_autoindex_api_keys_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_api_keys_2",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_blacklist_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_channels_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_daily_stats_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_domain_whitelist_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_order_logs_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_orders_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_password_resets_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_payment_logs_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_payment_types_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_payment_types_2",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_reconciliation_logs_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_refunds_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_refunds_2",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_settlements_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_system_config_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_throttle_counters_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_user_groups_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_users_1",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_users_2",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_users_3",
+        "sql": null
+      },
+      {
+        "name": "sqlite_autoindex_webhook_logs_1",
+        "sql": null
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.4787
+      },
+      "duration": 0.4787,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 442368,
+      "rows_read": 149,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

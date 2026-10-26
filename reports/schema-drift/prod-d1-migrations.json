@@ -1,0 +1,15 @@
+
+{
+  "error": {
+    "text": "A request to the Cloudflare API (/accounts/40c5cdd4a50968b4e395ec7a001b9f3f/d1/database/7de39fde-b84c-46bd-bb0c-01004b6f5200/query) failed.",
+    "notes": [
+      {
+        "text": "no such table: d1_migrations: SQLITE_ERROR [code: 7500]"
+      }
+    ],
+    "kind": "error",
+    "name": "APIError",
+    "code": 7500,
+    "accountTag": "40c5cdd4a50968b4e395ec7a001b9f3f"
+  }
+}

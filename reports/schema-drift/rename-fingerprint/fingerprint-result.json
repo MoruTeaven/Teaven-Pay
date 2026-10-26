@@ -1,0 +1,10 @@
+{
+  "experiment": "CREATE TABLE users_new -> DROP TABLE users -> ALTER TABLE users_new RENAME TO users",
+  "identical_to_prod": true,
+  "table_name_quoted": true,
+  "inline_comments_preserved": false,
+  "prod_ddl_normalized_length": 714,
+  "replayed_ddl_normalized_length": 714,
+  "prod_ddl": "CREATE TABLE \"users\" (\n    id TEXT PRIMARY KEY,\n    username TEXT NOT NULL UNIQUE,\n    email TEXT UNIQUE,\n    password_hash TEXT NOT NULL,\n    salt TEXT NOT NULL,\n    role TEXT NOT NULL DEFAULT 'merchant',\n    status INTEGER DEFAULT 1,\n    balance REAL DEFAULT 0,\n    frozen_balance REAL DEFAULT 0,\n    notify_url TEXT,\n    return_url TEXT,\n    contact_qq TEXT,\n    contact_wechat TEXT,\n    contact_phone TEXT,\n    group_id TEXT,\n    settle_type TEXT DEFAULT 'alipay',\n    settle_account TEXT,\n    settle_name TEXT,\n    deposit REAL DEFAULT 0,\n    today_income REAL DEFAULT 0,\n    total_income REAL DEFAULT 0,\n    today_orders INTEGER DEFAULT 0,\n    total_orders INTEGER DEFAULT 0,\n    last_login_at TEXT,\n    last_login_ip TEXT,\n    created_at TEXT DEFAULT (datetime('now')),\n    updated_at TEXT DEFAULT (datetime('now'))\n)",
+  "replayed_ddl": "CREATE TABLE \"users\" (\n    id TEXT PRIMARY KEY,\n    username TEXT NOT NULL UNIQUE,\n    email TEXT UNIQUE,\n    password_hash TEXT NOT NULL,\n    salt TEXT NOT NULL,\n    role TEXT NOT NULL DEFAULT 'merchant',\n    status INTEGER DEFAULT 1,\n    balance REAL DEFAULT 0,\n    frozen_balance REAL DEFAULT 0,\n    notify_url TEXT,\n    return_url TEXT,\n    contact_qq TEXT,\n    contact_wechat TEXT,\n    contact_phone TEXT,\n    group_id TEXT,\n    settle_type TEXT DEFAULT 'alipay',\n    settle_account TEXT,\n    settle_name TEXT,\n    deposit REAL DEFAULT 0,\n    today_income REAL DEFAULT 0,\n    total_income REAL DEFAULT 0,\n    today_orders INTEGER DEFAULT 0,\n    total_orders INTEGER DEFAULT 0,\n    last_login_at TEXT,\n    last_login_ip TEXT,\n    created_at TEXT DEFAULT (datetime('now')),\n    updated_at TEXT DEFAULT (datetime('now'))\n)"
+}

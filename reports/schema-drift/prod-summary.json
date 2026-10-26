@@ -1,0 +1,331 @@
+{
+    "captured_at":  "2026-10-18T14:02:03.9205194+08:00",
+    "source":  "wrangler d1 execute teaven-pay --remote --json (read-only)",
+    "database_id":  "7de39fde-b84c-46bd-bb0c-01004b6f5200",
+    "table_count":  20,
+    "index_count":  64,
+    "trigger_count":  0,
+    "d1_migrations_table":  "absent",
+    "tables":  [
+                   {
+                       "name":  "api_keys",
+                       "column_count":  9,
+                       "columns":  [
+                                       "id",
+                                       "user_id",
+                                       "api_key",
+                                       "name",
+                                       "api_key_type",
+                                       "rsa_public_key",
+                                       "status",
+                                       "last_used_at",
+                                       "updated_at"
+                                   ]
+                   },
+                   {
+                       "name":  "blacklist",
+                       "column_count":  5,
+                       "columns":  [
+                                       "id",
+                                       "type",
+                                       "content",
+                                       "reason",
+                                       "created_at"
+                                   ]
+                   },
+                   {
+                       "name":  "channels",
+                       "column_count":  14,
+                       "columns":  [
+                                       "id",
+                                       "payment_type_id",
+                                       "name",
+                                       "plugin",
+                                       "config",
+                                       "fee_rate",
+                                       "min_amount",
+                                       "time_start",
+                                       "time_stop",
+                                       "sort_order",
+                                       "status",
+                                       "description",
+                                       "created_at",
+                                       "updated_at"
+                                   ]
+                   },
+                   {
+                       "name":  "daily_stats",
+                       "column_count":  7,
+                       "columns":  [
+                                       "id",
+                                       "date",
+                                       "user_id",
+                                       "payment_type",
+                                       "order_count",
+                                       "fee",
+                                       "created_at"
+                                   ]
+                   },
+                   {
+                       "name":  "domain_whitelist",
+                       "column_count":  5,
+                       "columns":  [
+                                       "id",
+                                       "user_id",
+                                       "domain",
+                                       "status",
+                                       "created_at"
+                                   ]
+                   },
+                   {
+                       "name":  "operation_logs",
+                       "column_count":  8,
+                       "columns":  [
+                                       "id",
+                                       "user_id",
+                                       "action",
+                                       "target",
+                                       "detail",
+                                       "ip",
+                                       "user_agent",
+                                       "created_at"
+                                   ]
+                   },
+                   {
+                       "name":  "order_logs",
+                       "column_count":  8,
+                       "columns":  [
+                                       "id",
+                                       "order_id",
+                                       "out_trade_no",
+                                       "from_status",
+                                       "detail",
+                                       "ip",
+                                       "user_agent",
+                                       "created_at"
+                                   ]
+                   },
+                   {
+                       "name":  "orders",
+                       "column_count":  25,
+                       "columns":  [
+                                       "id",
+                                       "user_id",
+                                       "out_trade_no",
+                                       "channel_id",
+                                       "sub_channel_id",
+                                       "plugin",
+                                       "amount",
+                                       "actual_amount",
+                                       "fee",
+                                       "status",
+                                       "body",
+                                       "param",
+                                       "buyer_ip",
+                                       "notify_url",
+                                       "return_url",
+                                       "notify_status",
+                                       "notify_count",
+                                       "last_notify_at",
+                                       "domain",
+                                       "device",
+                                       "cert_no",
+                                       "cert_name",
+                                       "refund_amount",
+                                       "paid_at",
+                                       "closed_at"
+                                   ]
+                   },
+                   {
+                       "name":  "password_resets",
+                       "column_count":  6,
+                       "columns":  [
+                                       "id",
+                                       "user_id",
+                                       "expires_at",
+                                       "ip",
+                                       "user_agent",
+                                       "created_at"
+                                   ]
+                   },
+                   {
+                       "name":  "payment_logs",
+                       "column_count":  13,
+                       "columns":  [
+                                       "id",
+                                       "order_id",
+                                       "channel_id",
+                                       "plugin",
+                                       "direction",
+                                       "action",
+                                       "status",
+                                       "amount",
+                                       "third_party_trade_no",
+                                       "request_data",
+                                       "response_data",
+                                       "error_message",
+                                       "created_at"
+                                   ]
+                   },
+                   {
+                       "name":  "payment_types",
+                       "column_count":  10,
+                       "columns":  [
+                                       "id",
+                                       "name",
+                                       "display_name",
+                                       "icon",
+                                       "description",
+                                       "sort_order",
+                                       "status",
+                                       "config",
+                                       "created_at",
+                                       "updated_at"
+                                   ]
+                   },
+                   {
+                       "name":  "reconciliation_logs",
+                       "column_count":  13,
+                       "columns":  [
+                                       "id",
+                                       "user_id",
+                                       "payment_type",
+                                       "date",
+                                       "status",
+                                       "checked_count",
+                                       "matched_count",
+                                       "mismatch_count",
+                                       "operator_id",
+                                       "detail",
+                                       "error_message",
+                                       "started_at",
+                                       "created_at"
+                                   ]
+                   },
+                   {
+                       "name":  "refunds",
+                       "column_count":  8,
+                       "columns":  [
+                                       "id",
+                                       "refund_no",
+                                       "user_id",
+                                       "amount",
+                                       "third_party_refund_no",
+                                       "error_message",
+                                       "created_at",
+                                       "completed_at"
+                                   ]
+                   },
+                   {
+                       "name":  "settlements",
+                       "column_count":  12,
+                       "columns":  [
+                                       "id",
+                                       "user_id",
+                                       "amount",
+                                       "fee",
+                                       "settle_type",
+                                       "settle_account",
+                                       "settle_name",
+                                       "bank_name",
+                                       "bank_branch",
+                                       "status",
+                                       "processed_at",
+                                       "created_at"
+                                   ]
+                   },
+                   {
+                       "name":  "sqlite_sequence",
+                       "column_count":  0,
+                       "columns":  [
+
+                                   ]
+                   },
+                   {
+                       "name":  "system_config",
+                       "column_count":  2,
+                       "columns":  [
+                                       "key",
+                                       "updated_at"
+                                   ]
+                   },
+                   {
+                       "name":  "throttle_counters",
+                       "column_count":  4,
+                       "columns":  [
+                                       "key",
+                                       "count",
+                                       "reset_at",
+                                       "updated_at"
+                                   ]
+                   },
+                   {
+                       "name":  "user_groups",
+                       "column_count":  8,
+                       "columns":  [
+                                       "id",
+                                       "name",
+                                       "description",
+                                       "fee_rate",
+                                       "min_amount",
+                                       "permissions",
+                                       "created_at",
+                                       "updated_at"
+                                   ]
+                   },
+                   {
+                       "name":  "users",
+                       "column_count":  27,
+                       "columns":  [
+                                       "id",
+                                       "username",
+                                       "email",
+                                       "password_hash",
+                                       "salt",
+                                       "role",
+                                       "status",
+                                       "balance",
+                                       "frozen_balance",
+                                       "notify_url",
+                                       "return_url",
+                                       "contact_qq",
+                                       "contact_wechat",
+                                       "contact_phone",
+                                       "group_id",
+                                       "settle_type",
+                                       "settle_account",
+                                       "settle_name",
+                                       "deposit",
+                                       "today_income",
+                                       "total_income",
+                                       "today_orders",
+                                       "total_orders",
+                                       "last_login_at",
+                                       "last_login_ip",
+                                       "created_at",
+                                       "updated_at"
+                                   ]
+                   },
+                   {
+                       "name":  "webhook_logs",
+                       "column_count":  15,
+                       "columns":  [
+                                       "id",
+                                       "order_id",
+                                       "plugin",
+                                       "webhook_type",
+                                       "direction",
+                                       "url",
+                                       "method",
+                                       "http_status",
+                                       "success",
+                                       "request_body",
+                                       "response_body",
+                                       "error_message",
+                                       "ip",
+                                       "user_agent",
+                                       "created_at"
+                                   ]
+                   }
+               ]
+}
