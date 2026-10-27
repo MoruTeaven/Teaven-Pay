@@ -99,6 +99,19 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
   `PRAGMA table_info` 再按需执行（见 `scripts/lib/align-users-columns.mjs`），
   否则重复执行会报 `duplicate column name`。
 
+### 商户无密钥故障（沉默故障，务必例行检查）
+
+`api_keys` 一旦缺少某商户的 `status = 1` 记录，该商户的收银台与**全部**支付 API
+（submit / cashier / query / orders / refund）会同时不可用，而系统不会有任何告警
+——这是已经真实发生过一次的生产故障（任务 `t-mv39kakr-ojbnlu`）。
+
+- 诊断与处置步骤见 `docs/api-key-recovery.md`。
+- 随时可调的自检：`pnpm run check:api-keys`（只查库）或
+  `pnpm run check:api-keys:smoke`（连端到端签名冒烟一起做，含错密钥 / 过期时间戳 /
+  URL 明文 key 三组负向对照）。脚本 D1 侧全部只读，会断言 `changed_db=false`。
+- 兜底：`ensureMerchantHasApiKey`（`src/routes/merchant.ts`）在商户登录时补种默认密钥。
+  注意它**只挂在登录链路上**，半年不登录的商户不会自愈。
+
 ## 支付插件规则
 
 新增支付插件时：

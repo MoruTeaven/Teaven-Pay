@@ -19,7 +19,9 @@
     "db:console": "wrangler d1 execute teaven-pay --command 'SELECT * FROM users LIMIT 10'",
     "tail": "wrangler tail",
     "secret:put": "wrangler secret put",
-    "test:credit": "node --experimental-sqlite tests/credit-race.test.cjs"
+    "test:credit": "node --experimental-sqlite tests/credit-race.test.cjs",
+    "check:api-keys": "node scripts/check-merchant-api-keys.mjs",
+    "check:api-keys:smoke": "node scripts/check-merchant-api-keys.mjs --smoke"
   },
   "dependencies": {
     "@cloudflare/workers-types": "^4.20240117.0",
