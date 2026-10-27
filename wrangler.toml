@@ -9,6 +9,12 @@ compatibility_flags = ["nodejs_compat"]
 port = 8787
 local_protocol = "http"
 
+# Cron Triggers：未支付订单超时自动关闭
+# 每 7 分钟扫描一次 status=0 且超过 order_expire_minutes（默认 420 = 7 小时）的订单。
+# 关单前会先向渠道 queryOrder 核对：已支付的转入入账，查询失败的本轮跳过（绝不盲关）。
+[triggers]
+crons = ["*/7 * * * *"]
+
 # 环境变量
 [vars]
 ENVIRONMENT = "production"

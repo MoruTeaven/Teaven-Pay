@@ -24,6 +24,8 @@ import { generateUUIDv7 } from './uuid';
 export const CREDIT_SOURCE = {
     CHANNEL_NOTIFY: 'channel_notify',
     STATUS_POLL: 'status_poll',
+    /** 订单超时自动关闭前向渠道核对到已支付（订单自动关单任务） */
+    AUTO_EXPIRE: 'auto_expire',
 } as const;
 export type CreditSource = (typeof CREDIT_SOURCE)[keyof typeof CREDIT_SOURCE];
 

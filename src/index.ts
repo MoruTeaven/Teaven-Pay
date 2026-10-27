@@ -32,6 +32,7 @@ import { parseAllowedOrigins, resolveAllowedOrigin } from './utils/cors';
 import { issueCashierTicket } from './utils/cashierAuth';
 import { getPrimaryApiKey } from './utils/apiKeyAuth';
 import { issueOrderStatusToken } from './utils/orderStatusAuth';
+import { autoCloseExpiredOrders } from './utils/orderExpiry';
 
 // 类型
 import { Env } from './types/env';
@@ -7078,12 +7079,18 @@ export default {
         return app.fetch(request, env, ctx);
     },
     
-    // 定时任务 (可选)
+    // 定时任务（Cron Trigger 见 wrangler.toml 的 [triggers]）
+    // 1. 关闭超时未支付订单：先向渠道核对，已支付的转入入账、绝不盲关
     async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-        // TODO: 实现定时任务
-        // 1. 清理过期订单
-        // 2. 重试异步通知
-        // 3. 统计数据
-        console.log('Scheduled event triggered:', event.cron);
+        ctx.waitUntil(
+            (async () => {
+                try {
+                    const summary = await autoCloseExpiredOrders(env);
+                    console.log('[Scheduled/order-expiry]', event.cron, JSON.stringify(summary));
+                } catch (error) {
+                    console.error('[Scheduled/order-expiry] 执行失败:', error);
+                }
+            })()
+        );
     },
 };
