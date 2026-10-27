@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     getPlugin: vi.fn(),
     decryptChannelConfig: vi.fn(),
     creditOrder: vi.fn(),
+    throttleIncrement: vi.fn(),
 }));
 
 vi.mock('../plugins', () => ({ getPlugin: mocks.getPlugin }));
@@ -34,8 +35,16 @@ vi.mock('./credit', () => ({
     },
     creditOrder: mocks.creditOrder,
 }));
+vi.mock('./throttleStore', () => ({
+    getThrottleStore: () => ({ increment: mocks.throttleIncrement }),
+}));
 
-import { autoCloseExpiredOrders, resolveTtlMinutes } from './orderExpiry';
+import {
+    autoCloseExpiredOrders,
+    resolveTtlMinutes,
+    scheduleLazyAutoClose,
+    resetLazySweepStateForTest,
+} from './orderExpiry';
 import type { Env } from '../types/env';
 
 interface FakeDbState {
@@ -109,9 +118,12 @@ beforeEach(() => {
     mocks.getPlugin.mockReset();
     mocks.decryptChannelConfig.mockReset();
     mocks.creditOrder.mockReset();
+    mocks.throttleIncrement.mockReset();
+    resetLazySweepStateForTest();
     mocks.getPlugin.mockReturnValue({ queryOrder: vi.fn(async () => ({ status: 'pending' })) });
     mocks.decryptChannelConfig.mockResolvedValue({});
     mocks.creditOrder.mockResolvedValue({ outcome: 'credited' });
+    mocks.throttleIncrement.mockResolvedValue({ count: 1, resetAt: 0 });
 });
 
 describe('resolveTtlMinutes', () => {
@@ -259,5 +271,55 @@ describe('autoCloseExpiredOrders', () => {
         expect(selects).toHaveLength(1);
         expect(selects[0].args[0]).toBe(expectedCutoff);
         expect(selects[0].args[1]).toBe(50);
+    });
+});
+
+describe('scheduleLazyAutoClose（懒执行）', () => {
+    function fakeCtx(): { ctx: ExecutionContext; waiters: Promise<unknown>[] } {
+        const waiters: Promise<unknown>[] = [];
+        return {
+            ctx: { waitUntil: (p: Promise<unknown>) => waiters.push(p) } as unknown as ExecutionContext,
+            waiters,
+        };
+    }
+
+    const T0 = 1_700_000_000_000; // 正常 epoch 毫秒，避免与初始内存标记 0 冲突
+
+    it('窗口内第一个请求执行，同窗口后续请求直接跳过', async () => {
+        const { env, selects } = createEnv({ orders: [] });
+        const { ctx, waiters } = fakeCtx();
+
+        scheduleLazyAutoClose(env, ctx, { now: new Date(T0) });
+        scheduleLazyAutoClose(env, ctx, { now: new Date(T0 + 2_000) });
+        await Promise.all(waiters);
+
+        // 内存节流：7 分钟窗口内只做一次 throttle 自增与扫描
+        expect(mocks.throttleIncrement).toHaveBeenCalledTimes(1);
+        expect(mocks.throttleIncrement).toHaveBeenCalledWith('order_expire_lazy_sweep', 420);
+        expect(selects).toHaveLength(1);
+    });
+
+    it('跨 isolate 互斥：throttle 窗口内已有计数（count≠1）时不扫描', async () => {
+        mocks.throttleIncrement.mockResolvedValue({ count: 2, resetAt: 0 });
+        const { env, selects } = createEnv({ orders: [unpaidOrder()] });
+        const { ctx, waiters } = fakeCtx();
+
+        scheduleLazyAutoClose(env, ctx, { now: new Date(T0) });
+        await Promise.all(waiters);
+
+        expect(mocks.throttleIncrement).toHaveBeenCalledTimes(1);
+        expect(selects).toHaveLength(0);
+    });
+
+    it('内存窗口过期后允许再次调度', async () => {
+        const { env } = createEnv({ orders: [] });
+        const { ctx, waiters } = fakeCtx();
+
+        scheduleLazyAutoClose(env, ctx, { now: new Date(T0) });
+        // 7 分钟之后：内存节流放行，throttle 窗口（420s）也已过期
+        scheduleLazyAutoClose(env, ctx, { now: new Date(T0 + 7 * 60_000 + 1_000) });
+        await Promise.all(waiters);
+
+        expect(mocks.throttleIncrement).toHaveBeenCalledTimes(2);
     });
 });

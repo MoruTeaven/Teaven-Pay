@@ -25,6 +25,7 @@ import { getPlugin } from '../plugins';
 import { decryptChannelConfig } from './crypto';
 import { CREDIT_OUTCOME, CREDIT_SOURCE, creditOrder } from './credit';
 import { logOrderEvent, logPaymentEvent } from './logging';
+import { getThrottleStore } from './throttleStore';
 
 /** system_config 中的 TTL 配置键（0001_initial.sql 已种子，管理后台有输入框） */
 export const ORDER_EXPIRY_CONFIG_KEY = 'order_expire_minutes';
@@ -280,4 +281,63 @@ export async function autoCloseExpiredOrders(
     }
 
     return summary;
+}
+
+/* ============================================================
+ * 懒执行（请求流量触发）
+ *
+ * Cloudflare Free 套餐的 Cron Trigger 账号上限为 5 个，且已被
+ * teaven-captcha / teaven-email / teaven-image-api / teaven-removebg /
+ * teaven-sms 占满，teaven-pay 的 cron 注册会报 10072。
+ * 因此改为「请求触发 + 双层节流」：
+ *   1. isolate 内存：7 分钟内直接返回，绝大多数请求零 D1 开销；
+ *   2. throttle_counters（原子自增）：跨 isolate 互斥，窗口内只有
+ *      第 1 个请求真正执行扫描。
+ * cron 配置保留在 wrangler.toml（注释态），套餐升级或腾出槽位后即可打开。
+ * ============================================================ */
+
+/** 懒执行窗口（毫秒），与计划中的「每 7 分钟」cron 对齐 */
+export const LAZY_SWEEP_INTERVAL_MS = 7 * 60_000;
+
+const LAZY_SWEEP_THROTTLE_KEY = 'order_expire_lazy_sweep';
+
+/** isolate 内存节流标记 */
+let lastLazySweepAt = 0;
+
+/** 测试用：重置 isolate 内存节流状态 */
+export function resetLazySweepStateForTest(): void {
+    lastLazySweepAt = 0;
+}
+
+/**
+ * 请求链路上的懒执行入口：不阻塞响应，扫描放在 waitUntil 里。
+ * 调用方应为全局中间件，任何请求（含 /api/health）都可能触发。
+ */
+export function scheduleLazyAutoClose(
+    env: Env,
+    executionCtx: ExecutionContext,
+    options: { now?: Date } = {}
+): void {
+    const nowMs = (options.now ?? new Date()).getTime();
+    if (nowMs - lastLazySweepAt < LAZY_SWEEP_INTERVAL_MS) return;
+    // 先占位再执行：即便后续失败，也只是本 isolate 7 分钟内不再尝试
+    lastLazySweepAt = nowMs;
+
+    executionCtx.waitUntil(
+        (async () => {
+            try {
+                // 跨 isolate 互斥：窗口内第 1 个自增（count === 1）才执行
+                const state = await getThrottleStore(env).increment(
+                    LAZY_SWEEP_THROTTLE_KEY,
+                    Math.round(LAZY_SWEEP_INTERVAL_MS / 1000)
+                );
+                if (state.count !== 1) return;
+
+                const summary = await autoCloseExpiredOrders(env);
+                console.log('[OrderExpiry/lazy]', JSON.stringify(summary));
+            } catch (error) {
+                console.error('[OrderExpiry/lazy] 执行失败:', error);
+            }
+        })()
+    );
 }

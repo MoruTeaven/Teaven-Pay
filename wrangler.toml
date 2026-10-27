@@ -9,11 +9,13 @@ compatibility_flags = ["nodejs_compat"]
 port = 8787
 local_protocol = "http"
 
-# Cron Triggers：未支付订单超时自动关闭
-# 每 7 分钟扫描一次 status=0 且超过 order_expire_minutes（默认 420 = 7 小时）的订单。
-# 关单前会先向渠道 queryOrder 核对：已支付的转入入账，查询失败的本轮跳过（绝不盲关）。
-[triggers]
-crons = ["*/7 * * * *"]
+# Cron Triggers（暂缓启用）：未支付订单超时自动关闭
+# Free 套餐 cron 账号上限 5 个已被占满（teaven-captcha / teaven-email /
+# teaven-image-api / teaven-removebg / teaven-sms），注册会报 10072 并让
+# deploy 以「partially updated」收尾。当前由请求流量触发的懒执行兜底
+# （见 docs/order-expiry.md）；套餐升级或腾出槽位后再打开下面两行。
+# [triggers]
+# crons = ["*/7 * * * *"]
 
 # 环境变量
 [vars]

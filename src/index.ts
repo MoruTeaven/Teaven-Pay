@@ -32,7 +32,7 @@ import { parseAllowedOrigins, resolveAllowedOrigin } from './utils/cors';
 import { issueCashierTicket } from './utils/cashierAuth';
 import { getPrimaryApiKey } from './utils/apiKeyAuth';
 import { issueOrderStatusToken } from './utils/orderStatusAuth';
-import { autoCloseExpiredOrders } from './utils/orderExpiry';
+import { autoCloseExpiredOrders, scheduleLazyAutoClose } from './utils/orderExpiry';
 
 // 类型
 import { Env } from './types/env';
@@ -61,6 +61,18 @@ app.use('*', async (c, next) => {
 
 // 错误处理
 app.onError(errorHandler);
+
+// 未支付订单超时自动关闭（懒执行）：Free 套餐 cron 配额已满（10072），
+// 改由请求流量触发，7 分钟窗口内只有第一个请求真正执行（内存 + throttle_counters 双层节流）。
+// 响应已完成（await next() 之后）才调度，不阻塞任何请求；waitUntil 里失败只记日志。
+app.use('*', async (c: { env: Env; executionCtx: ExecutionContext }, next: () => Promise<void>) => {
+    await next();
+    try {
+        scheduleLazyAutoClose(c.env, c.executionCtx);
+    } catch {
+        // executionCtx 不可用（如单元测试环境）时静默跳过
+    }
+});
 
 // JWT_SECRET 必填守卫：后台/商户接口（登录签发与鉴权）缺失密钥时直接 500（fail-fast）
 app.use('/api/admin/*', jwtSecretGuard);

@@ -1,8 +1,27 @@
 # 未支付订单超时自动关闭
 
 `status = 0` 的订单不会自动过期。历史验证单会长期留在订单列表，并让
-`/api/pay/orders` 的 `count` 变脏。本功能通过 Cloudflare Cron Trigger
-定时关闭超时未支付订单。
+`/api/pay/orders` 的 `count` 变脏。本功能定时关闭超时未支付订单。
+
+## 触发方式
+
+当前采用**懒执行**（请求流量触发）：
+
+- Free 套餐 Cron Trigger 账号上限 5 个已被其它 Worker 占满（注册会报 10072），
+  因此由全局中间件在响应完成后调度扫描；
+- 双层节流：isolate 内存 7 分钟窗口（绝大多数请求零 D1 开销）+
+  `throttle_counters` 原子自增（跨 isolate 互斥，窗口内只有第 1 个请求执行）；
+- 任何请求（含 `/api/health`、收银台页面）都可能触发，不阻塞响应。
+
+计划中的 Cron 方案保留在 `wrangler.toml`（注释态），套餐升级到 Workers Paid
+或腾出槽位后，取消 `[triggers]` 两行注释并重新部署即可；届时懒执行自动成为
+兜底（cron 未注册就不会跑）。
+
+```toml
+# 套餐有空位后启用：
+# [triggers]
+# crons = ["*/7 * * * *"]   # 每 7 分钟扫描一次
+```
 
 ## 配置
 
@@ -18,13 +37,6 @@ TTL 读取 `system_config.order_expire_minutes`（管理后台「系统设置 �
 
 ```sql
 UPDATE system_config SET value = '420' WHERE key = 'order_expire_minutes';
-```
-
-Cron 表达式在 `wrangler.toml`：
-
-```toml
-[triggers]
-crons = ["*/7 * * * *"]   # 每 7 分钟扫描一次
 ```
 
 ## 行为（每一轮）
@@ -47,7 +59,9 @@ crons = ["*/7 * * * *"]   # 每 7 分钟扫描一次
 
 ## 运维与排查
 
-- 每轮结果打在 Workers 日志：`[Scheduled/order-expiry] <cron> {"ttlMinutes":420,"scanned":..,"closed":..,"credited":..,"skipped":..,"failed":..}`。
+- 每轮结果打在 Workers 日志：
+  - 懒执行：`[OrderExpiry/lazy] {"ttlMinutes":420,"scanned":..,"closed":..,"credited":..,"skipped":..,"failed":..}`
+  - Cron（启用后）：`[Scheduled/order-expiry] <cron> {...}`
 - 关单流水：`SELECT * FROM order_logs WHERE action = 'closed' AND json_extract(detail, '$.source') = 'auto_expire' ORDER BY created_at DESC;`
 - 渠道核对流水：`SELECT * FROM payment_logs WHERE action = 'query_order' ORDER BY created_at DESC LIMIT 50;`
 - 若 `skipped` 持续偏高，通常是渠道查询失败或渠道记录被删，需人工核对后再处理。
