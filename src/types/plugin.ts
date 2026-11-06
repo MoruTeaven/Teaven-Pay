@@ -185,12 +185,15 @@ export interface RefundResult {
 export interface RefundStatus {
     /** 退款状态 */
     status: 'processing' | 'success' | 'failed';
-    
+
     /** 退款金额 */
     amount?: number;
-    
+
     /** 退款时间 */
     refundedAt?: string;
+
+    /** 渠道给出的失败原因（status=failed 时用于对账日志，不直接暴露给商户） */
+    message?: string;
 }
 
 /**

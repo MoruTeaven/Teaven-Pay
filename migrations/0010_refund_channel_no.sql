@@ -1,0 +1,31 @@
+-- 0010: refunds 增加 channel_refund_no（渠道侧退款请求号）——任务 t-mukt086l-zjzt0h
+--
+-- 背景：
+--   渠道退款受理是异步的：发起退款时插件（alipay / wxpay）在渠道侧生成一个退款请求号
+--   （alipay 的 out_request_no / wxpay 的 out_refund_no，即 RefundResult.refundNo），
+--   渠道当时可能只返回「已受理」，没有第三方退款号。本地退款记录因此停留在
+--   status=0（处理中），要靠事后调用 plugin.queryRefund 对账才能拿到最终结果。
+--
+--   整改前的落库语句把这个渠道侧请求号丢弃了（只存 third_party_refund_no），
+--   导致处理中的退款永远无法对账——queryRefund 需要的恰是这个号。
+--
+-- 本迁移做的事：
+--   给 refunds 加一列 channel_refund_no TEXT，退款落库时写入插件回传的渠道侧请求号，
+--   /api/pay/refund/query 对账时优先用它调用 plugin.queryRefund
+--   （历史记录该列为 NULL 时回退本地 refund_no，兼容存量数据）。
+--
+-- 安全性与幂等性：
+--   - 纯加列：不改任何现有列、索引、外键，存量行为 NULL，不影响任何在跑查询；
+--   - SQLite 的 DDL 不支持 IF NOT EXISTS 形式的 ADD COLUMN，重复执行会报
+--     "duplicate column name"；幂等执行请用配套脚本
+--     scripts/apply-0010-refund-channel-no.mjs（先读 PRAGMA table_info 再按需执行）；
+--   - 全新环境按 0001 → 0010 顺序重放时，本句正常执行。
+--
+-- 执行方式：
+--   wrangler d1 execute teaven-pay --remote --file=./migrations/0010_refund_channel_no.sql
+--
+-- 验证：
+--   SELECT name FROM pragma_table_info('refunds') WHERE name = 'channel_refund_no';
+--   期望返回 1 行。
+
+ALTER TABLE refunds ADD COLUMN channel_refund_no TEXT;

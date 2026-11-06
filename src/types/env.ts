@@ -189,6 +189,8 @@ export interface RefundRow {
     reason: string | null;
     status: number;
     third_party_refund_no: string | null;
+    /** 渠道侧退款请求号（alipay out_request_no / wxpay out_refund_no），对账 queryRefund 的定位依据 */
+    channel_refund_no: string | null;
     error_message: string | null;
     created_at: string;
     completed_at: string | null;
