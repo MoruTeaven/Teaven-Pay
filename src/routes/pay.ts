@@ -15,6 +15,13 @@ import type { PluginConfig, RefundResult } from '../types/plugin';
 import { getSiteUrl } from '../utils/site';
 import { getRequestLogMeta, logOrderEvent, logPaymentEvent } from '../utils/logging';
 import { CREDIT_OUTCOME, CREDIT_SOURCE, creditOrder } from '../utils/credit';
+import {
+    reserveRefundQuota,
+    releaseRefundQuota,
+    settleRefundSuccess,
+    settleRefundFailed,
+    refundToCents,
+} from '../utils/refundGuard';
 
 export const payRouter = new Hono<{ Bindings: Env }>();
 
@@ -819,25 +826,117 @@ async function resolveRefundChannel(env: Env, order: any): Promise<{ ok: true; c
 }
 
 /**
- * 回滚「退款占位」：CAS 累加的 refund_amount 与翻转的订单状态
+ * 退款对账：把「处理中」的退款记录与渠道的真实退款状态同步（B-2 收尾）
  *
- * 只在渠道退款失败时调用。refund_amount 按金额回退，
- * 订单状态仅在累计退款额归零时由 2 回退为 1，避免误伤其它退款记录。
+ * 渠道受理退款但未立即回传第三方退款号（异步退款）时，本地状态停留在 0（处理中），
+ * 商户无从得知最终结果。商户查询退款时顺带向渠道核对：
+ *   - 渠道成功 → 退款记录置 1 并记完成时间；
+ *   - 渠道失败 → 退款记录置 2，并原子释放退款占位额度（钱没退出去，可退额度必须还回去）；
+ *   - 渠道仍在处理 / 渠道不可达 / 配置缺失 → 维持本地现状，下次查询再对账。
+ *
+ * 并发安全：成功/失败落库都是 CAS（仅 status=0 时生效），释放额度带 EXISTS(status=0)
+ * 守卫（refundGuard.settleRefundFailed），同一笔占位不会被并发对账释放两次。
+ * 本函数只做尽力对账，任何异常都不影响退款查询接口本身返回本地记录。
  */
-async function rollbackRefundReservation(env: Env, orderId: string, amount: number): Promise<void> {
-    try {
-        await env.DB.prepare(
-            `UPDATE orders SET refund_amount = refund_amount - ? WHERE id = ? AND refund_amount >= ?`
-        ).bind(amount, orderId, amount).run();
+async function syncRefundWithChannel(env: Env, refund: any): Promise<void> {
+    let channelId: string | null = null;
+    let pluginId: string | null = null;
 
-        await env.DB.prepare(
-            `UPDATE orders SET status = 1 WHERE id = ? AND status = 2 AND refund_amount <= 0`
-        ).bind(orderId).run();
+    try {
+        const order = await env.DB.prepare(
+            'SELECT * FROM orders WHERE id = ?'
+        ).bind(refund.order_id).first() as any;
+
+        if (!order) {
+            console.error(`[Pay/refundSync] 退款记录关联的订单不存在 refund=${refund.id} order=${refund.order_id}`);
+            return;
+        }
+
+        const channelCtx = await resolveRefundChannel(env, order);
+        if (!channelCtx.ok) {
+            // 渠道不可解析：无法对账，留给下次查询重试；记 error 流水便于发现配置劣化
+            await logPaymentEvent(env, {
+                orderId: refund.order_id,
+                userId: refund.user_id,
+                channelId: order.channel_id || null,
+                plugin: order.plugin || null,
+                direction: 'response',
+                action: 'refund_sync',
+                status: 'error',
+                amount: refund.amount,
+                errorMessage: `退款对账失败：${channelCtx.msg}`,
+            }).catch(() => {});
+            return;
+        }
+
+        channelId = channelCtx.ctx.channelId;
+        pluginId = channelCtx.ctx.pluginId;
+
+        // 渠道侧退款请求号优先（发起退款时插件回传的 out_request_no / out_refund_no）；
+        // 历史记录缺失该列时回退本地退款单号
+        const channelRefundNo = refund.channel_refund_no || refund.refund_no;
+        const status = await channelCtx.ctx.plugin.queryRefund(channelRefundNo, channelCtx.ctx.config);
+
+        if (status.status === 'success') {
+            await settleRefundSuccess(env.DB, refund.id);
+            return;
+        }
+
+        if (status.status === 'failed') {
+            // 渠道明确退款失败：置失败 + 原子释放占位额度 + 订单状态回翻（单事务）
+            const failMessage = `渠道对账确认退款失败: ${status.message || '渠道未说明原因'}`;
+            await settleRefundFailed(env.DB, refund.id, refund.order_id, refund.amount, failMessage);
+
+            await logOrderEvent(env, {
+                orderId: refund.order_id,
+                userId: refund.user_id,
+                outTradeNo: order.out_trade_no,
+                action: 'refund_failed',
+                amount: refund.amount,
+                detail: {
+                    source: 'refund_query_sync',
+                    refund_no: refund.refund_no,
+                    channel_refund_no: refund.channel_refund_no || null,
+                    reason: failMessage,
+                    plugin: channelCtx.ctx.pluginId,
+                },
+            }).catch(() => {});
+
+            await logPaymentEvent(env, {
+                orderId: refund.order_id,
+                userId: refund.user_id,
+                channelId: channelCtx.ctx.channelId,
+                plugin: channelCtx.ctx.pluginId,
+                direction: 'response',
+                action: 'refund_sync',
+                status: 'failed',
+                amount: refund.amount,
+                errorMessage: failMessage,
+            }).catch(() => {});
+            return;
+        }
+
+        // processing：渠道还没给出最终结果，保持处理中，下次查询再对账
     } catch (error) {
-        // 回滚失败必须留痕：此时库里存在「退款占位未释放」的悬空状态，需人工对账
-        console.error(`[Pay/refund] 退款占位回滚失败，需人工对账 order=${orderId} amount=${amount}:`, error);
+        // 对账是尽力而为：渠道抖动/插件异常不打断退款查询，只留错误流水
+        console.error(`[Pay/refundSync] 退款对账异常 refund=${refund.id}:`, error);
+        await logPaymentEvent(env, {
+            orderId: refund.order_id,
+            userId: refund.user_id,
+            channelId,
+            plugin: pluginId,
+            direction: 'response',
+            action: 'refund_sync',
+            status: 'error',
+            amount: refund.amount,
+            errorMessage: error instanceof Error ? error.message : String(error),
+        }).catch(() => {});
     }
 }
+
+// 退款占位 / 回滚 / 对账落库统一走 src/utils/refundGuard.ts：
+// SQL 守卫（CAS + changes 检查 + 按分比较）是并发安全的唯一权威，
+// 渠道失败后的额度释放与状态回翻在单个 D1 batch 事务里原子生效。
 payRouter.post('/refund', async (c) => {
     const body = await c.req.parseBody();
     const env = c.env;
@@ -902,7 +1001,9 @@ payRouter.post('/refund', async (c) => {
         
         // 退款单号（渠道受理成功后才落库，避免留下「从未向渠道发起」的退款记录）
         const refundNo = generateUUIDv7();
-        const isFullRefund = refundAmount >= remainingRefundAmount;
+        // 全额判断按「分」比较：REAL 浮点直接比较会把 77.77 - 66.66 = 11.109999... 判成
+        // 小于 11.11，导致全额退款漏翻订单状态；按分取整后与守卫 SQL 同一口径
+        const isFullRefund = refundToCents(refundAmount) >= refundToCents(remainingRefundAmount);
 
         // 先解析真实支付渠道：解析不出来就不允许进入退款流程。
         // 整改前是「先写库再返回退款成功」，渠道从未收到退款请求（B-2），
@@ -912,13 +1013,12 @@ payRouter.post('/refund', async (c) => {
             return c.json({ code: -1, msg: channelCtx.msg });
         }
 
-        // 占位：CAS 累加 refund_amount / 翻转状态，占住可退额度，防止并发超额退款
-        // 并发退款 / 重复回调时，只有抢到这次 CAS 的请求才继续，其余 changes=0 直接拒绝
-        const accum = await env.DB.prepare(
-            `UPDATE orders SET refund_amount = refund_amount + ? WHERE id = ? AND status = 1 AND refund_amount + ? <= amount`
-        ).bind(refundAmount, order.id, refundAmount).run();
+        // 占位：CAS 累加 refund_amount / 翻转状态，占住可退额度，防止并发超额退款。
+        // 守卫语义（refundGuard.REFUND_RESERVE_SQL）：status=1 且按分比较
+        // 「已退 + 本次 <= 订单额」，changes=0 即并发对手已把额度占满或状态已变更，直接拒绝。
+        const reserved = await reserveRefundQuota(env.DB, order.id, refundAmount);
 
-        if ((accum?.meta?.changes ?? 0) <= 0) {
+        if (!reserved) {
             return c.json({ code: -1, msg: '订单状态已变更或退款金额超出可退金额，请刷新后重试' });
         }
 
@@ -955,7 +1055,9 @@ payRouter.post('/refund', async (c) => {
 
         if (!refundResult.success) {
             const failMessage = refundResult.message || '渠道退款失败';
-            await rollbackRefundReservation(env, order.id, refundAmount);
+            // 原子释放占位：额度回退 + 状态回翻在同一事务（refundGuard.releaseRefundQuota），
+            // 释放后只要还有可退余额，订单就会从「已退款」回到「已支付」，剩余额度可继续退
+            await releaseRefundQuota(env.DB, order.id, refundAmount);
 
             await logOrderEvent(env, {
                 orderId: order.id,
@@ -987,15 +1089,19 @@ payRouter.post('/refund', async (c) => {
 
         // 渠道已受理：落退款记录。渠道未回传第三方退款号时记为处理中（0），
         // 最终状态由 /api/pay/refund/query 对账补齐。
+        // channel_refund_no 存插件回传的渠道侧退款请求号（alipay out_request_no /
+        // wxpay out_refund_no）——queryRefund 对账时必须用它定位渠道侧的退款，
+        // 整改前这个号被丢弃，处理中的退款永远无法对账。
         const settledAt = new Date().toISOString();
         await env.DB.prepare(`
-            INSERT INTO refunds (id, refund_no, order_id, user_id, amount, reason, status, third_party_refund_no, created_at, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO refunds (id, refund_no, order_id, user_id, amount, reason, status, third_party_refund_no, channel_refund_no, created_at, completed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
             refundNo, refundNo, order.id, pid, refundAmount,
             (body.reason as string) || '',
             refundResult.thirdPartyRefundNo ? 1 : 0,
             refundResult.thirdPartyRefundNo || null,
+            refundResult.refundNo || null,
             settledAt,
             refundResult.thirdPartyRefundNo ? settledAt : null
         ).run();
@@ -1106,7 +1212,19 @@ payRouter.get('/refund/query', async (c) => {
         if (!refund) {
             return c.json({ code: -4, msg: '退款记录不存在' });
         }
-        
+
+        // 处理中的退款：先向渠道对账同步真实状态（渠道成功/失败都会落库），
+        // 再把最新记录返回给商户；渠道仍在处理或对账不可用时维持本地现状
+        if (refund.status === 0) {
+            await syncRefundWithChannel(env, refund);
+            const fresh = await env.DB.prepare(`
+                SELECT r.*, o.out_trade_no FROM refunds r
+                LEFT JOIN orders o ON r.order_id = o.id
+                WHERE r.id = ?
+            `).bind(refund.id).first();
+            if (fresh) refund = fresh;
+        }
+
         return c.json({
             code: 1,
             refund_no: refund.refund_no,
