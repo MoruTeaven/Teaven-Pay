@@ -741,7 +741,9 @@ app.get('/pay/:merchantId', async (c) => {
             payTypesEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px;">暂无可用支付方式</div>';
         } else {
             payTypes.forEach(function(pt, i) {
-                var icon = iconMap[pt.id] || 'ri-bank-card-line';
+                // 优先用 payment_types.icon（后台/迁移维护），再回退按 id 的 iconMap。
+                // 旧写法只用 iconMap[pt.id]，而 key 是短名、pt.id 是 pt_ 前缀，永远匹配不上。
+                var icon = pt.icon || iconMap[pt.id] || 'ri-bank-card-line';
                 var div = document.createElement('div');
                 div.className = 'pay-type';
                 div.setAttribute('data-id', pt.id);
@@ -3036,9 +3038,7 @@ app.get('/admin', async (c) => {
             const names = {
                 alipay: '支付宝',
                 wxpay: '微信支付',
-                qqpay: 'QQ钱包',
-                dodopayments: 'DodoPayments',
-                pt_dodopayments: 'DodoPayments'
+                qqpay: 'QQ钱包'
             };
             return names[type] || type;
         }
@@ -3048,9 +3048,7 @@ app.get('/admin', async (c) => {
             const names = {
                 alipay: '支付宝',
                 wxpay: '微信支付',
-                qqpay: 'QQ钱包',
-                dodopayments: 'DodoPayments',
-                pt_dodopayments: 'DodoPayments'
+                qqpay: 'QQ钱包'
             };
             return names[type] || '未知支付方式';
         }
@@ -3641,7 +3639,6 @@ app.get('/admin', async (c) => {
                 '                <option value="alipay">支付宝</option>' +
                 '                <option value="wxpay">微信支付</option>' +
                 '                <option value="qqpay">QQ钱包</option>' +
-                '                <option value="pt_dodopayments">DodoPayments</option>' +
                 '            </select>' +
                 '            <button class="btn btn-secondary">' +
                 '                <i class="ri-search-line"></i>' +
@@ -5849,6 +5846,19 @@ app.get('/admin', async (c) => {
                         '            <div class="form-hint">在 Dodo 控制台 Developer → Webhooks 添加回调地址后复制</div>' +
                         '        </div>' +
                         '        <div class="form-group">' +
+                        '            <label class="form-label">支付方式代码</label>' +
+                        '            <input type="text" class="form-input" id="config_paymentMethodType" value="' + escapeHtml(config.payment_method_type || '') + '" placeholder="如 we_chat_pay / credit / apple_pay">' +
+                        '            <div class="form-hint">本通道对应哪种支付方式，填 Dodo 的 method code（与支付方式标识一致）。留空则由 Dodo 自动展示可用方式；多个用英文逗号分隔</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">信用卡兜底</label>' +
+                        '            <select class="form-input form-select" id="config_allowCardFallback">' +
+                        '                <option value="false" ' + (!config.allowCardFallback ? 'selected' : '') + '>关闭（严格只展示所选方式）</option>' +
+                        '                <option value="true" ' + (config.allowCardFallback === true || config.allowCardFallback === 'true' ? 'selected' : '') + '>开启（附带信用卡/借记卡兜底）</option>' +
+                        '            </select>' +
+                        '            <div class="form-hint">若目标用户可能没有所选支付方式，可开启兜底避免无法付款</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
                         '            <label class="form-label">币种（可选）</label>' +
                         '            <input type="text" class="form-input" id="config_currency" value="' + escapeHtml(config.currency || '') + '" placeholder="USD">' +
                         '            <div class="form-hint">默认 USD；PWYW 产品仅支持 USD / GBP / EUR</div>' +
@@ -5947,6 +5957,8 @@ app.get('/admin', async (c) => {
                 var productId = document.getElementById('config_productId').value.trim();
                 var webhookSecret = document.getElementById('config_webhookSecret').value.trim();
                 var currency = document.getElementById('config_currency').value.trim();
+                var paymentMethodType = document.getElementById('config_paymentMethodType').value.trim();
+                var allowCardFallback = document.getElementById('config_allowCardFallback').value;
                 if (!apiKey || !productId || !webhookSecret) {
                     showToast('error', '验证失败', 'API 密钥、产品 ID、Webhook 验签密钥均不能为空');
                     return;
@@ -5958,6 +5970,8 @@ app.get('/admin', async (c) => {
                 config.productId = productId;
                 config.webhookSecret = webhookSecret;
                 if (currency) config.currency = currency;
+                if (paymentMethodType) config.payment_method_type = paymentMethodType;
+                config.allowCardFallback = allowCardFallback === 'true';
             } else {
                 var jsonStr = document.getElementById('config_json').value;
                 try {

@@ -363,8 +363,7 @@ adminRouter.get('/stats', async (c) => {
         `).all();
         const paymentNames: Record<string, string> = {
             alipay: '支付宝', wxpay: '微信支付', qqpay: 'QQ钱包',
-            unionpay: '银联', jdpay: '京东支付',
-            dodopayments: 'DodoPayments', pt_dodopayments: 'DodoPayments'
+            unionpay: '银联', jdpay: '京东支付'
         };
         const paymentDistribution = paymentRows.results.map((row: any) => ({
             value: Number(row.amount) || 0,

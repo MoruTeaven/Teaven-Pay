@@ -28,6 +28,7 @@ import {
 } from '../types/plugin';
 import { generateRefundNo } from '../utils/uuid';
 import { timingSafeEqual } from '../utils/constantTime';
+import { DODO_PAYMENT_TYPE_NAMES, normalizeDodoMethodTypes } from './dodopayments-methods';
 
 const TEST_BASE = 'https://test.dodopayments.com';
 const LIVE_BASE = 'https://live.dodopayments.com';
@@ -55,6 +56,14 @@ interface DodoConfig extends PluginConfig {
     timeoutMs?: number | string;
     /** 开发者下单传入的同步回跳地址（由 pay.ts 合并进 config） */
     returnUrl?: string;
+    /**
+     * 本通道提供给用户的支付方式白名单（Dodo method code）。
+     * 来源：payment_types.name 对应的 channel.config.payment_method_type。
+     * 未配置时不传 allowed_payment_method_types，由 Dodo 按其规则自动展示。
+     */
+    payment_method_type?: string | string[];
+    /** 是否额外放行信用卡/借记卡兜底（默认 false，严格只展示所选方式） */
+    allowCardFallback?: boolean | string;
 }
 
 interface DodoApiError {
@@ -199,9 +208,13 @@ function mapRefundStatus(status: string): RefundStatus['status'] {
 export class DodoPaymentsPlugin implements PaymentPlugin {
     id = 'dodopayments';
     name = 'DodoPayments';
-    version = '1.0.0';
-    /** payment_types.name 为 dodopayments */
-    supportedTypes = ['dodopayments'];
+    version = '1.1.0';
+    /**
+     * 用户侧支付方式（payment_types.name）→ 本插件。
+     * 后台按 name 匹配插件，必须把全部 Dodo 支付方式列出，
+     * 否则在后台为这些支付方式建通道时插件下拉无法选中。
+     */
+    supportedTypes = DODO_PAYMENT_TYPE_NAMES;
 
     private request(config: DodoConfig, path: string, init?: RequestInit): Promise<Response> {
         const apiKey = resolveApiKey(config);
@@ -249,6 +262,18 @@ export class DodoPaymentsPlugin implements PaymentPlugin {
             const currency = String(cfg.currency || DEFAULT_CURRENCY).toUpperCase();
             if (currency && currency !== DEFAULT_CURRENCY) {
                 body.billing_currency = currency;
+            }
+
+            // 限定本通道允许的支付方式：只把该 payment_type 对应的 Dodo method
+            // 传给 Dodo，让 hosted checkout 只展示用户选的那一种。
+            const methods = normalizeDodoMethodTypes(cfg.payment_method_type);
+            if (methods.length > 0) {
+                let allowed = methods;
+                const fallback = cfg.allowCardFallback === true || cfg.allowCardFallback === 'true';
+                if (fallback) {
+                    allowed = Array.from(new Set([...methods, 'credit', 'debit']));
+                }
+                body.allowed_payment_method_types = allowed;
             }
 
             // 同步回跳：优先使用开发者下单传入的 return_url（pay.ts 已合并到 config）

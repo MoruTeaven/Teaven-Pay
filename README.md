@@ -531,6 +531,9 @@ export class AlipayPlugin implements PaymentPlugin {
 | 京东支付 | jdpay | 🚧 开发中 |
 | 银联 | unionpay | 🚧 开发中 |
 | USDT | usdt | 🚧 开发中 |
+| DodoPayments（29 种国际支付方式） | 见 `docs/dodo-payment-methods.md` | ✅ 已支持（需自行建通道） |
+
+> DodoPayments 的支付方式（用户侧）与通道（后台）相互独立：仓库只附带 29 种支付方式清单和插件，通道须由管理员在后台自行创建。详见 `docs/dodo-payment-methods.md`。
 
 ---
 
@@ -565,6 +568,7 @@ export class AlipayPlugin implements PaymentPlugin {
 - `docs/admin-dashboard-design.md`：管理后台设计
 - `docs/schema-drift-report.md`：**生产库结构漂移的根因与对齐方案**（改结构前必读）
 - `docs/api-key-recovery.md`：**商户无 API 密钥时的诊断与处置**（收银台不可下单时先看这里）
+- `docs/dodo-payment-methods.md`：DodoPayments 支付方式清单与「支付方式 vs 通道」概念说明
 
 ### 前置条件
 1. Cloudflare 账号

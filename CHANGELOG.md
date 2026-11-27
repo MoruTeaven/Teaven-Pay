@@ -11,3 +11,4 @@
 - 新增 DodoPayments 交易通道，支持跳转到 Dodo 托管收银台完成付款
 - 新增 DodoPayments 回调验签与订单查询、退款，支付成功后自动入账
 - 管理后台新增 DodoPayments 通道配置表单
+- DodoPayments 支付方式改为用户可选的 29 种具体方式（信用卡、Apple Pay、微信支付等），通道由管理员自行创建

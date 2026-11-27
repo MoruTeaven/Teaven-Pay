@@ -11,6 +11,7 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { DodoPaymentsPlugin } from './dodopayments';
+import { DODO_PAYMENT_METHODS, DODO_PAYMENT_TYPE_NAMES, normalizeDodoMethodTypes } from './dodopayments-methods';
 
 const ORDER: any = {
     tradeNo: '0199f1a7-7777-7000-8000-000000000777',
@@ -74,6 +75,23 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+describe('DodoPayments 支付方式清单', () => {
+    it('官方 29 种支付方式，code 唯一且与插件 supportedTypes 一致', () => {
+        expect(DODO_PAYMENT_METHODS.length).toBe(29);
+        const codes = DODO_PAYMENT_METHODS.map((m) => m.code);
+        expect(new Set(codes).size).toBe(29);
+        expect(DODO_PAYMENT_TYPE_NAMES).toEqual(codes);
+        expect(new DodoPaymentsPlugin().supportedTypes).toEqual(codes);
+    });
+
+    it('白名单归一化：兼容数组 / 逗号分隔，过滤非法 code', () => {
+        expect(normalizeDodoMethodTypes(['credit', 'apple_pay'])).toEqual(['credit', 'apple_pay']);
+        expect(normalizeDodoMethodTypes('we_chat_pay,gcash')).toEqual(['we_chat_pay', 'gcash']);
+        expect(normalizeDodoMethodTypes(['credit', 'unknown', 'CREDIT'])).toEqual(['credit']);
+        expect(normalizeDodoMethodTypes(undefined)).toEqual([]);
+    });
+});
+
 describe('DodoPaymentsPlugin 下单', () => {
     it('金额转最小单位并携带平台订单号，返回 checkout_url', async () => {
         const calls = stubFetch(() => ({
@@ -104,6 +122,31 @@ describe('DodoPaymentsPlugin 下单', () => {
         expect(calls[0].body.return_url).toBe('https://pay.example.com/result/T777');
         // 默认 USD 不重复下发 billing_currency
         expect(calls[0].body.billing_currency).toBeUndefined();
+    });
+
+    it('按 payment_method_type 限定收银台支付方式，默认不带卡兜底', async () => {
+        const calls = stubFetch(() => ({
+            session_id: 'cks_method',
+            checkout_url: 'https://test.checkout.dodopayments.com/session/cks_method',
+        }));
+        await new DodoPaymentsPlugin().createPayment(ORDER, {
+            ...CONFIG,
+            payment_method_type: 'we_chat_pay',
+        });
+        expect(calls[0].body.allowed_payment_method_types).toEqual(['we_chat_pay']);
+    });
+
+    it('开启 allowCardFallback 时附带信用卡/借记卡兜底', async () => {
+        const calls = stubFetch(() => ({
+            session_id: 'cks_fallback',
+            checkout_url: 'https://test.checkout.dodopayments.com/session/cks_fallback',
+        }));
+        await new DodoPaymentsPlugin().createPayment(ORDER, {
+            ...CONFIG,
+            payment_method_type: ['ideal'],
+            allowCardFallback: true,
+        });
+        expect(calls[0].body.allowed_payment_method_types).toEqual(['ideal', 'credit', 'debit']);
     });
 
     it('live key 自动切到 live 域名', async () => {
