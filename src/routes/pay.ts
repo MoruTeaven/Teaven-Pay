@@ -26,6 +26,25 @@ import {
 export const payRouter = new Hono<{ Bindings: Env }>();
 
 /**
+ * 保存插件返回的渠道侧初始交易号（如 DodoPayments 的 checkout session id）。
+ *
+ * 部分渠道下单时拿不到最终支付号，只返回会话 id；先落到 orders.api_trade_no，
+ * 支付成功后由 creditOrder() 用真正的 payment_id 覆盖。查单/退款据此定位渠道资源。
+ * 这是可选字段，普通插件不返回 externalTradeNo 时本函数不写库。
+ */
+async function persistExternalTradeNo(env: Env, tradeNo: string, externalNo?: string): Promise<void> {
+    if (!externalNo) return;
+    try {
+        await env.DB.prepare(
+            'UPDATE orders SET api_trade_no = ? WHERE id = ? AND (api_trade_no IS NULL OR api_trade_no = \'\')'
+        ).bind(externalNo, tradeNo).run();
+    } catch (error) {
+        // 落号失败不应阻断支付流程：回调里仍带 payment_id 可兜底
+        console.error('[Pay] persistExternalTradeNo failed:', tradeNo, error);
+    }
+}
+
+/**
  * 支付方式归一化：支付宝只有一个对外支付方式（pt_alipay）。
  * 网页收款早期用 alipay_web / pt_alipay_web 作为标识，合并后仍兼容旧调用方，
  * 统一映射到 pt_alipay，避免已接入的商户因传旧 type 而下不了单。
@@ -278,6 +297,8 @@ payRouter.post('/submit', async (c) => {
         if (!payResult.success) {
             return c.json({ code: -1, msg: payResult.message || '创建支付失败' });
         }
+
+        await persistExternalTradeNo(env, tradeNo, payResult.externalTradeNo);
         
         return c.json({
             code: 1,
@@ -467,6 +488,8 @@ payRouter.post('/cashier', async (c) => {
             return c.json({ code: -1, msg: payResult.message || '创建支付失败' });
         }
 
+        await persistExternalTradeNo(env, tradeNo, payResult.externalTradeNo);
+
         return c.json({
             code: 1,
             msg: '创建订单成功',
@@ -527,7 +550,9 @@ payRouter.get('/status/:tradeNo', async (c) => {
                     const orderStatus = await plugin.queryOrder(tradeNo, {
                         appId: channelConfig.appId || '',
                         appSecret: channelConfig.appSecret || '',
-                        ...channelConfig
+                        ...channelConfig,
+                        // 下单时保存的渠道侧交易号（如 DodoPayments 的 checkout session id）
+                        externalTradeNo: order.api_trade_no || '',
                     });
 
                     await logPaymentEvent(env, {
@@ -828,7 +853,7 @@ async function resolveRefundChannel(env: Env, order: any): Promise<{ ok: true; c
         }
     }
 
-    if (!config.appId && !config.appSecret && !config.mchId) {
+    if (!config.appId && !config.appSecret && !config.mchId && !config.apiKey) {
         return { ok: false, msg: '支付渠道配置缺失，无法向渠道发起退款' };
     }
 
@@ -1064,6 +1089,8 @@ payRouter.post('/refund', async (c) => {
                     subject: order.name || '',
                     clientIp: order.buyer_ip || '',
                     createdAt: order.created_at,
+                    // 渠道侧支付号（下单时落库，支付成功后由回调覆盖为 payment_id）
+                    apiTradeNo: order.api_trade_no || '',
                 },
                 refundAmount,
                 channelCtx.ctx.config

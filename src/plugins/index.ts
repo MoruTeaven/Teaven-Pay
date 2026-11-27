@@ -8,6 +8,7 @@ import { AlipayWebPlugin } from './alipayWeb';
 import { WxpayPlugin } from './wxpay';
 import { QQPayPlugin } from './qqpay';
 import { XunhupayPlugin } from './xunhupay';
+import { DodoPaymentsPlugin } from './dodopayments';
 
 // 插件注册表
 const plugins: Record<string, () => PaymentPlugin> = {
@@ -16,6 +17,7 @@ const plugins: Record<string, () => PaymentPlugin> = {
     'wxpay': () => new WxpayPlugin(),
     'qqpay': () => new QQPayPlugin(),
     'xunhupay': () => new XunhupayPlugin(),
+    'dodopayments': () => new DodoPaymentsPlugin(),
 };
 
 /**

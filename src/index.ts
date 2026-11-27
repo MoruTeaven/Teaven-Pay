@@ -3036,7 +3036,9 @@ app.get('/admin', async (c) => {
             const names = {
                 alipay: '支付宝',
                 wxpay: '微信支付',
-                qqpay: 'QQ钱包'
+                qqpay: 'QQ钱包',
+                dodopayments: 'DodoPayments',
+                pt_dodopayments: 'DodoPayments'
             };
             return names[type] || type;
         }
@@ -3046,7 +3048,9 @@ app.get('/admin', async (c) => {
             const names = {
                 alipay: '支付宝',
                 wxpay: '微信支付',
-                qqpay: 'QQ钱包'
+                qqpay: 'QQ钱包',
+                dodopayments: 'DodoPayments',
+                pt_dodopayments: 'DodoPayments'
             };
             return names[type] || '未知支付方式';
         }
@@ -3637,6 +3641,7 @@ app.get('/admin', async (c) => {
                 '                <option value="alipay">支付宝</option>' +
                 '                <option value="wxpay">微信支付</option>' +
                 '                <option value="qqpay">QQ钱包</option>' +
+                '                <option value="pt_dodopayments">DodoPayments</option>' +
                 '            </select>' +
                 '            <button class="btn btn-secondary">' +
                 '                <i class="ri-search-line"></i>' +
@@ -5826,6 +5831,33 @@ app.get('/admin', async (c) => {
                         '            <input type="text" class="form-input" id="config_gateway" value="' + escapeHtml(config.gateway || '') + '" placeholder="留空使用生产网关">' +
                         '            <div class="form-hint">沙箱联调填 https://openapi-sandbox.dl.alipaydev.com/gateway.do；生产留空</div>' +
                         '        </div>';
+                } else if (channel.plugin === 'dodopayments') {
+                    configFields =
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">API 密钥</label>' +
+                        '            <input type="text" class="form-input" id="config_apiKey" value="' + escapeHtml(config.apiKey || config.appSecret || '') + '" placeholder="dodo_test_... 或 dodo_live_...">' +
+                        '            <div class="form-hint">测试密钥以 dodo_test_ 开头、生产密钥以 dodo_live_ 开头；环境按密钥前缀自动选择</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">产品 ID (product_id)</label>' +
+                        '            <input type="text" class="form-input" id="config_productId" value="' + escapeHtml(config.productId || config.product_id || '') + '" placeholder="pdt_...">' +
+                        '            <div class="form-hint">需在 Dodo 后台开启 Pay What You Want 的一次性产品，否则下单金额会被忽略</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">Webhook 验签密钥</label>' +
+                        '            <input type="text" class="form-input" id="config_webhookSecret" value="' + escapeHtml(config.webhookSecret || '') + '" placeholder="whsec_...">' +
+                        '            <div class="form-hint">在 Dodo 控制台 Developer → Webhooks 添加回调地址后复制</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">币种（可选）</label>' +
+                        '            <input type="text" class="form-input" id="config_currency" value="' + escapeHtml(config.currency || '') + '" placeholder="USD">' +
+                        '            <div class="form-hint">默认 USD；PWYW 产品仅支持 USD / GBP / EUR</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">回调地址</label>' +
+                        '            <input type="text" class="form-input" value="' + escapeHtml(window.location.origin + '/notify/dodopayments') + '" readonly>' +
+                        '            <div class="form-hint">请复制到 Dodo 控制台的 Webhook 端点，并订阅 payment.succeeded / payment.failed 事件</div>' +
+                        '        </div>';
                 } else {
                     configFields =
                         '        <div class="form-group">' +
@@ -5910,6 +5942,22 @@ app.get('/admin', async (c) => {
                 config.notifyUrl = document.getElementById('config_notifyUrl').value;
                 config.returnUrl = document.getElementById('config_returnUrl').value;
                 config.gateway = document.getElementById('config_gateway').value;
+            } else if (plugin === 'dodopayments') {
+                var apiKey = document.getElementById('config_apiKey').value.trim();
+                var productId = document.getElementById('config_productId').value.trim();
+                var webhookSecret = document.getElementById('config_webhookSecret').value.trim();
+                var currency = document.getElementById('config_currency').value.trim();
+                if (!apiKey || !productId || !webhookSecret) {
+                    showToast('error', '验证失败', 'API 密钥、产品 ID、Webhook 验签密钥均不能为空');
+                    return;
+                }
+                config.apiKey = apiKey;
+                // 兼容通用字段：退款解析通道时检查 appId/appSecret
+                config.appId = productId;
+                config.appSecret = apiKey;
+                config.productId = productId;
+                config.webhookSecret = webhookSecret;
+                if (currency) config.currency = currency;
             } else {
                 var jsonStr = document.getElementById('config_json').value;
                 try {

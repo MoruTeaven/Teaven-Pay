@@ -239,6 +239,125 @@ notifyRouter.post('/qqpay', async (c) => {
 });
 
 /**
+ * DodoPayments 异步通知
+ * POST /notify/dodopayments
+ *
+ * Dodo 使用 Standard Webhooks：签名覆盖 `${webhook-id}.${webhook-timestamp}.${rawBody}`，
+ * 必须用未经解析的原始 body 验签，所以不能走下面通用路由的 parseBody()。
+ * 这里读取 raw body + 签名头，注入插件验签所需字段后复用标准入账流程。
+ */
+notifyRouter.post('/dodopayments', async (c) => {
+    const requestMeta = getRequestLogMeta(c.req.raw);
+    const rawBody = await c.req.text();
+    const headers = {
+        'webhook-id': c.req.header('webhook-id') || '',
+        'webhook-timestamp': c.req.header('webhook-timestamp') || '',
+        'webhook-signature': c.req.header('webhook-signature') || '',
+    };
+
+    let parsed: any = {};
+    try {
+        parsed = JSON.parse(rawBody);
+    } catch {
+        return c.text('fail');
+    }
+
+    const channel = await c.env.DB.prepare(
+        "SELECT * FROM channels WHERE plugin = 'dodopayments' AND status = 1 LIMIT 1"
+    ).first();
+
+    if (!channel) {
+        await logWebhookEvent(c.env, {
+            plugin: 'dodopayments',
+            webhookType: 'channel_notify',
+            direction: 'inbound',
+            url: c.req.url,
+            method: c.req.method,
+            success: false,
+            requestHeaders: headersToLogObject(c.req.raw.headers),
+            requestBody: parsed,
+            responseBody: 'fail',
+            errorMessage: '通道不存在',
+            ...requestMeta,
+        });
+        return c.text('fail');
+    }
+
+    try {
+        const config = await decryptChannelConfig((channel as any).config, c.env.ENCRYPTION_KEY);
+
+        // 兜底定位订单：Dodo 的 payment 事件带 checkout_session_id，
+        // 下单时已把 session id 落到 orders.api_trade_no。
+        // 即使 checkout metadata 没有传播到 payment 对象，也能靠它找到订单。
+        const injectedConfig: any = { ...config };
+        const sessionId = String(parsed?.data?.checkout_session_id || '');
+        if (sessionId && !parsed?.data?.metadata?.trade_no) {
+            const order = await c.env.DB.prepare(
+                "SELECT id, out_trade_no FROM orders WHERE api_trade_no = ? AND plugin = 'dodopayments' LIMIT 1"
+            ).bind(sessionId).first();
+            if (order) {
+                injectedConfig.__tradeNoHint = (order as any).id;
+                injectedConfig.__outTradeNoHint = (order as any).out_trade_no;
+            }
+        }
+
+        const plugin = getPlugin('dodopayments');
+        // 原始 body 与签名头注入 payload，插件据此做 Standard Webhooks 验签
+        const result = await plugin.verifyNotify({ ...parsed, __raw: rawBody, __headers: headers }, injectedConfig);
+
+        if (!result.success) {
+            await logWebhookEvent(c.env, {
+                orderId: result.tradeNo || null,
+                plugin: 'dodopayments',
+                webhookType: 'channel_notify',
+                direction: 'inbound',
+                url: c.req.url,
+                method: c.req.method,
+                success: false,
+                requestHeaders: headersToLogObject(c.req.raw.headers),
+                requestBody: parsed,
+                responseBody: 'fail',
+                errorMessage: `${result.errorCode || 'VERIFY_FAILED'}: ${result.message || ''}`,
+                ...requestMeta,
+            });
+            return c.text('fail');
+        }
+
+        await logWebhookEvent(c.env, {
+            orderId: result.tradeNo || null,
+            plugin: 'dodopayments',
+            webhookType: 'channel_notify',
+            direction: 'inbound',
+            url: c.req.url,
+            method: c.req.method,
+            success: true,
+            requestHeaders: headersToLogObject(c.req.raw.headers),
+            requestBody: parsed,
+            responseBody: result.response || 'success',
+            ...requestMeta,
+        });
+
+        // 只有 payment.succeeded 才入账；退款/拒付/订阅等事件不走入账
+        if (result.status === 'success') {
+            await handlePaymentSuccess(c.env, {
+                tradeNo: result.tradeNo,
+                outTradeNo: result.outTradeNo,
+                thirdPartyTradeNo: result.thirdPartyTradeNo,
+                buyer: result.buyer,
+                paidAt: result.paidAt,
+                paidAmount: result.paidAmount,
+            });
+        }
+
+        // Dodo 要求 2xx 确认；返回 200 避免重复投递
+        return c.text('success');
+    } catch (error) {
+        console.error('[Notify/dodopayments] error:', error);
+        return c.text('fail');
+    }
+});
+
+/**
  * 通用异步通知 (用于自定义插件)
  * POST/GET /notify/:plugin
  */

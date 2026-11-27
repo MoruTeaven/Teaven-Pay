@@ -32,6 +32,9 @@ export interface OrderInfo {
     
     /** 客户端 IP */
     clientIp: string;
+
+    /** 渠道侧交易号（orders.api_trade_no，退款时用于定位渠道侧支付单） */
+    apiTradeNo?: string;
     
     /** 创建时间 */
     createdAt: string;
@@ -81,6 +84,14 @@ export interface PaymentResult {
     
     /** 表单 HTML (method=form) */
     formHtml?: string;
+
+    /**
+     * 渠道侧初始交易号（可选）。
+     * 部分渠道（如 DodoPayments）下单时只返回 checkout session id，
+     * 真正的 payment_id 要等回调；路由层会把这个号落到 orders.api_trade_no，
+     * 供后续查单/退款定位渠道侧资源。
+     */
+    externalTradeNo?: string;
     
     /** 错误信息 */
     message?: string;
