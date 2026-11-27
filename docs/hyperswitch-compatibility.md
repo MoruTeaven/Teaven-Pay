@@ -110,7 +110,30 @@ SDK 流程对不上。因此 L1/L2 只能服务「服务端直连」客户，覆
 - 兼容层不能成为安全后门：API Key 校验、SSRF 校验、签名验签、幂等入账等主流程约束必须同样生效。
 - 若未来真要接 Hyperswitch 编排能力，优先评估把 Teaven Pay 的中文渠道做成 Hyperswitch 侧的独立服务（而非在 Teaven Pay 内重造编排）。
 
-## 7. 参考资料
+## 7. 已实现（Stripe 兼容层 · t-mwz1l37b）
+
+已按上述路线落地 Stripe 风格兼容层（服务端直连最小子集），代码位于 `src/routes/stripe.ts`、`src/utils/stripe-compat.ts`，挂载在独立前缀 `/v1/*`，不改动 `/api/pay/*` 与易支付入口。
+
+### 可用端点
+
+| 端点 | 说明 |
+| --- | --- |
+| `POST /v1/payment_intents` | 创建支付（amount 为分，metadata.type 指定支付方式） |
+| `GET /v1/payment_intents/:id` | 查询支付状态 |
+| `GET /v1/payment_intents` | 订单列表（limit / starting_after 分页） |
+| `POST /v1/payment_intents/:id/cancel` | 关闭未支付订单 |
+| `POST /v1/refunds` | 申请退款（payment_intent + amount） |
+| `GET /v1/refunds/:id` | 查询退款 |
+
+- 认证：`Authorization: Bearer sk_<api_key>`（兼容 `sk_test_` / `sk_live_` 前缀，也接受裸密钥与 `X-API-Key`），密钥仍只认 `api_keys` 表。
+- 金额：请求/响应均为最小货币单位（分），内部自动转元；仅支持 `cny`，其它币种返回 400。
+- 响应：Stripe PaymentIntent / Refund 对象 + `{ error: { type, code, message, status_code } }` 错误模型与对应 HTTP 状态码。
+- 不支持的能力（confirm / capture / customers）返回明确的 `unsupported_feature` 错误，不伪装支持。
+- 业务逻辑内部转发给现有 `payRouter`，完整复用签名验签、SSRF 校验、幂等入账等主流程。
+- 幂等：用 `metadata.out_trade_no` 或 `idempotency_key` 作为商户订单号，重复请求返回同一笔订单。
+- 契约测试：`src/utils/stripe-compat.test.ts`（纯函数）+ `src/routes/stripe.test.ts`（路由），共 30 项全通过。
+
+## 8. 参考资料
 
 - Hyperswitch 架构：<https://docs.hyperswitch.io/about-hyperswitch/hyperswitch-architecture>
 - Hyperswitch API Reference：<https://api-reference.hyperswitch.io/introduction>

@@ -11,6 +11,7 @@ import { timing } from 'hono/timing';
 
 // 路由
 import { payRouter } from './routes/pay';
+import { stripeRouter } from './routes/stripe';
 import { merchantRouter } from './routes/merchant';
 import { adminRouter } from './routes/admin';
 import { notifyRouter } from './routes/notify';
@@ -115,6 +116,10 @@ app.get('/api/health', async (c) => {
 
 // API 路由
 app.route('/api/pay', payRouter);
+
+// Stripe 风格兼容层（服务端直连最小子集，独立 /v1/* 前缀隔离）
+app.route('/v1', stripeRouter);
+
 app.route('/api/merchant', merchantRouter);
 app.route('/api/merchant/api-keys', apiKeyRouter);
 app.route('/api/password-reset', passwordResetRouter);
