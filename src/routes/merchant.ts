@@ -6,7 +6,8 @@ import { Hono } from 'hono';
 import { Env } from '../types/env';
 import { authMiddleware, merchantMiddleware, signJWT } from '../middleware/auth';
 import { isJwtSecretMissingError, resolveJwtSecret, JWT_SECRET_MISSING_MSG } from '../utils/jwtSecret';
-import { hashPassword, verifyPassword } from '../utils/crypto';
+import { hashPassword, verifyPassword, decryptChannelConfig } from '../utils/crypto';
+import { getPlugin } from '../plugins';
 import { generateUUIDv7 } from '../utils/uuid';
 import { getRequestLogMeta, logAuditEvent, logOrderEvent } from '../utils/logging';
 import { isSafeOutboundUrl } from '../utils/netSecurity';
@@ -520,6 +521,27 @@ merchantRouter.post('/orders/:id/close', async (c) => {
 
         if ((order as any).status !== 0) {
             return c.json({ code: -1, msg: '该订单无法关闭' });
+        }
+
+        // 同步关闭渠道侧未付款交易（可选接口，如支付宝AI付 alipay.trade.close）。
+        // 渠道异常只记日志，不阻断本地关单状态翻转。
+        if ((order as any).plugin && (order as any).channel_id) {
+            try {
+                const channel = await c.env.DB.prepare(
+                    'SELECT config FROM channels WHERE id = ?'
+                ).bind((order as any).channel_id).first() as any;
+                const plugin = getPlugin((order as any).plugin);
+                if (channel && typeof plugin.closeOrder === 'function') {
+                    const channelConfig = await decryptChannelConfig(channel.config, c.env.ENCRYPTION_KEY);
+                    await plugin.closeOrder(orderId, {
+                        ...channelConfig,
+                        appId: channelConfig.appId || '',
+                        appSecret: channelConfig.appSecret || ''
+                    });
+                }
+            } catch (e) {
+                console.error('[Merchant/close] 渠道关单失败（不影响本地关单）:', e);
+            }
         }
 
         await c.env.DB.prepare(

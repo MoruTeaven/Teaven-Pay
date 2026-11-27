@@ -94,3 +94,5 @@ _premerge_snapshot*
 _git_corrupt_bak*
 _corrupted/
 *.tmp
+/.alipay-sandbox.json
+/.alipay-sandbox.*

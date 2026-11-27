@@ -4,6 +4,7 @@
 
 import { PaymentPlugin } from '../types/plugin';
 import { AlipayPlugin } from './alipay';
+import { AlipayWebPlugin } from './alipayWeb';
 import { WxpayPlugin } from './wxpay';
 import { QQPayPlugin } from './qqpay';
 import { XunhupayPlugin } from './xunhupay';
@@ -11,6 +12,7 @@ import { XunhupayPlugin } from './xunhupay';
 // 插件注册表
 const plugins: Record<string, () => PaymentPlugin> = {
     'alipay': () => new AlipayPlugin(),
+    'alipay_web': () => new AlipayWebPlugin(),
     'wxpay': () => new WxpayPlugin(),
     'qqpay': () => new QQPayPlugin(),
     'xunhupay': () => new XunhupayPlugin(),

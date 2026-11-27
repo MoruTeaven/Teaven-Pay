@@ -271,7 +271,11 @@ payRouter.post('/submit', async (c) => {
             msg: '创建订单成功',
             trade_no: tradeNo,
             payurl: payResult.payUrl || `${siteUrl}/cashier/${tradeNo}`,
-            qrcode: payResult.qrcode
+            qrcode: payResult.qrcode,
+            // 表单跳转类插件（如支付宝AI付网页收款）返回需渲染并自动提交的 HTML form。
+            // 不能改成 URL 跳转，否则浏览器只会显示表单参数。
+            formHtml: payResult.formHtml,
+            method: payResult.method
         });
     } catch (error) {
         console.error('Create payment error:', error);
@@ -453,7 +457,10 @@ payRouter.post('/cashier', async (c) => {
             msg: '创建订单成功',
             trade_no: tradeNo,
             payurl: payResult.payUrl || `${siteUrl}/cashier/${tradeNo}`,
-            qrcode: payResult.qrcode
+            qrcode: payResult.qrcode,
+            // 表单跳转类插件（如支付宝AI付网页收款）返回需渲染并自动提交的 HTML form。
+            formHtml: payResult.formHtml,
+            method: payResult.method
         });
     } catch (error) {
         console.error('Cashier payment error:', error);
@@ -1293,7 +1300,29 @@ payRouter.post('/close', async (c) => {
         if (order.status !== 0) {
             return c.json({ code: -1, msg: '订单状态不允许关闭' });
         }
-        
+
+        // 同步关闭渠道侧未付款交易（可选接口，如支付宝AI付 alipay.trade.close）。
+        // 渠道关单失败只记日志、不阻断本地关单：本地状态翻转仍以 CAS 为准，
+        // 避免渠道抖动导致本地订单永远关不掉。
+        if (order.plugin && order.channel_id) {
+            try {
+                const channel = await env.DB.prepare(
+                    'SELECT config FROM channels WHERE id = ?'
+                ).bind(order.channel_id).first() as any;
+                const plugin = getPlugin(order.plugin);
+                if (channel && typeof plugin.closeOrder === 'function') {
+                    const channelConfig = await decryptChannelConfig(channel.config, env.ENCRYPTION_KEY);
+                    await plugin.closeOrder(order.id, {
+                        ...channelConfig,
+                        appId: channelConfig.appId || '',
+                        appSecret: channelConfig.appSecret || ''
+                    });
+                }
+            } catch (e) {
+                console.error('[Pay/close] 渠道关单失败（不影响本地关单）:', e);
+            }
+        }
+
         // 关闭订单
         const now = new Date().toISOString();
         await env.DB.prepare(

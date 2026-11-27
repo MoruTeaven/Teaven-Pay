@@ -830,7 +830,27 @@ app.get('/pay/:merchantId', async (c) => {
                 var data = await res.json();
 
                 if (data.code === 1) {
-                    if (data.payurl) {
+                    // 表单跳转类支付（如支付宝AI付网页收款）：服务端返回需渲染并自动提交的
+                    // HTML form。禁止用 window.location.href 直接跳转表单字符串——那样浏览器
+                    // 只会显示一串参数，无法唤起收银台。
+                    if (data.formHtml) {
+                        var container = document.createElement('div');
+                        container.innerHTML = data.formHtml;
+                        container.style.position = 'fixed';
+                        container.style.top = '0';
+                        container.style.left = '0';
+                        container.style.width = '100%';
+                        container.style.height = '100%';
+                        container.style.zIndex = '9999';
+                        container.style.background = '#fff';
+                        document.body.appendChild(container);
+                        var form = container.querySelector('form');
+                        if (form) {
+                            form.submit();
+                        } else {
+                            showError('支付表单异常，请联系管理员');
+                        }
+                    } else if (data.payurl) {
                         window.location.href = data.payurl;
                     } else if (data.qrcode) {
                         window.location.href = '/cashier/' + data.trade_no;

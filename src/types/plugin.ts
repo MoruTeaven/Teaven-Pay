@@ -252,4 +252,10 @@ export interface PaymentPlugin {
      * @returns 退款状态
      */
     queryRefund(refundNo: string, config: PluginConfig): Promise<RefundStatus>;
+
+    /**
+     * 关闭未付款交易（可选接口）
+     * 仅部分渠道需要在本地关单时同步通知渠道；未实现的插件本地关单照常进行。
+     */
+    closeOrder?(tradeNo: string, config: PluginConfig): Promise<{ success: boolean; message?: string }>;
 }
