@@ -8,7 +8,7 @@
 |---|---|---|
 | 归属 | **用户侧**：付款人在收银台看到并选择的选项 | **后台侧**：平台用哪套账号/密钥去收款 |
 | 例子 | 信用卡、Apple Pay、微信支付、iDEAL | 一个配置了 Dodo API 密钥 + PWYW 产品的通道 |
-| 谁创建 | 随迁移导入的默认数据（本文 28 种，微信支付复用已有类型） | **只能由管理员在后台自行创建，仓库不预置任何通道** |
+| 谁创建 | 随迁移导入的默认数据（本文 29 种，微信支付复用已有类型） | **只能由管理员在后台自行创建，仓库不预置任何通道** |
 | 存储 | `payment_types` 表 | `channels` 表，`config` 字段 AES-GCM 加密 |
 | 关系 | 一个支付方式可以有多条通道（下单取 sort_order 最小的一条启用通道） | 一条通道只属于一个支付方式 |
 
@@ -18,7 +18,7 @@
 
 ## 已导入的用户侧支付方式
 
-来源：Dodo 官方文档 [Available Method Types](https://docs.dodopayments.com/features/payment-methods.md)。`标识` 既是 `payment_types.name`，也是 Dodo API `allowed_payment_method_types` 的取值。导入迁移：[0015_expand_dodopayments_methods.sql](../migrations/0015_expand_dodopayments_methods.sql)；微信支付复用与清理见 [0017_merge_dodo_wechat_into_wxpay.sql](../migrations/0017_merge_dodo_wechat_into_wxpay.sql)。
+来源：Dodo 官方文档 [Available Method Types](https://docs.dodopayments.com/features/payment-methods.md)。`标识` 是 `payment_types.name`；绝大多数同时也是 Dodo API `allowed_payment_method_types` 的取值（例外见文末 Afterpay/Clearpay）。导入迁移：[0015_expand_dodopayments_methods.sql](../migrations/0015_expand_dodopayments_methods.sql)；微信支付复用见 [0017_merge_dodo_wechat_into_wxpay.sql](../migrations/0017_merge_dodo_wechat_into_wxpay.sql)；Afterpay/Clearpay 拆分见 [0018_split_afterpay_clearpay.sql](../migrations/0018_split_afterpay_clearpay.sql)。
 
 | 支付方式 | 标识 | 说明 |
 |---|---|---|
@@ -30,7 +30,8 @@
 | Cash App Pay | `cashapp` | 美国 Cash App 钱包 |
 | ACH 直接借记 | `ach` | 美国银行账户借记，仅一次性支付 |
 | Klarna | `klarna` | 先买后付，美国 / 欧洲 |
-| Afterpay / Clearpay | `afterpay_clearpay` | 先买后付，美国 / 英国 |
+| Afterpay | `afterpay` | 先买后付，美国，USD（Dodo method: `afterpay_clearpay`） |
+| Clearpay | `clearpay` | 先买后付，英国，GBP（Dodo method: `afterpay_clearpay`） |
 | UPI | `upi_intent` | 印度统一支付接口（扫码） |
 | iDEAL | `ideal` | 荷兰本地银行转账 |
 | Bancontact | `bancontact_card` | 比利时银行卡支付 |
@@ -51,7 +52,7 @@
 | FPS | `fps` | 香港快速支付系统 |
 | Touch 'n Go | `touch_n_go` | 马来西亚电子钱包 |
 
-> 注：Dodo 官网宣传"40+ 种支付方式"，OpenAPI 枚举列出 100+ 个代码（含各国 ATM / 便利店等细分渠道）。这里导入的是官方明确列出的标准支付方式（现 **28 种**）。PayPal 官方标注为"暂停新交易"，故不在清单内。微信支付不单列——它复用已有的「微信支付」(`wxpay`) 类型，见下文。
+> 注：Dodo 官网宣传"40+ 种支付方式"，OpenAPI 枚举列出 100+ 个代码（含各国 ATM / 便利店等细分渠道）。这里导入的是官方明确列出的标准支付方式（现 **29 种**）。PayPal 官方标注为"暂停新交易"，故不在清单内。微信支付不单列——它复用已有的「微信支付」(`wxpay`) 类型，见下文。
 
 支付方式清单在代码中集中定义于 [src/plugins/dodopayments-methods.ts](../src/plugins/dodopayments-methods.ts)，插件的 `supportedTypes` 与迁移数据都以此为唯一口径。
 
@@ -83,9 +84,19 @@ Dodo 的微信支付（`we_chat_pay`）**不单列为用户侧类型**，直接�
 
 > ⚠️ 下单时同一支付方式下**只取 `sort_order` 最小的启用通道**。现有 `pt_wxpay` 下已有虎皮椒通道（`sort_order=0`），若你的 Dodo 通道排序更大，收款仍会走虎皮椒。请调整通道排序或停用不需要的通道，确保钱进对账户。
 
+## Afterpay 与 Clearpay 为什么拆成两个
+
+Dodo API 侧两者**共用一个 method code `afterpay_clearpay`**，实际品牌由账单国家/币种决定：美国用户看到 Afterpay（USD），英国用户看到 Clearpay（GBP）。用户侧仍拆成两个独立选项更清晰，插件会把两者都映射回 `afterpay_clearpay`，并按币种区分：
+
+- 建 Afterpay 通道时，币种填 `USD`，支付方式代码填 `afterpay`（或 `afterpay_clearpay`）；
+- 建 Clearpay 通道时，币种填 `GBP`，支付方式代码填 `clearpay`（或 `afterpay_clearpay`）。
+
+两者最低金额均为 $50.01 以上，且不支持订阅。
+
 ## 实现说明
 
 - 下单走 `POST /checkouts`，插件把通道配置的 `payment_method_type` 转成 `allowed_payment_method_types` 下发给 Dodo，从而让 hosted checkout 只展示用户选的方式。白名单会被校验，非法代码不会发给渠道。
+- 用户侧 code 与 Dodo method code 不同的情况由清单里的 `dodoMethod` 字段处理（当前只有 Afterpay / Clearpay），映射与校验集中在 [dodopayments-methods.ts](../src/plugins/dodopayments-methods.ts)。
 - 回调走 Standard Webhooks 验签，履约只认 `payment.succeeded`。
 - 查单 `GET /payments/{id}`、退款 `POST /refunds`。
 - 目前只支持全额退款（Dodo 部分退款需要稳定的 `item_id`，PWYW 产品不提供）。

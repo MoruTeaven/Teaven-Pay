@@ -76,19 +76,31 @@ afterEach(() => {
 });
 
 describe('DodoPayments 支付方式清单', () => {
-    it('28 种支付方式，code 唯一；微信支付复用 wxpay', () => {
-        expect(DODO_PAYMENT_METHODS.length).toBe(28);
+    it('29 种支付方式，code 唯一；微信支付复用 wxpay', () => {
+        expect(DODO_PAYMENT_METHODS.length).toBe(29);
         const codes = DODO_PAYMENT_METHODS.map((m) => m.code);
-        expect(new Set(codes).size).toBe(28);
+        expect(new Set(codes).size).toBe(29);
         expect(codes).not.toContain('we_chat_pay');
         expect(DODO_PAYMENT_TYPE_NAMES).toEqual(codes);
-        // 插件 supportedTypes = 28 种 + 复用的 wxpay
+        // 插件 supportedTypes = 29 种 + 复用的 wxpay
         expect(new DodoPaymentsPlugin().supportedTypes).toEqual([...codes, 'wxpay']);
+    });
+
+    it('Afterpay / Clearpay 拆为两种，底层都映射到 afterpay_clearpay', () => {
+        const afterpay = DODO_PAYMENT_METHODS.find((m) => m.code === 'afterpay');
+        const clearpay = DODO_PAYMENT_METHODS.find((m) => m.code === 'clearpay');
+        expect(afterpay?.dodoMethod).toBe('afterpay_clearpay');
+        expect(clearpay?.dodoMethod).toBe('afterpay_clearpay');
+        expect(normalizeDodoMethodTypes('afterpay')).toEqual(['afterpay_clearpay']);
+        expect(normalizeDodoMethodTypes('clearpay')).toEqual(['afterpay_clearpay']);
+        // 两个都填时去重，只发一个 code
+        expect(normalizeDodoMethodTypes(['afterpay', 'clearpay'])).toEqual(['afterpay_clearpay']);
     });
 
     it('白名单归一化：兼容数组 / 逗号分隔，过滤非法 code', () => {
         expect(normalizeDodoMethodTypes(['credit', 'apple_pay'])).toEqual(['credit', 'apple_pay']);
         expect(normalizeDodoMethodTypes('we_chat_pay,gcash')).toEqual(['we_chat_pay', 'gcash']);
+        expect(normalizeDodoMethodTypes('afterpay_clearpay')).toEqual(['afterpay_clearpay']);
         expect(normalizeDodoMethodTypes(['credit', 'unknown', 'CREDIT'])).toEqual(['credit']);
         expect(normalizeDodoMethodTypes(undefined)).toEqual([]);
     });

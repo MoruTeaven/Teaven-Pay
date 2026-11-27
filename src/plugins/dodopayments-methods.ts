@@ -14,15 +14,21 @@
  */
 
 export interface DodoPaymentMethod {
-    /** Dodo 支付方式代码，同时作为 payment_types.name */
+    /** 用户侧支付方式标识，作为 payment_types.name */
     code: string;
     /** 用户侧展示名 */
     displayName: string;
     /** 简要说明（地区 / 币种 / 类型） */
     description: string;
+    /**
+     * 实际下发给 Dodo API 的 method code，默认等于 code。
+     * 仅当用户侧拆分而 Dodo 侧共用一个 code 时才不同——
+     * 例如 Afterpay / Clearpay 在 Dodo 都是 afterpay_clearpay。
+     */
+    dodoMethod?: string;
 }
 
-/** 官方标准支付方式（29 种） */
+/** 官方标准支付方式（Afterpay / Clearpay 在用户侧拆为两种） */
 export const DODO_PAYMENT_METHODS: readonly DodoPaymentMethod[] = [
     { code: 'credit', displayName: '信用卡', description: 'Visa / Mastercard / Amex / JCB 等，全球通用' },
     { code: 'debit', displayName: '借记卡', description: '全球通用的借记卡' },
@@ -32,7 +38,8 @@ export const DODO_PAYMENT_METHODS: readonly DodoPaymentMethod[] = [
     { code: 'cashapp', displayName: 'Cash App Pay', description: '美国 Cash App 钱包' },
     { code: 'ach', displayName: 'ACH 直接借记', description: '美国银行账户借记，仅一次性支付' },
     { code: 'klarna', displayName: 'Klarna', description: '先买后付，美国 / 欧洲' },
-    { code: 'afterpay_clearpay', displayName: 'Afterpay / Clearpay', description: '先买后付，美国 / 英国' },
+    { code: 'afterpay', displayName: 'Afterpay', description: '先买后付，美国，以 USD 结算', dodoMethod: 'afterpay_clearpay' },
+    { code: 'clearpay', displayName: 'Clearpay', description: '先买后付，英国，以 GBP 结算', dodoMethod: 'afterpay_clearpay' },
     { code: 'upi_intent', displayName: 'UPI', description: '印度统一支付接口（扫码）' },
     { code: 'ideal', displayName: 'iDEAL', description: '荷兰本地银行转账' },
     { code: 'bancontact_card', displayName: 'Bancontact', description: '比利时银行卡支付' },
@@ -62,17 +69,26 @@ export const DODO_PAYMENT_METHODS: readonly DodoPaymentMethod[] = [
 export const DODO_PAYMENT_TYPE_NAMES: string[] = DODO_PAYMENT_METHODS.map((m) => m.code);
 
 /**
- * 有效的 Dodo method code 集合。
- * 除了独立支付方式，还包含 we_chat_pay——它不是用户侧类型（复用 wxpay），
- * 但管理员在「微信支付」下建 Dodo 通道时，支付方式代码要填它。
+ * 用户侧支付方式 code → 实际下发给 Dodo 的 method code。
+ *
+ * 大多数一一对应；例外：
+ *  - afterpay / clearpay：用户侧拆为两种，Dodo 侧统一为 afterpay_clearpay；
+ *  - we_chat_pay：Dodo 官方 method code，但用户侧复用已有的 wxpay 类型。
  */
-const VALID_DODO_METHODS: Set<string> = new Set([...DODO_PAYMENT_TYPE_NAMES, 'we_chat_pay']);
+const CODE_TO_DODO_METHOD: Map<string, string> = new Map(
+    DODO_PAYMENT_METHODS.map((m) => [m.code, m.dodoMethod || m.code])
+);
+CODE_TO_DODO_METHOD.set('we_chat_pay', 'we_chat_pay');
+// 允许管理员直接填 Dodo 原生 code（用户侧已拆开，原生 code 不再是任何 payment_types.name）
+CODE_TO_DODO_METHOD.set('afterpay_clearpay', 'afterpay_clearpay');
 
 /**
- * 把通道配置里的支付方式白名单归一为 Dodo API 需要的字符串数组。
+ * 把通道配置里的支付方式代码归一为 Dodo API 需要的 method code 数组。
  * 兼容三种写法：未配置（空数组）、单个字符串、字符串数组（逗号分隔亦可）。
  *
- * 只有 Dodo 官方支持的代码会被保留，避免把拼错的值发给渠道导致下单失败。
+ * 输入既可以是用户侧 code（afterpay / clearpay），也可以是 Dodo 原生 code
+ * （afterpay_clearpay / we_chat_pay）；输出统一是 Dodo 认识的 method code。
+ * 拼错的值会被丢弃，避免把非法 code 发给渠道导致下单失败。
  */
 export function normalizeDodoMethodTypes(input: unknown): string[] {
     if (input === undefined || input === null || input === '') return [];
@@ -82,7 +98,8 @@ export function normalizeDodoMethodTypes(input: unknown): string[] {
     const result: string[] = [];
     for (const item of raw) {
         const code = String(item).trim().toLowerCase();
-        if (code && VALID_DODO_METHODS.has(code) && !result.includes(code)) result.push(code);
+        const dodoMethod = CODE_TO_DODO_METHOD.get(code);
+        if (dodoMethod && !result.includes(dodoMethod)) result.push(dodoMethod);
     }
     return result;
 }
