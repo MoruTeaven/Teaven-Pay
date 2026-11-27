@@ -5652,6 +5652,36 @@ app.get('/admin', async (c) => {
                         '            <input type="text" class="form-input" id="config_callbackUrl" value="' + (config.callbackUrl || '') + '" placeholder="可选，留空则不跳转">' +
                         '            <div class="form-hint">用户取消支付后引导其重新付款的网址</div>' +
                         '        </div>';
+                } else if (channel.plugin === 'alipay_web') {
+                    configFields =
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">应用 ID (app_id)</label>' +
+                        '            <input type="text" class="form-input" id="config_appId" value="' + escapeHtml(config.appId || '') + '" placeholder="支付宝应用ID">' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">应用私钥（PKCS#1）</label>' +
+                        '            <textarea class="form-input" id="config_appSecret" rows="4" placeholder="应用私钥">' + escapeHtml(config.appSecret || config.privateKey || '') + '</textarea>' +
+                        '            <div class="form-hint">Node.js 使用 PKCS#1 格式；直接粘贴原始密钥字符串，不要添加 PEM 头尾</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">支付宝公钥</label>' +
+                        '            <textarea class="form-input" id="config_alipayPublicKey" rows="4" placeholder="支付宝公钥">' + escapeHtml(config.alipayPublicKey || '') + '</textarea>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">通知地址 (notify_url)</label>' +
+                        '            <input type="text" class="form-input" id="config_notifyUrl" value="' + escapeHtml(config.notifyUrl || '') + '" placeholder="留空使用系统默认">' +
+                        '            <div class="form-hint">留空则由服务端主动查单兜底；填写需为公网可访问的 HTTPS 地址</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">同步跳转地址 (return_url)</label>' +
+                        '            <input type="text" class="form-input" id="config_returnUrl" value="' + escapeHtml(config.returnUrl || '') + '" placeholder="留空使用平台结果页">' +
+                        '            <div class="form-hint">仅在下单方未传 return_url 时作为兜底</div>' +
+                        '        </div>' +
+                        '        <div class="form-group">' +
+                        '            <label class="form-label">网关地址（可选）</label>' +
+                        '            <input type="text" class="form-input" id="config_gateway" value="' + escapeHtml(config.gateway || '') + '" placeholder="留空使用生产网关">' +
+                        '            <div class="form-hint">沙箱联调填 https://openapi-sandbox.dl.alipaydev.com/gateway.do；生产留空</div>' +
+                        '        </div>';
                 } else {
                     configFields =
                         '        <div class="form-group">' +
@@ -5722,6 +5752,20 @@ app.get('/admin', async (c) => {
                     config.returnUrl = document.getElementById('config_returnUrl').value;
                     config.callbackUrl = document.getElementById('config_callbackUrl').value;
                 }
+            } else if (plugin === 'alipay_web') {
+                var appId = document.getElementById('config_appId').value;
+                var appSecret = document.getElementById('config_appSecret').value;
+                var alipayPublicKey = document.getElementById('config_alipayPublicKey').value;
+                if (!appId || !appSecret || !alipayPublicKey) {
+                    showToast('error', '验证失败', '应用ID、应用私钥、支付宝公钥均不能为空');
+                    return;
+                }
+                config.appId = appId;
+                config.appSecret = appSecret;
+                config.alipayPublicKey = alipayPublicKey;
+                config.notifyUrl = document.getElementById('config_notifyUrl').value;
+                config.returnUrl = document.getElementById('config_returnUrl').value;
+                config.gateway = document.getElementById('config_gateway').value;
             } else {
                 var jsonStr = document.getElementById('config_json').value;
                 try {
