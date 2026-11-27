@@ -76,12 +76,14 @@ afterEach(() => {
 });
 
 describe('DodoPayments 支付方式清单', () => {
-    it('官方 29 种支付方式，code 唯一且与插件 supportedTypes 一致', () => {
-        expect(DODO_PAYMENT_METHODS.length).toBe(29);
+    it('28 种支付方式，code 唯一；微信支付复用 wxpay', () => {
+        expect(DODO_PAYMENT_METHODS.length).toBe(28);
         const codes = DODO_PAYMENT_METHODS.map((m) => m.code);
-        expect(new Set(codes).size).toBe(29);
+        expect(new Set(codes).size).toBe(28);
+        expect(codes).not.toContain('we_chat_pay');
         expect(DODO_PAYMENT_TYPE_NAMES).toEqual(codes);
-        expect(new DodoPaymentsPlugin().supportedTypes).toEqual(codes);
+        // 插件 supportedTypes = 28 种 + 复用的 wxpay
+        expect(new DodoPaymentsPlugin().supportedTypes).toEqual([...codes, 'wxpay']);
     });
 
     it('白名单归一化：兼容数组 / 逗号分隔，过滤非法 code', () => {

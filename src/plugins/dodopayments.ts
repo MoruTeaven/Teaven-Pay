@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DodoPayments 支付插件（一次性支付 / hosted checkout）
  *
  * 官方文档：https://docs.dodopayments.com
@@ -208,13 +208,18 @@ function mapRefundStatus(status: string): RefundStatus['status'] {
 export class DodoPaymentsPlugin implements PaymentPlugin {
     id = 'dodopayments';
     name = 'DodoPayments';
-    version = '1.1.0';
+    version = '1.1.1';
     /**
      * 用户侧支付方式（payment_types.name）→ 本插件。
      * 后台按 name 匹配插件，必须把全部 Dodo 支付方式列出，
      * 否则在后台为这些支付方式建通道时插件下拉无法选中。
+     *
+     * 另外包含已有的 'wxpay'（微信支付）：Dodo 的微信支付复用国内微信支付这个
+     * 用户侧类型，不再单独建 pt_dodo_wechat。管理员可在「微信支付」下建 Dodo
+     * 通道（payment_method_type=we_chat_pay）；注意同类型下若还有其它通道，
+     * 下单只取 sort_order 最小的一条，需自行调整以免走错渠道。
      */
-    supportedTypes = DODO_PAYMENT_TYPE_NAMES;
+    supportedTypes = [...DODO_PAYMENT_TYPE_NAMES, 'wxpay'];
 
     private request(config: DodoConfig, path: string, init?: RequestInit): Promise<Response> {
         const apiKey = resolveApiKey(config);

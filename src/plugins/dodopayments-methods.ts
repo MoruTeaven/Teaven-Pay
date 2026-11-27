@@ -48,7 +48,6 @@ export const DODO_PAYMENT_METHODS: readonly DodoPaymentMethod[] = [
     { code: 'billie', displayName: 'Billie', description: '企业先买后付（B2B）' },
     { code: 'pix', displayName: 'Pix', description: '巴西即时银行转账' },
     { code: 'crypto_currency', displayName: '稳定币', description: '稳定币支付，以 USD 结算' },
-    { code: 'we_chat_pay', displayName: 'WeChat Pay', description: '微信扫码支付，支持 USD / CNY，单笔上限 1000 CNY' },
     { code: 'gcash', displayName: 'GCash', description: '菲律宾电子钱包' },
     { code: 'ali_pay_hk', displayName: 'Alipay HK', description: '香港支付宝，以 HKD 结算' },
     { code: 'fps', displayName: 'FPS', description: '香港快速支付系统' },
@@ -57,9 +56,17 @@ export const DODO_PAYMENT_METHODS: readonly DodoPaymentMethod[] = [
 
 /**
  * 插件的 supportedTypes：后台按 payment_types.name 匹配插件，
- * 因此这 29 个 code 就是新增支付方式的 name。
+ * 因此这些 code 就是新增支付方式的 name。
+ * 微信支付复用已有 pt_wxpay，单独在插件里追加 'wxpay'（见 dodopayments.ts）。
  */
 export const DODO_PAYMENT_TYPE_NAMES: string[] = DODO_PAYMENT_METHODS.map((m) => m.code);
+
+/**
+ * 有效的 Dodo method code 集合。
+ * 除了独立支付方式，还包含 we_chat_pay——它不是用户侧类型（复用 wxpay），
+ * 但管理员在「微信支付」下建 Dodo 通道时，支付方式代码要填它。
+ */
+const VALID_DODO_METHODS: Set<string> = new Set([...DODO_PAYMENT_TYPE_NAMES, 'we_chat_pay']);
 
 /**
  * 把通道配置里的支付方式白名单归一为 Dodo API 需要的字符串数组。
@@ -72,11 +79,10 @@ export function normalizeDodoMethodTypes(input: unknown): string[] {
     const raw = Array.isArray(input)
         ? input
         : String(input).split(',');
-    const supported = new Set<string>(DODO_PAYMENT_TYPE_NAMES);
     const result: string[] = [];
     for (const item of raw) {
         const code = String(item).trim().toLowerCase();
-        if (code && supported.has(code) && !result.includes(code)) result.push(code);
+        if (code && VALID_DODO_METHODS.has(code) && !result.includes(code)) result.push(code);
     }
     return result;
 }
