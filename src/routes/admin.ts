@@ -10,6 +10,7 @@ import { isJwtSecretMissingError, resolveJwtSecret, JWT_SECRET_MISSING_MSG } fro
 import { generateUUIDv7 } from '../utils/uuid';
 import { hashPassword, verifyPassword, encryptChannelConfig, decryptChannelConfig } from '../utils/crypto';
 import { getPlugin, getPluginList } from '../plugins';
+import { getPluginName as resolvePluginName } from '../utils/displayNames';
 import { getRequestLogMeta, logAuditEvent, logPaymentEvent, logReconciliationEvent } from '../utils/logging';
 import { isSafeOutboundUrl } from '../utils/netSecurity';
 
@@ -353,21 +354,20 @@ adminRouter.get('/stats', async (c) => {
         }
 
         // 支付方式分布 (按成功订单金额)
+        // 展示名一律取 payment_types.display_name，避免把内部标识（pt_xxx / method code）暴露到图表。
         const paymentRows = await c.env.DB.prepare(`
-            SELECT 
-                payment_type as name,
-                SUM(CASE WHEN status = 1 THEN amount ELSE 0 END) as amount,
-                COUNT(CASE WHEN status = 1 THEN 1 END) as count
-            FROM orders
-            GROUP BY payment_type
+            SELECT
+                o.payment_type as name,
+                COALESCE(pt.display_name, o.payment_type) as display_name,
+                SUM(CASE WHEN o.status = 1 THEN o.amount ELSE 0 END) as amount,
+                COUNT(CASE WHEN o.status = 1 THEN 1 END) as count
+            FROM orders o
+            LEFT JOIN payment_types pt ON o.payment_type = pt.id OR o.payment_type = pt.name
+            GROUP BY o.payment_type
         `).all();
-        const paymentNames: Record<string, string> = {
-            alipay: '支付宝', wxpay: '微信支付', qqpay: 'QQ钱包',
-            unionpay: '银联', jdpay: '京东支付'
-        };
         const paymentDistribution = paymentRows.results.map((row: any) => ({
             value: Number(row.amount) || 0,
-            name: paymentNames[row.name] || row.name,
+            name: row.display_name || row.name || '未知支付方式',
             count: row.count || 0
         })).filter((item: any) => item.value > 0);
 
@@ -916,6 +916,7 @@ adminRouter.get('/orders', async (c) => {
             merchant: row.username || '-',
             paymentType: row.payment_type || '',
             paymentTypeName: row.payment_type_name || '',
+            pluginName: resolvePluginName(row.plugin || ''),
             channelId: row.channel_id || '',
             amount: row.amount || 0,
             actualAmount: row.actual_amount || 0,
@@ -991,6 +992,7 @@ adminRouter.get('/orders/:id', async (c) => {
                 channelId: o.channel_id || '',
                 channelName: o.channel_name || '',
                 plugin: o.plugin || '',
+                pluginName: resolvePluginName(o.plugin || ''),
                 amount: o.amount || 0,
                 actualAmount: o.actual_amount || 0,
                 fee: o.fee || 0,
@@ -1385,6 +1387,7 @@ adminRouter.get('/channels', async (c) => {
                 paymentTypeDisplay: row.payment_type_display || '',
                 name: row.name,
                 plugin: row.plugin,
+                pluginName: resolvePluginName(row.plugin || ''),
                 config: JSON.stringify(configObj),
                 feeRate: row.fee_rate || 0,
                 minAmount: row.min_amount || 0,

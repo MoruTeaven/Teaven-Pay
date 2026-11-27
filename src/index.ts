@@ -32,6 +32,7 @@ import { parseAllowedOrigins, resolveAllowedOrigin } from './utils/cors';
 import { issueCashierTicket } from './utils/cashierAuth';
 import { getPrimaryApiKey } from './utils/apiKeyAuth';
 import { issueOrderStatusToken } from './utils/orderStatusAuth';
+import { getPaymentTypeDisplayName } from './utils/displayNames';
 import { autoCloseExpiredOrders, scheduleLazyAutoClose } from './utils/orderExpiry';
 
 // 类型
@@ -207,7 +208,8 @@ app.get('/cashier/:tradeNo', async (c) => {
 
     const amount = orderInfo ? Number(orderInfo.amount).toFixed(2) : '0.00';
     const name = orderInfo ? (orderInfo.name || '在线支付') : '订单';
-    const typeName = orderInfo ? (orderInfo.type_name || orderInfo.payment_type) : '';
+    // 展示用户可见的支付方式名称，避免把 pt_xxx / method code 这类内部标识直出给用户
+    const typeName = orderInfo ? getPaymentTypeDisplayName(orderInfo.type_name, orderInfo.payment_type || '') : '';
     const returnUrl = orderInfo ? (orderInfo.return_url || '') : '';
 
     // 订单状态接口已加认证（B-3），页面轮询必须带上服务端签发的单订单票据。
@@ -3034,23 +3036,42 @@ app.get('/admin', async (c) => {
             return icons[type] || 'ri-bank-card-line';
         }
 
+        // 支付方式标识 → 展示名。数据库 display_name 缺失时的兜底，
+        // 避免把 pt_xxx 前缀或 Dodo method code 这类内部标识直接暴露给用户。
+        const PAY_TYPE_NAMES = {
+            alipay: '支付宝', alipay_web: '支付宝', wxpay: '微信支付', qqpay: 'QQ钱包',
+            xunhupay: '虎皮椒', dodopayments: 'DodoPayments',
+            credit: '信用卡', debit: '借记卡', apple_pay: 'Apple Pay', google_pay: 'Google Pay',
+            amazon_pay: 'Amazon Pay', cashapp: 'Cash App Pay', ach: 'ACH 直接借记',
+            klarna: 'Klarna', afterpay: 'Afterpay', clearpay: 'Clearpay', upi_intent: 'UPI',
+            ideal: 'iDEAL', bancontact_card: 'Bancontact', eps: 'EPS', multibanco: 'Multibanco',
+            blik: 'BLIK', sepa: 'SEPA 直接借记', satispay: 'Satispay', payco: 'PAYCO',
+            naver_pay: 'Naver Pay', kakao_pay: 'Kakao Pay', revolut_pay: 'RevolutPay',
+            billie: 'Billie', pix: 'Pix', crypto_currency: '稳定币', gcash: 'GCash',
+            ali_pay_hk: 'Alipay HK', fps: 'FPS', touch_n_go: "Touch 'n Go"
+        };
+
         function getPaymentTypeName(type) {
-            const names = {
-                alipay: '支付宝',
-                wxpay: '微信支付',
-                qqpay: 'QQ钱包'
-            };
-            return names[type] || type;
+            if (!type) return '';
+            const key = String(type).replace(/^pt_/, '');
+            return PAY_TYPE_NAMES[key] || PAY_TYPE_NAMES[type] || type;
         }
 
         function getPaymentTypeDisplayName(displayName, type) {
             if (displayName) return displayName;
-            const names = {
-                alipay: '支付宝',
-                wxpay: '微信支付',
-                qqpay: 'QQ钱包'
-            };
-            return names[type] || '未知支付方式';
+            return getPaymentTypeName(type) || '未知支付方式';
+        }
+
+        // 插件标识 → 插件名（与 src/plugins 注册表保持一致）。
+        const PLUGIN_NAMES = {
+            alipay: '支付宝', alipay_web: '支付宝网页支付', wxpay: '微信支付',
+            qqpay: 'QQ钱包', xunhupay: '虎皮椒', dodopayments: 'DodoPayments'
+        };
+
+        function getPluginName(plugin, pluginName) {
+            if (pluginName) return pluginName;
+            if (!plugin) return '-';
+            return PLUGIN_NAMES[plugin] || plugin;
         }
 
         function getOperationActionName(action) {
@@ -3893,7 +3914,7 @@ app.get('/admin', async (c) => {
                     '<div class="detail-grid">' +
                         infoRow('支付方式', getPaymentTypeDisplayName(o.paymentTypeName, o.paymentType)) +
                         infoRow('支付通道', o.channelName || o.channelId || '-') +
-                        infoRow('插件标识', o.plugin) +
+                        infoRow('插件', getPluginName(o.plugin, o.pluginName)) +
                         infoRow('第三方交易号', o.apiTradeNo, true) +
                         infoRow('来源域名', o.domain) +
                         infoRow('设备类型', o.device) +
@@ -4177,7 +4198,7 @@ app.get('/admin', async (c) => {
                     html += '<tr>' +
                         '<td>' + escapeHtml(channel.name || '') + '</td>' +
                         '<td><i class="' + getPaymentTypeIcon(channel.paymentType) + '" style="margin-right: 4px;"></i>' + escapeHtml(channel.paymentTypeDisplay || getPaymentTypeName(channel.paymentType)) + '</td>' +
-                        '<td>' + escapeHtml(channel.plugin || '') + '</td>' +
+                        '<td>' + escapeHtml(getPluginName(channel.plugin, channel.pluginName)) + '</td>' +
                         '<td>' + ((channel.feeRate || 0) * 100).toFixed(2) + '%</td>' +
                         '<td>' + minStr + ' - ' + maxStr + '</td>' +
                         '<td>' +
@@ -6436,6 +6457,26 @@ app.get('/user', async (c) => {
 
         function formatMoney(v) { return (Number(v) || 0).toFixed(2); }
 
+        // 支付方式标识 → 展示名兜底（后端 type_name 缺失时用，避免暴露内部标识）
+        var PAY_TYPE_NAMES = {
+            alipay: '支付宝', alipay_web: '支付宝', wxpay: '微信支付', qqpay: 'QQ钱包',
+            xunhupay: '虎皮椒', dodopayments: 'DodoPayments',
+            credit: '信用卡', debit: '借记卡', apple_pay: 'Apple Pay', google_pay: 'Google Pay',
+            amazon_pay: 'Amazon Pay', cashapp: 'Cash App Pay', ach: 'ACH 直接借记',
+            klarna: 'Klarna', afterpay: 'Afterpay', clearpay: 'Clearpay', upi_intent: 'UPI',
+            ideal: 'iDEAL', bancontact_card: 'Bancontact', eps: 'EPS', multibanco: 'Multibanco',
+            blik: 'BLIK', sepa: 'SEPA 直接借记', satispay: 'Satispay', payco: 'PAYCO',
+            naver_pay: 'Naver Pay', kakao_pay: 'Kakao Pay', revolut_pay: 'RevolutPay',
+            billie: 'Billie', pix: 'Pix', crypto_currency: '稳定币', gcash: 'GCash',
+            ali_pay_hk: 'Alipay HK', fps: 'FPS', touch_n_go: "Touch 'n Go"
+        };
+        function payTypeName(typeName, type) {
+            if (typeName) return typeName;
+            if (!type) return '-';
+            var key = String(type).replace(/^pt_/, '');
+            return PAY_TYPE_NAMES[key] || PAY_TYPE_NAMES[type] || type;
+        }
+
         function formatDate(s) {
             if (!s) return '-';
             return s.replace('T', ' ').substring(0, 19);
@@ -6813,7 +6854,7 @@ app.get('/user', async (c) => {
                         '<td><code style="background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;font-size:11px;">' + escapeHtml(o.id ? o.id.substring(0, 12) + '...' : '-') + '</code></td>' +
                         '<td>' + escapeHtml(o.out_trade_no) + '</td>' +
                         '<td>' + escapeHtml(o.name || '-') + '</td>' +
-                        '<td>' + escapeHtml(o.type_name || o.payment_type) + '</td>' +
+                        '<td>' + escapeHtml(payTypeName(o.type_name, o.payment_type)) + '</td>' +
                         '<td>' + formatMoney(o.amount) + '</td>' +
                         '<td>' + getStatusBadge(o.status, 'order') + '</td>' +
                         '<td style="font-size:12px;">' + formatDate(o.created_at) + '</td>' +
@@ -6903,7 +6944,7 @@ app.get('/user', async (c) => {
 
             var payHtml =
                 '<div class="user-panel" data-panel="payment" style="display:none;grid-template-columns:1fr 1fr;gap:12px 24px;font-size:13px;">' +
-                    infoRow('支付方式', o.type_name || o.payment_type) +
+                    infoRow('支付方式', payTypeName(o.type_name, o.payment_type)) +
                     infoRow('支付通道', o.channel_id || '-') +
                     infoRow('第三方交易号', o.api_trade_no, true) +
                     infoRow('来源域名', o.domain) +
