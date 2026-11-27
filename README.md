@@ -1,6 +1,6 @@
-# Teaven Pay - Cloudflare Workers 易支付系统
+# Teaven Pay - Cloudflare Workers 聚合支付平台
 
-基于 Cloudflare Workers 构建的高性能易支付聚合支付系统，完全兼容易支付标准接口。
+基于 Cloudflare Workers 构建的高性能聚合支付平台。
 
 ---
 

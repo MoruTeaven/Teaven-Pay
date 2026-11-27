@@ -2,7 +2,7 @@
 
 ## 概述
 
-Teaven Pay 提供完全兼容易支付标准的 API 接口，支持支付宝、微信支付、QQ钱包等多种支付方式。
+Teaven Pay 提供统一的聚合支付 API 接口，支持支付宝、微信支付、QQ钱包等多种支付方式。
 
 ### 基础信息
 
@@ -31,7 +31,7 @@ Teaven Pay 提供完全兼容易支付标准的 API 接口，支持支付宝、�
 
 ### MD5 签名（已废弃）
 
-> **已废弃**：MD5 为弱哈希，且与标准易支付 MD5 拼串存在兼容差异。
+> **已废弃**：MD5 为弱哈希，且与通用支付协议 MD5 拼串存在差异。
 > 新接入商户请统一使用 HMAC-SHA256；MD5 仅保留给存量商户验签兼容，
 > 商户后台已无法新建 MD5 类型密钥。
 
@@ -720,9 +720,9 @@ app.post('/notify', (req, res) => {
 
 ```php
 <?php
-require_once 'EpaySDK.php';
+require_once 'TeavenPaySDK.php';
 
-$sdk = new EpaySDK([
+$sdk = new TeavenPaySDK([
     'pid' => '1001',
     'key' => 'your_api_key',
     'api_url' => 'https://your-domain.com'
@@ -753,9 +753,9 @@ $refund = $sdk->refund([
 ### Python SDK
 
 ```python
-from epay_sdk import EpaySDK
+from teaven_pay_sdk import TeavenPaySDK
 
-sdk = EpaySDK(
+sdk = TeavenPaySDK(
     pid='1001',
     key='your_api_key',
     api_url='https://your-domain.com'
@@ -784,7 +784,7 @@ refund = sdk.refund(
 ### Java SDK
 
 ```java
-EpaySDK sdk = new EpaySDK.Builder()
+TeavenPaySDK sdk = new TeavenPaySDK.Builder()
     .pid("1001")
     .key("your_api_key")
     .apiUrl("https://your-domain.com")

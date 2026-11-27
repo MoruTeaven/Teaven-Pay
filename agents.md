@@ -4,7 +4,7 @@
 
 ## 项目概览
 
-Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
+Teaven Pay 是基于 Cloudflare Workers 的聚合支付平台。
 
 - 运行时：Cloudflare Workers
 - Web 框架：Hono
@@ -15,7 +15,7 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 
 ## 当前目录结构
 
-- `src/index.ts`：Workers 入口，挂载全局中间件、API 路由、兼容易支付入口和内联管理后台页面
+- `src/index.ts`：Workers 入口，挂载全局中间件、API 路由、通用支付协议兼容入口和内联管理后台页面
 - `src/routes/pay.ts`：支付下单、查询、退款、关闭订单等支付 API
 - `src/routes/merchant.ts`：商户相关 API
 - `src/routes/admin.ts`：管理后台 API 和管理员登录逻辑
@@ -65,7 +65,7 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 - 商户 API：`/api/merchant/*`
 - 管理 API：`/api/admin/*`
 - 异步通知：`/notify/alipay`、`/notify/wxpay`、`/notify/qqpay`、`/notify/:plugin`
-- 易支付兼容：`POST /submit.php`、`/api.php?act=submit|query|order|orders|settle|refund|refundquery|close`
+- 通用支付协议兼容：`POST /submit.php`、`/api.php?act=submit|query|order|orders|settle|refund|refundquery|close`
 - 页面入口：`/cashier/:tradeNo`、`/result/:tradeNo`、`/admin`
 
 ## 数据库要点
@@ -121,7 +121,7 @@ Teaven Pay 是基于 Cloudflare Workers 的易支付聚合支付系统。
 3. 在 `src/plugins/index.ts` 注册插件 ID。
 4. 在迁移或种子数据中添加 `payment_types` 和 `channels` 配置。
 5. 确保回调验证失败时不会更新订单，成功回调重复到达时不会重复入账。
-6. 在 `verifyNotify()` 和 `queryOrder()` 返回值中回填实付金额 `paidAmount`（`src/types/plugin.ts`）。入账统一走 `src/utils/credit.ts` 的 `creditOrder()`：金额按「分」比对，容差 `AMOUNT_TOLERANCE_CENTS`（±0.70 元），超容差直接拒绝入账；渠道未回传金额时无法核对，会按订单额放行并写一条 `payment_logs` 的 `amount_verified=false` warning 流水——即该笔入账不经过金额核对。若插件对接的是允许买家改价的渠道（易支付类），必须回传实付金额。
+6. 在 `verifyNotify()` 和 `queryOrder()` 返回值中回填实付金额 `paidAmount`（`src/types/plugin.ts`）。入账统一走 `src/utils/credit.ts` 的 `creditOrder()`：金额按「分」比对，容差 `AMOUNT_TOLERANCE_CENTS`（±0.70 元），超容差直接拒绝入账；渠道未回传金额时无法核对，会按订单额放行并写一条 `payment_logs` 的 `amount_verified=false` warning 流水——即该笔入账不经过金额核对。若插件对接的是允许买家改价的渠道，必须回传实付金额。
 
 ## 签名与安全注意事项
 
