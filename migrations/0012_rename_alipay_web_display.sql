@@ -1,11 +1,12 @@
--- 前台展示名统一为「支付宝」：用户无需感知 AI / 网页收款等内部产品形态。
--- 修正已执行过 0011 的库（新环境 0011 已是「支付宝」，本迁移重复执行安全）。
+-- 展示名统一为「支付宝」：用户无需感知 AI / 网页收款等内部产品形态。
+-- 支付方式为单一 pt_alipay（0011 已直接复用它，不再新建重复支付方式）；
+-- 本迁移对新库是空操作，对早期执行过旧版 0011（曾创建 pt_alipay_web）的库做纠正。
 
 UPDATE payment_types
 SET display_name = '支付宝',
-    description = '支付宝网页收款（电脑网页/手机 H5）',
+    status = 1,
     updated_at = datetime('now')
-WHERE id = 'pt_alipay_web';
+WHERE id = 'pt_alipay';
 
 UPDATE channels
 SET name = '支付宝网页收款',

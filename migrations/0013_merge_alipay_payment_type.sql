@@ -18,8 +18,5 @@ WHERE id = 'pt_alipay';
 -- 3) 历史订单的支付方式归并到 pt_alipay（展示与查询保持一致）
 UPDATE orders SET payment_type = 'pt_alipay' WHERE payment_type = 'pt_alipay_web';
 
--- 4) 停用第二个支付方式（不删记录，保留历史可追溯）
-UPDATE payment_types
-SET status = 0,
-    updated_at = datetime('now')
-WHERE id = 'pt_alipay_web';
+-- 4) 删除重复的支付方式（历史订单已在第 3 步归并，无残留引用）
+DELETE FROM payment_types WHERE id = 'pt_alipay_web';

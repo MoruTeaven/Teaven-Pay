@@ -63,6 +63,9 @@ coverage/
 *.orig
 *.tmp
 
+# 一次性数据迁移备份（含生产数据快照，不入仓库）
+reports/*-backup-*.json
+
 # CI/CD
 .gitlab-ci.yml
 .travis.yml
