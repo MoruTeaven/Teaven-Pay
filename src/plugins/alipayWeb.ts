@@ -1,5 +1,5 @@
 /**
- * 支付宝 AI 付 · AI 网页应用收款插件（alipay.trade.page.pay）
+ * 支付宝网页收款插件（alipay.trade.page.pay）
  *
  * 覆盖：下单并返回自动提交表单、交易查询、退款、退款查询、关闭交易、异步通知验签。
  * 运行于 Cloudflare Workers，签名/验签走 Web Crypto（见 utils/alipayCrypto.ts）。
@@ -106,7 +106,7 @@ async function parseGatewayResponse(
 
 export class AlipayWebPlugin implements PaymentPlugin {
     id = 'alipay_web';
-    name = '支付宝AI付（网页）';
+    name = '支付宝';
     version = '1.0.0';
     supportedTypes = ['alipay_web'];
 
@@ -115,7 +115,7 @@ export class AlipayWebPlugin implements PaymentPlugin {
         try {
             const cfg = config as AlipayWebConfig;
             if (!cfg.appId || !resolvePrivateKey(cfg)) {
-                return { success: false, method: 'form', message: '支付宝AI付配置不完整' };
+                return { success: false, method: 'form', message: '支付宝配置不完整' };
             }
 
             const bizContent: Record<string, string> = {

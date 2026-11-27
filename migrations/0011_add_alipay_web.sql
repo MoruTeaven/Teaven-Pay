@@ -7,9 +7,9 @@ INSERT OR IGNORE INTO payment_types (id, name, display_name, icon, description, 
 VALUES (
     'pt_alipay_web',
     'alipay_web',
-    '支付宝AI付',
+    '支付宝',
     '/icons/alipay.svg',
-    '支付宝AI付 · AI 网页应用收款（电脑网页/手机 H5）',
+    '支付宝网页收款（电脑网页/手机 H5）',
     7,
     1
 );
@@ -18,11 +18,11 @@ INSERT OR IGNORE INTO channels (id, payment_type_id, name, plugin, config, fee_r
 VALUES (
     'ch_alipay_web',
     'pt_alipay_web',
-    '支付宝AI付网页收款',
+    '支付宝网页收款',
     'alipay_web',
     '{}',
     0.6,
     1,
     1,
-    '支付宝AI付 alipay.trade.page.pay；请在后台配置 appId/privateKey(PKCS#1)/alipayPublicKey/notifyUrl/returnUrl'
+    'alipay.trade.page.pay；请在后台配置 appId/privateKey(PKCS#1)/alipayPublicKey/notifyUrl/returnUrl'
 );
