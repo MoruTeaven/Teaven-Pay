@@ -4958,8 +4958,15 @@ app.get('/admin', async (c) => {
                     return '<option value="' + escapeHtml(p.id) + '" ' + (channelData.plugin === p.id ? 'selected' : '') + '>' + escapeHtml(p.name) + '</option>';
                 }).join('');
                 
-                var paymentTypeOptions = paymentTypes.map(function(pt) {
-                    return '<option value="' + escapeHtml(pt.id) + '" ' + (channelData.paymentTypeId === pt.id ? 'selected' : '') + '>' + escapeHtml(pt.displayName || pt.name) + '</option>';
+                // 通道只能挂到启用中的支付方式；停用的（如历史 QQ钱包/云闪付/京东支付）
+                // 不应出现在下拉里。编辑已有通道时，其当前支付方式即使在分类里也保留，
+                // 避免一打开编辑框就把原值丢了。
+                var paymentTypeOptions = paymentTypes.filter(function(pt) {
+                    return pt.status === 1 || pt.id === channelData.paymentTypeId;
+                }).map(function(pt) {
+                    var label = escapeHtml(pt.displayName || pt.name);
+                    if (pt.status !== 1) label += '（已停用）';
+                    return '<option value="' + escapeHtml(pt.id) + '" ' + (channelData.paymentTypeId === pt.id ? 'selected' : '') + '>' + label + '</option>';
                 }).join('');
                 
                 var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
@@ -5302,8 +5309,8 @@ app.get('/admin', async (c) => {
             paymentTypeSelect.innerHTML = '<option value="">请选择支付方式</option>';
             
             if (!pluginId) {
-                // 如果没有选择插件，显示所有支付方式
-                window._paymentTypes.forEach(function(pt) {
+                // 如果没有选择插件，显示所有启用中的支付方式
+                window._paymentTypes.filter(function(pt) { return pt.status === 1; }).forEach(function(pt) {
                     var option = document.createElement('option');
                     option.value = pt.id;
                     option.textContent = pt.displayName || pt.name;
@@ -5317,8 +5324,8 @@ app.get('/admin', async (c) => {
             var selectedPlugin = window._pluginOptions.find(function(p) { return p.id === pluginId; });
             if (!selectedPlugin || !selectedPlugin.supportedTypes) return;
             
-            // 根据插件支持的支付方式过滤
-            window._paymentTypes.forEach(function(pt) {
+            // 根据插件支持的支付方式过滤（同样只列启用中的）
+            window._paymentTypes.filter(function(pt) { return pt.status === 1; }).forEach(function(pt) {
                 if (selectedPlugin.supportedTypes.includes(pt.name)) {
                     var option = document.createElement('option');
                     option.value = pt.id;
