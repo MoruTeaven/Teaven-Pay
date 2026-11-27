@@ -46,7 +46,7 @@
 | Billie | `billie` | 企业先买后付（B2B） |
 | Pix | `pix` | 巴西即时银行转账 |
 | 稳定币 | `crypto_currency` | 稳定币支付，USD 结算 |
-| WeChat Pay（Dodo） | `we_chat_pay` | 面向海外用户的微信支付，USD / CNY |
+| WeChat Pay | `we_chat_pay` | 微信扫码支付，USD / CNY，单笔上限 1000 CNY |
 | GCash | `gcash` | 菲律宾电子钱包 |
 | Alipay HK | `ali_pay_hk` | 香港支付宝，HKD 结算 |
 | FPS | `fps` | 香港快速支付系统 |

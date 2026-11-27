@@ -48,7 +48,7 @@ export const DODO_PAYMENT_METHODS: readonly DodoPaymentMethod[] = [
     { code: 'billie', displayName: 'Billie', description: '企业先买后付（B2B）' },
     { code: 'pix', displayName: 'Pix', description: '巴西即时银行转账' },
     { code: 'crypto_currency', displayName: '稳定币', description: '稳定币支付，以 USD 结算' },
-    { code: 'we_chat_pay', displayName: 'WeChat Pay（Dodo）', description: '面向海外用户的微信支付，支持 USD / CNY' },
+    { code: 'we_chat_pay', displayName: 'WeChat Pay', description: '微信扫码支付，支持 USD / CNY，单笔上限 1000 CNY' },
     { code: 'gcash', displayName: 'GCash', description: '菲律宾电子钱包' },
     { code: 'ali_pay_hk', displayName: 'Alipay HK', description: '香港支付宝，以 HKD 结算' },
     { code: 'fps', displayName: 'FPS', description: '香港快速支付系统' },
