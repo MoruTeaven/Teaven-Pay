@@ -106,8 +106,9 @@ async function parseGatewayResponse(
 
 export class AlipayWebPlugin implements PaymentPlugin {
     id = 'alipay_web';
-    // 插件名保留 AI 网页支付以和老的支付宝 APP 插件区分（前台支付方式名仍只显示「支付宝」）
-    name = '支付宝AI网页支付';
+    // 通道名按实际接口 alipay.trade.page.pay（电脑网站支付）命名；
+    // 前台支付方式名仍只显示「支付宝」，这里仅后台通道下拉可辨识。
+    name = '支付宝网页支付';
     version = '1.0.0';
     // 支付方式已合并为单一的 alipay；保留 alipay_web 以兼容旧通道/旧订单标识
     supportedTypes = ['alipay', 'alipay_web'];

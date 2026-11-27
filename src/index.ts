@@ -830,7 +830,7 @@ app.get('/pay/:merchantId', async (c) => {
                 var data = await res.json();
 
                 if (data.code === 1) {
-                    // 表单跳转类支付（如支付宝AI付网页收款）：服务端返回需渲染并自动提交的
+                    // 表单跳转类支付（如支付宝网页收款）：服务端返回需渲染并自动提交的
                     // HTML form。禁止用 window.location.href 直接跳转表单字符串——那样浏览器
                     // 只会显示一串参数，无法唤起收银台。
                     if (data.formHtml) {

@@ -523,7 +523,7 @@ merchantRouter.post('/orders/:id/close', async (c) => {
             return c.json({ code: -1, msg: '该订单无法关闭' });
         }
 
-        // 同步关闭渠道侧未付款交易（可选接口，如支付宝AI付 alipay.trade.close）。
+        // 同步关闭渠道侧未付款交易（可选接口，如支付宝网页支付 alipay.trade.close）。
         // 渠道异常只记日志，不阻断本地关单状态翻转。
         if ((order as any).plugin && (order as any).channel_id) {
             try {

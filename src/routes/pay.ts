@@ -306,7 +306,7 @@ payRouter.post('/submit', async (c) => {
             trade_no: tradeNo,
             payurl: payResult.payUrl || `${siteUrl}/cashier/${tradeNo}`,
             qrcode: payResult.qrcode,
-            // 表单跳转类插件（如支付宝AI付网页收款）返回需渲染并自动提交的 HTML form。
+            // 表单跳转类插件（如支付宝网页收款）返回需渲染并自动提交的 HTML form。
             // 不能改成 URL 跳转，否则浏览器只会显示表单参数。
             formHtml: payResult.formHtml,
             method: payResult.method
@@ -496,7 +496,7 @@ payRouter.post('/cashier', async (c) => {
             trade_no: tradeNo,
             payurl: payResult.payUrl || `${siteUrl}/cashier/${tradeNo}`,
             qrcode: payResult.qrcode,
-            // 表单跳转类插件（如支付宝AI付网页收款）返回需渲染并自动提交的 HTML form。
+            // 表单跳转类插件（如支付宝网页收款）返回需渲染并自动提交的 HTML form。
             formHtml: payResult.formHtml,
             method: payResult.method
         });
@@ -1343,7 +1343,7 @@ payRouter.post('/close', async (c) => {
             return c.json({ code: -1, msg: '订单状态不允许关闭' });
         }
 
-        // 同步关闭渠道侧未付款交易（可选接口，如支付宝AI付 alipay.trade.close）。
+        // 同步关闭渠道侧未付款交易（可选接口，如支付宝网页支付 alipay.trade.close）。
         // 渠道关单失败只记日志、不阻断本地关单：本地状态翻转仍以 CAS 为准，
         // 避免渠道抖动导致本地订单永远关不掉。
         if (order.plugin && order.channel_id) {
