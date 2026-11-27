@@ -142,11 +142,17 @@ export class AlipayWebPlugin implements PaymentPlugin {
             if (cfg.returnUrl) params.return_url = cfg.returnUrl;
             params.sign = await alipaySign(params, resolvePrivateKey(cfg));
 
-            const inputs = Object.entries(params)
+            // 支付宝 POST 表单：charset 必须放在 action 的 URL 查询字符串中，
+            // 网关需先据此字符集解码 body 里的中文参数（subject/biz_content）才能正确验签。
+            // 若 charset 只在 body 里，中文会按默认编码解码导致 invalid-signature。
+            // 签名串里 charset=utf-8 仍参与（见上方 params），此处只调整提交位置。
+            const { charset, ...bodyParams } = params;
+            const inputs = Object.entries(bodyParams)
                 .map(([k, v]) => `<input type="hidden" name="${escHtml(k)}" value="${escHtml(v)}">`)
                 .join('\n');
+            const actionUrl = `${gatewayOf(cfg)}?charset=${encodeURIComponent(charset)}`;
             const formHtml =
-                `<form id="alipay_web_pay_form" name="punchout_form" method="post" action="${escHtml(gatewayOf(cfg))}">\n` +
+                `<form id="alipay_web_pay_form" name="punchout_form" method="post" action="${escHtml(actionUrl)}">\n` +
                 `${inputs}\n` +
                 `<input type="submit" value="立即支付" style="display:none">\n` +
                 `</form>\n` +

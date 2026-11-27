@@ -79,4 +79,14 @@ describe('AlipayWebPlugin 下单', () => {
         expect(html).toContain('name="sign"');
         expect(html).toContain('.submit()');            // 自动提交表单
     });
+
+    it('charset 放在 action 的 URL 上，body 里不能有（否则中文参数验签失败）', async () => {
+        const plugin = new AlipayWebPlugin();
+        const result = await plugin.createPayment(order, config);
+        const html = result.formHtml || '';
+        // action 形如 gateway.do?charset=utf-8
+        expect(html).toMatch(/action="[^"]*gateway\.do\?charset=utf-8"/);
+        // body 隐藏字段里不再有 charset
+        expect(html).not.toContain('name="charset"');
+    });
 });
