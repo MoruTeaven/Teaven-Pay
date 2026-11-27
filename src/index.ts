@@ -2335,11 +2335,11 @@ app.get('/admin', async (c) => {
                             <i class="ri-arrow-down-s-line"></i>
                         </button>
                         <div class="user-menu-dropdown">
-                            <a href="#" class="dropdown-item">
+                            <a href="#" class="dropdown-item" data-action="account-settings" onclick="showAccountSettings(); return false;">
                                 <i class="ri-user-line"></i>
                                 <span>个人信息</span>
                             </a>
-                            <a href="#" class="dropdown-item">
+                            <a href="#" class="dropdown-item" data-action="account-settings" onclick="showAccountSettings(); return false;">
                                 <i class="ri-settings-3-line"></i>
                                 <span>账号设置</span>
                             </a>
@@ -2922,6 +2922,59 @@ app.get('/admin', async (c) => {
                 } catch (error) {
                     console.error('获取操作日志失败:', error);
                     return { data: [] };
+                }
+            },
+
+            // 获取当前管理员资料
+            async getProfile() {
+                try {
+                    const response = await this.request('/api/admin/profile');
+                    const data = await response.json();
+                    if (data.code === 0) {
+                        return { success: true, data: data.data };
+                    }
+                    throw new Error(data.msg || '获取账号信息失败');
+                } catch (error) {
+                    console.error('获取账号信息失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
+            // 更新当前管理员资料（用户名 / 邮箱）
+            async updateProfile(profileData) {
+                try {
+                    const response = await this.request('/api/admin/profile', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams(profileData)
+                    });
+                    const data = await response.json();
+                    if (data.code === 0) {
+                        return { success: true, data: data.data, message: data.msg };
+                    }
+                    throw new Error(data.msg || '保存账号信息失败');
+                } catch (error) {
+                    console.error('保存账号信息失败:', error);
+                    return { success: false, message: error.message };
+                }
+            },
+
+            // 修改当前管理员密码
+            async changeAdminPassword(oldPassword, newPassword) {
+                try {
+                    const response = await this.request('/api/admin/password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ old_password: oldPassword, new_password: newPassword })
+                    });
+                    const data = await response.json();
+                    if (data.code === 0) {
+                        return { success: true, message: data.msg };
+                    }
+                    throw new Error(data.msg || '修改密码失败');
+                } catch (error) {
+                    console.error('修改密码失败:', error);
+                    return { success: false, message: error.message };
                 }
             }
         };
@@ -5118,6 +5171,97 @@ app.get('/admin', async (c) => {
             if (overlay) {
                 overlay.classList.remove('active');
                 setTimeout(function() { overlay.remove(); }, 300);
+            }
+        }
+
+        // 打开管理员账号设置弹窗
+        async function showAccountSettings() {
+            var result = await api.getProfile();
+            if (!result.success) {
+                showToast('error', '获取失败', result.message || '账号信息加载失败');
+                return;
+            }
+            var u = result.data;
+
+            var modalHTML = '<div class="modal-overlay" id="modalOverlay">' +
+                '<div class="modal">' +
+                '    <div class="modal-header">' +
+                '        <span class="modal-title">账号设置</span>' +
+                '        <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>' +
+                '    </div>' +
+                '    <div class="modal-body">' +
+                '        <div class="form-group"><label class="form-label">用户名</label><input type="text" class="form-input" id="adminUsername" value="' + escapeHtml(u.username || '') + '" placeholder="请输入用户名"></div>' +
+                '        <div class="form-group"><label class="form-label">邮箱</label><input type="email" class="form-input" id="adminEmail" value="' + escapeHtml(u.email || '') + '" placeholder="请输入邮箱"></div>' +
+                '        <div class="form-hint" style="margin-bottom:16px;">修改用户名后需要重新登录，当前登录状态仍可继续使用。</div>' +
+                '        <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:8px;">' +
+                '            <div class="form-group"><label class="form-label">当前密码</label><input type="password" class="form-input" id="adminOldPwd" placeholder="请输入当前密码"></div>' +
+                '            <div class="form-group"><label class="form-label">新密码</label><input type="password" class="form-input" id="adminNewPwd" placeholder="请输入新密码（不少于6位）"></div>' +
+                '            <div class="form-hint">如不修改密码，请留空上面两项。</div>' +
+                '        </div>' +
+                '    </div>' +
+                '    <div class="modal-footer">' +
+                '        <button class="btn btn-secondary" onclick="closeModal()">取消</button>' +
+                '        <button class="btn btn-primary" id="accountSaveBtn" onclick="saveAccountSettings()">保存</button>' +
+                '    </div>' +
+                '</div>' +
+                '</div>';
+
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            setTimeout(function() {
+                var overlay = document.getElementById('modalOverlay');
+                if (overlay) overlay.classList.add('active');
+            }, 10);
+        }
+
+        // 保存管理员账号设置
+        async function saveAccountSettings() {
+            var username = document.getElementById('adminUsername').value.trim();
+            var email = document.getElementById('adminEmail').value.trim();
+            var oldPwd = document.getElementById('adminOldPwd').value;
+            var newPwd = document.getElementById('adminNewPwd').value;
+
+            if (!username || !email) {
+                showToast('error', '保存失败', '用户名和邮箱不能为空');
+                return;
+            }
+            if ((oldPwd && !newPwd) || (!oldPwd && newPwd)) {
+                showToast('error', '保存失败', '请同时填写当前密码和新密码');
+                return;
+            }
+            if (newPwd && newPwd.length < 6) {
+                showToast('error', '保存失败', '新密码长度不能少于6位');
+                return;
+            }
+
+            var btn = document.getElementById('accountSaveBtn');
+            if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+
+            try {
+                // 先保存用户名 / 邮箱
+                var profileRes = await api.updateProfile({ username: username, email: email });
+                if (!profileRes.success) {
+                    showToast('error', '保存失败', profileRes.message || '账号信息保存失败');
+                    return;
+                }
+                // 用户名变更后后端会重新签发 token，同步本地登录态
+                if (profileRes.data && profileRes.data.token) {
+                    setAuth(profileRes.data.token, profileRes.data.user);
+                    updateUserDisplay();
+                }
+
+                // 如填写了密码则一并修改
+                if (oldPwd && newPwd) {
+                    var pwdRes = await api.changeAdminPassword(oldPwd, newPwd);
+                    if (!pwdRes.success) {
+                        showToast('warning', '部分保存', '账号信息已保存，但密码修改失败：' + (pwdRes.message || '未知错误'));
+                        return;
+                    }
+                }
+
+                showToast('success', '保存成功', '账号信息已更新');
+                closeModal();
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '保存'; }
             }
         }
 

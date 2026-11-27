@@ -93,6 +93,198 @@ adminRouter.post('/login', async (c) => {
 adminRouter.use('*', authMiddleware);
 adminRouter.use('*', adminMiddleware);
 
+/** 简化 RFC 5322 邮箱校验，避免存储型 XSS 载荷入库 */
+const ADMIN_EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+
+/**
+ * 获取当前管理员资料
+ * GET /api/admin/profile
+ */
+adminRouter.get('/profile', async (c) => {
+    const payload = c.get('user') as any;
+
+    try {
+        const user = await c.env.DB.prepare(
+            'SELECT id, username, email, status, role, last_login_at, last_login_ip, created_at FROM users WHERE id = ? AND role = ?'
+        ).bind(payload.id, 'admin').first();
+
+        if (!user) {
+            return c.json({ code: -2, msg: '管理员账号不存在' }, 401);
+        }
+
+        const u = user as any;
+        return c.json({
+            code: 0,
+            msg: 'success',
+            data: {
+                id: u.id,
+                username: u.username,
+                email: u.email || '',
+                status: u.status,
+                role: u.role,
+                last_login_at: u.last_login_at,
+                last_login_ip: u.last_login_ip,
+                created_at: u.created_at,
+            }
+        });
+    } catch (error) {
+        console.error('Get admin profile error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 更新当前管理员资料（用户名 / 邮箱）
+ * PUT /api/admin/profile
+ *
+ * 用户名会写入 JWT 的 username 声明，改完后重新签发 token 返回，
+ * 前端据此更新本地登录态，避免顶栏显示旧用户名。
+ */
+adminRouter.put('/profile', async (c) => {
+    const payload = c.get('user') as any;
+    const body = await c.req.parseBody();
+
+    const allowedFields: Record<string, string> = {};
+    if (body.username !== undefined) allowedFields.username = (body.username as string).trim();
+    if (body.email !== undefined) allowedFields.email = (body.email as string).trim();
+
+    if (Object.keys(allowedFields).length === 0) {
+        return c.json({ code: -1, msg: '没有需要更新的字段' });
+    }
+
+    if (allowedFields.username !== undefined) {
+        const name = allowedFields.username;
+        if (!name || name.length < 2 || name.length > 32) {
+            return c.json({ code: -1, msg: '用户名长度需为 2-32 位' });
+        }
+    }
+
+    if (allowedFields.email !== undefined && !ADMIN_EMAIL_RE.test(allowedFields.email)) {
+        return c.json({ code: -1, msg: '邮箱格式不正确' });
+    }
+
+    try {
+        const current = await c.env.DB.prepare(
+            'SELECT id, username, status FROM users WHERE id = ? AND role = ?'
+        ).bind(payload.id, 'admin').first();
+
+        if (!current) {
+            return c.json({ code: -2, msg: '管理员账号不存在' }, 401);
+        }
+        if ((current as any).status !== 1) {
+            return c.json({ code: -2, msg: '账号已被禁用' });
+        }
+
+        // 唯一性校验（排除自身）
+        if (allowedFields.username !== undefined && allowedFields.username !== (current as any).username) {
+            const dup = await c.env.DB.prepare(
+                'SELECT id FROM users WHERE username = ? AND id != ?'
+            ).bind(allowedFields.username, payload.id).first();
+            if (dup) {
+                return c.json({ code: -1, msg: '该用户名已被使用' });
+            }
+        }
+        if (allowedFields.email !== undefined) {
+            const dup = await c.env.DB.prepare(
+                'SELECT id FROM users WHERE email = ? AND id != ?'
+            ).bind(allowedFields.email, payload.id).first();
+            if (dup) {
+                return c.json({ code: -1, msg: '该邮箱已被使用' });
+            }
+        }
+
+        const sets = Object.keys(allowedFields).map(k => `${k} = ?`).join(', ');
+        await c.env.DB.prepare(
+            `UPDATE users SET ${sets}, updated_at = datetime('now') WHERE id = ? AND role = 'admin'`
+        ).bind(...Object.values(allowedFields), payload.id).run();
+
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'admin_update_profile',
+            target: payload.id,
+            detail: { fields: Object.keys(allowedFields) },
+            ...getRequestLogMeta(c.req.raw),
+        });
+
+        // 用户名变更后重新签发 token，保持登录态并同步顶栏显示
+        const newUsername = allowedFields.username ?? (current as any).username;
+        let token: string | undefined;
+        if (allowedFields.username !== undefined && allowedFields.username !== (current as any).username) {
+            const secret = resolveJwtSecret(c.env);
+            token = await signJWT({ id: payload.id, username: newUsername, role: 'admin' }, secret, 86400);
+        }
+
+        return c.json({
+            code: 0,
+            msg: '资料更新成功',
+            data: {
+                token,
+                user: { id: payload.id, username: newUsername, role: 'admin' },
+            }
+        });
+    } catch (error) {
+        if (isJwtSecretMissingError(error)) {
+            return c.json({ code: -5, msg: JWT_SECRET_MISSING_MSG }, 500);
+        }
+        console.error('Update admin profile error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
+/**
+ * 修改当前管理员密码
+ * POST /api/admin/password
+ */
+adminRouter.post('/password', async (c) => {
+    const payload = c.get('user') as any;
+    const body = await c.req.parseBody();
+
+    const oldPassword = body.old_password as string;
+    const newPassword = body.new_password as string;
+
+    if (!oldPassword || !newPassword) {
+        return c.json({ code: -1, msg: '请输入当前密码和新密码' });
+    }
+    if (newPassword.length < 6) {
+        return c.json({ code: -1, msg: '新密码长度不能少于6位' });
+    }
+
+    try {
+        const user = await c.env.DB.prepare(
+            'SELECT * FROM users WHERE id = ? AND role = ?'
+        ).bind(payload.id, 'admin').first();
+
+        if (!user) {
+            return c.json({ code: -2, msg: '管理员账号不存在' }, 401);
+        }
+
+        const isValid = await verifyPassword(oldPassword, (user as any).password_hash, (user as any).salt);
+        if (!isValid) {
+            return c.json({ code: -1, msg: '当前密码错误' });
+        }
+
+        const { hash, salt } = await hashPassword(newPassword);
+        await c.env.DB.prepare(
+            'UPDATE users SET password_hash = ?, salt = ?, updated_at = datetime(\'now\') WHERE id = ? AND role = ?'
+        ).bind(hash, salt, payload.id, 'admin').run();
+
+        const admin = c.get('user') as any;
+        await logAuditEvent(c.env, {
+            userId: payload.id,
+            action: 'admin_change_password',
+            target: payload.id,
+            detail: {},
+            ...getRequestLogMeta(c.req.raw),
+        });
+
+        return c.json({ code: 0, msg: '密码修改成功' });
+    } catch (error) {
+        console.error('Change admin password error:', error);
+        return c.json({ code: -5, msg: '系统错误' }, 500);
+    }
+});
+
 /**
  * 获取系统统计
  * GET /api/admin/stats
