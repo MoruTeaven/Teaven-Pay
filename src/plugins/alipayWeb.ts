@@ -13,7 +13,8 @@ import {
     NotifyResult,
     OrderStatus,
     RefundResult,
-    RefundStatus
+    RefundStatus,
+    DeliveryType
 } from '../types/plugin';
 import {
     alipaySign,
@@ -112,6 +113,7 @@ export class AlipayWebPlugin implements PaymentPlugin {
     version = '1.0.0';
     // 支付方式已合并为单一的 alipay；保留 alipay_web 以兼容旧通道/旧订单标识
     supportedTypes = ['alipay', 'alipay_web'];
+    capabilities: DeliveryType[] = ['form'];
 
     /** 下单：alipay.trade.page.pay，返回需渲染并自动提交的 HTML 表单 */
     async createPayment(order: OrderInfo, config: PluginConfig): Promise<PaymentResult> {

@@ -61,6 +61,14 @@ export interface PluginConfig {
 }
 
 /**
+ * 对外交付类型
+ *
+ * 与插件内部 method 的区别：内部 jump 对外统一为 link；
+ * 且一个 jump 插件若同时返回 qrcode，对外判为 qrcode。
+ */
+export type DeliveryType = 'qrcode' | 'link' | 'form' | 'jsapi';
+
+/**
  * 支付结果
  */
 export interface PaymentResult {
@@ -222,6 +230,13 @@ export interface PaymentPlugin {
     
     /** 支持的支付方式列表 */
     supportedTypes: string[];
+
+    /**
+     * 对外可交付类型（能力声明）。
+     * /api/pay/types 按支付方式聚合其下启用通道的 capabilities 取并集；
+     * 下单时按 expected_type 从声明了该能力的通道中挑选。
+     */
+    capabilities: DeliveryType[];
     
     /** 
      * 创建支付订单

@@ -10,7 +10,8 @@ import {
     NotifyResult,
     OrderStatus,
     RefundResult,
-    RefundStatus
+    RefundStatus,
+    DeliveryType
 } from '../types/plugin';
 
 export class QQPayPlugin implements PaymentPlugin {
@@ -18,6 +19,7 @@ export class QQPayPlugin implements PaymentPlugin {
     name = 'QQ钱包';
     version = '1.0.0';
     supportedTypes = ['qqpay'];
+    capabilities: DeliveryType[] = [];
     
     /**
      * 创建支付订单

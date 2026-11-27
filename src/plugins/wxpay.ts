@@ -11,7 +11,8 @@ import {
     OrderStatus,
     RefundResult,
     RefundStatus,
-    JsapiParams
+    JsapiParams,
+    DeliveryType
 } from '../types/plugin';
 import { rsaSign, generateNonce, x509CertToPublicKey, x509CertValidity } from '../utils/crypto';
 import { generateRefundNo } from '../utils/uuid';
@@ -35,6 +36,7 @@ export class WxpayPlugin implements PaymentPlugin {
     name = '微信支付';
     version = '1.0.0';
     supportedTypes = ['wxpay'];
+    capabilities: DeliveryType[] = ['jsapi'];
     
     private apiBase = 'https://api.mch.weixin.qq.com';
 

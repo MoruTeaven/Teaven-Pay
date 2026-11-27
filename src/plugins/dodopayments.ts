@@ -1,4 +1,4 @@
-﻿/**
+/**
  * DodoPayments 支付插件（一次性支付 / hosted checkout）
  *
  * 官方文档：https://docs.dodopayments.com
@@ -24,7 +24,8 @@ import {
     NotifyResult,
     OrderStatus,
     RefundResult,
-    RefundStatus
+    RefundStatus,
+    DeliveryType
 } from '../types/plugin';
 import { generateRefundNo } from '../utils/uuid';
 import { timingSafeEqual } from '../utils/constantTime';
@@ -220,6 +221,7 @@ export class DodoPaymentsPlugin implements PaymentPlugin {
      * 下单只取 sort_order 最小的一条，需自行调整以免走错渠道。
      */
     supportedTypes = [...DODO_PAYMENT_TYPE_NAMES, 'wxpay'];
+    capabilities: DeliveryType[] = ['link'];
 
     private request(config: DodoConfig, path: string, init?: RequestInit): Promise<Response> {
         const apiKey = resolveApiKey(config);

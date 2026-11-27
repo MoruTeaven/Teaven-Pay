@@ -10,7 +10,8 @@ import {
     NotifyResult,
     OrderStatus,
     RefundResult,
-    RefundStatus
+    RefundStatus,
+    DeliveryType
 } from '../types/plugin';
 import { rsaSign, rsaVerify } from '../utils/crypto';
 import { generateRefundNo } from '../utils/uuid';
@@ -20,6 +21,7 @@ export class AlipayPlugin implements PaymentPlugin {
     name = '支付宝';
     version = '1.0.0';
     supportedTypes = ['alipay'];
+    capabilities: DeliveryType[] = ['link'];
     
     private apiBase = 'https://openapi.alipay.com/gateway.do';
     

@@ -11,7 +11,8 @@ import { authorizeKeyOrSign, authorizeSignedRequest, getPrimaryApiKey, listActiv
 import { isSafeOutboundUrl } from '../utils/netSecurity';
 import { verifyOrderStatusToken } from '../utils/orderStatusAuth';
 import { getPlugin } from '../plugins';
-import type { PluginConfig, RefundResult } from '../types/plugin';
+import type { PluginConfig, RefundResult, DeliveryType } from '../types/plugin';
+import { isDeliveryType, resolveDeliveryType } from '../utils/deliveryType';
 import { getSiteUrl } from '../utils/site';
 import { getRequestLogMeta, logOrderEvent, logPaymentEvent } from '../utils/logging';
 import { CREDIT_OUTCOME, CREDIT_SOURCE, creditOrder } from '../utils/credit';
@@ -52,6 +53,39 @@ async function persistExternalTradeNo(env: Env, tradeNo: string, externalNo?: st
 export function normalizePaymentType(type: string): string {
     if (type === 'alipay_web' || type === 'pt_alipay_web') return 'pt_alipay';
     return type;
+}
+
+/**
+ * 从某支付方式下的启用通道中，挑一个能交付 expectedType 的通道。
+ *
+ * 查询按 sort_order 升序返回，取第一个插件 capabilities 含该类型的通道；
+ * 找不到时返回 null，由调用方降级到默认通道（ORDER BY sort_order LIMIT 1）。
+ * getPlugin 对未知插件会抛错，这里逐个兜住，避免一条脏通道拖垮整笔下单。
+ */
+async function pickChannelByCapability(
+    env: Env,
+    paymentType: string,
+    expectedType: DeliveryType
+): Promise<any | null> {
+    let channels: any[];
+    try {
+        const result = await env.DB.prepare(
+            'SELECT * FROM channels WHERE payment_type_id = ? AND status = 1 ORDER BY sort_order ASC'
+        ).bind(paymentType).all();
+        channels = (result?.results || []) as any[];
+    } catch {
+        return null;
+    }
+
+    for (const channel of channels) {
+        try {
+            const plugin = getPlugin(channel.plugin);
+            if (plugin.capabilities?.includes(expectedType)) return channel;
+        } catch {
+            // 脏通道（插件不存在）：跳过，继续找下一条
+        }
+    }
+    return null;
 }
 
 /** 订单状态接口的认证结果 */
@@ -144,6 +178,10 @@ payRouter.post('/submit', async (c) => {
     const param = (body.param as string) || '';
     const clientIp = (body.clientip as string) || '127.0.0.1';
     const device = (body.device as string) || 'pc';
+    // 预期交付类型（可选、不参与签名）：软件从 /api/pay/types 得知能力后指定，
+    // 服务端据此挑通道；非法值按未指定处理，找不到匹配通道则降级到默认通道。
+    const expectedTypeRaw = body.expected_type as string | undefined;
+    const expectedType = isDeliveryType(expectedTypeRaw) ? expectedTypeRaw : undefined;
     
     // 参数验证
     if (!pid) return c.json({ code: -1, msg: '商户ID不能为空' });
@@ -202,14 +240,18 @@ payRouter.post('/submit', async (c) => {
                 code: 1,
                 msg: '创建订单成功',
                 trade_no: existingOrder.id,
+                type: 'link',
                 payurl: `${siteUrl}/cashier/${existingOrder.id}`
             });
         }
         
-        // 获取支付通道
-        const channel = await env.DB.prepare(
-            'SELECT * FROM channels WHERE payment_type_id = ? AND status = 1 ORDER BY sort_order LIMIT 1'
-        ).bind(paymentType).first();
+        // 获取支付通道：有预期类型时优先挑能交付该类型的通道，找不到则降级到默认通道
+        let channel = expectedType ? await pickChannelByCapability(env, paymentType, expectedType) : null;
+        if (!channel) {
+            channel = await env.DB.prepare(
+                'SELECT * FROM channels WHERE payment_type_id = ? AND status = 1 ORDER BY sort_order LIMIT 1'
+            ).bind(paymentType).first();
+        }
         
         if (!channel) {
             return c.json({ code: -1, msg: '暂不支持该支付方式' });
@@ -304,8 +346,13 @@ payRouter.post('/submit', async (c) => {
             code: 1,
             msg: '创建订单成功',
             trade_no: tradeNo,
+            // type = 实际交付类型，软件据此决定渲染二维码/链接/表单/JSAPI。
+            // 可能不同于 expected_type（找不到匹配通道时降级）。
+            type: resolveDeliveryType(payResult),
             payurl: payResult.payUrl || `${siteUrl}/cashier/${tradeNo}`,
             qrcode: payResult.qrcode,
+            qrcodeUrl: payResult.qrcodeUrl,
+            jsapiParams: payResult.jsapiParams,
             // 表单跳转类插件（如支付宝网页收款）返回需渲染并自动提交的 HTML form。
             // 不能改成 URL 跳转，否则浏览器只会显示表单参数。
             formHtml: payResult.formHtml,
@@ -342,6 +389,10 @@ payRouter.post('/cashier', async (c) => {
     const ticket = body.ticket as string;
     const timestamp = body.timestamp as string;
     const sign = body.sign as string;
+    // 预期交付类型（可选、不参与签名）：签名串由 verifyCashierSign 按固定字段拼装，
+    // 本字段不进入签名，兼容存量客户端。
+    const expectedTypeRaw = body.expected_type as string | undefined;
+    const expectedType = isDeliveryType(expectedTypeRaw) ? expectedTypeRaw : undefined;
 
     if (!merchantId) return c.json({ code: -1, msg: '商户ID不能为空' });
     if (!amountStr) return c.json({ code: -1, msg: '金额不能为空' });
@@ -402,9 +453,13 @@ payRouter.post('/cashier', async (c) => {
             return c.json({ code: -2, msg: '签名验证失败' });
         }
 
-        const channel = await env.DB.prepare(
-            'SELECT * FROM channels WHERE payment_type_id = ? AND status = 1 ORDER BY sort_order LIMIT 1'
-        ).bind(paymentType).first();
+        // 与 /submit 一致：有预期类型时优先挑能交付的通道，找不到则降级到默认通道
+        let channel = expectedType ? await pickChannelByCapability(env, paymentType, expectedType) : null;
+        if (!channel) {
+            channel = await env.DB.prepare(
+                'SELECT * FROM channels WHERE payment_type_id = ? AND status = 1 ORDER BY sort_order LIMIT 1'
+            ).bind(paymentType).first();
+        }
 
         if (!channel) return c.json({ code: -1, msg: '暂不支持该支付方式' });
 
@@ -494,8 +549,11 @@ payRouter.post('/cashier', async (c) => {
             code: 1,
             msg: '创建订单成功',
             trade_no: tradeNo,
+            type: resolveDeliveryType(payResult),
             payurl: payResult.payUrl || `${siteUrl}/cashier/${tradeNo}`,
             qrcode: payResult.qrcode,
+            qrcodeUrl: payResult.qrcodeUrl,
+            jsapiParams: payResult.jsapiParams,
             // 表单跳转类插件（如支付宝网页收款）返回需渲染并自动提交的 HTML form。
             formHtml: payResult.formHtml,
             method: payResult.method
@@ -1409,16 +1467,43 @@ payRouter.get('/types', async (c) => {
             'SELECT id, name, display_name, icon, sort_order FROM payment_types WHERE status = 1 ORDER BY sort_order ASC'
         ).all();
 
-        return c.json({
-            code: 1,
-            msg: '获取支付方式列表成功',
-            data: paymentTypes.results.map((type: any) => ({
+        // 查询所有启用通道，用于聚合每个支付方式能交付的类型。
+        // capabilities 由插件静态声明：某支付方式下任一启用通道的插件支持某类型，
+        // 则该支付方式对外就声明该类型。新增支持 qrcode 的通道后列表会自动出现。
+        const channels = await env.DB.prepare(
+            'SELECT payment_type_id, plugin FROM channels WHERE status = 1'
+        ).all();
+        const channelsByType = new Map<string, string[]>();
+        for (const row of (channels.results || []) as any[]) {
+            const list = channelsByType.get(row.payment_type_id) || [];
+            list.push(row.plugin);
+            channelsByType.set(row.payment_type_id, list);
+        }
+
+        const data = paymentTypes.results.map((type: any) => {
+            const caps = new Set<DeliveryType>();
+            for (const pluginId of channelsByType.get(type.id) || []) {
+                try {
+                    for (const cap of getPlugin(pluginId).capabilities || []) caps.add(cap);
+                } catch {
+                    // 脏通道（插件不存在）：忽略其能力声明
+                }
+            }
+            return {
                 id: type.id,
                 name: type.name,
                 display_name: type.display_name,
                 icon: type.icon,
-                sort_order: type.sort_order
-            }))
+                sort_order: type.sort_order,
+                // 该支付方式支持的下单方式（去重、按固定顺序），供软件选择 expected_type
+                capabilities: (['qrcode', 'link', 'form', 'jsapi'] as DeliveryType[]).filter((t) => caps.has(t))
+            };
+        });
+
+        return c.json({
+            code: 1,
+            msg: '获取支付方式列表成功',
+            data
         });
     } catch (error) {
         console.error('Get payment types error:', error);

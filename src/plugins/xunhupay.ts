@@ -10,7 +10,8 @@ import {
     NotifyResult,
     OrderStatus,
     RefundResult,
-    RefundStatus
+    RefundStatus,
+    DeliveryType
 } from '../types/plugin';
 import { generateNonce } from '../utils/crypto';
 import { generateRefundNo } from '../utils/uuid';
@@ -21,6 +22,8 @@ export class XunhupayPlugin implements PaymentPlugin {
     name = '虎皮椒';
     version = '1.0.0';
     supportedTypes = ['alipay', 'wxpay'];
+    // 虎皮椒同时返回 url_qrcode 与 url，既能出二维码也能给跳转链接
+    capabilities: DeliveryType[] = ['qrcode', 'link'];
     
     private apiBase = 'https://api.xunhupay.com';
     
