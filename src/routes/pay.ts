@@ -25,6 +25,16 @@ import {
 
 export const payRouter = new Hono<{ Bindings: Env }>();
 
+/**
+ * 支付方式归一化：支付宝只有一个对外支付方式（pt_alipay）。
+ * 网页收款早期用 alipay_web / pt_alipay_web 作为标识，合并后仍兼容旧调用方，
+ * 统一映射到 pt_alipay，避免已接入的商户因传旧 type 而下不了单。
+ */
+export function normalizePaymentType(type: string): string {
+    if (type === 'alipay_web' || type === 'pt_alipay_web') return 'pt_alipay';
+    return type;
+}
+
 /** 订单状态接口的认证结果 */
 interface OrderStatusAuthResult {
     ok: boolean;
@@ -98,6 +108,9 @@ payRouter.post('/submit', async (c) => {
     // 获取参数
     const pid = body.pid as string;
     const type = body.type as string;
+    // 支付宝支付方式合并：旧 type（alipay_web/pt_alipay_web）归一到 pt_alipay，
+    // 仅用于查通道与写库；签名仍用客户端原始 type，不影响验签。
+    const paymentType = normalizePaymentType(type);
     const outTradeNo = body.out_trade_no as string;
     const notifyUrl = (body.notify_url as string) || '';
     const returnUrl = (body.return_url as string) || '';
@@ -177,7 +190,7 @@ payRouter.post('/submit', async (c) => {
         // 获取支付通道
         const channel = await env.DB.prepare(
             'SELECT * FROM channels WHERE payment_type_id = ? AND status = 1 ORDER BY sort_order LIMIT 1'
-        ).bind(type).first();
+        ).bind(paymentType).first();
         
         if (!channel) {
             return c.json({ code: -1, msg: '暂不支持该支付方式' });
@@ -195,7 +208,7 @@ payRouter.post('/submit', async (c) => {
                 created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-            tradeNo, pid, outTradeNo, type, channel.id,
+            tradeNo, pid, outTradeNo, paymentType, channel.id,
             channel.plugin, amount, 0, name, param,
             notifyUrl, returnUrl, clientIp, '', device,
             now
@@ -302,6 +315,8 @@ payRouter.post('/cashier', async (c) => {
     const merchantId = body.merchant_id as string;
     const amountStr = body.amount as string;
     const type = body.type as string;
+    // 与 /submit 一致：旧支付宝 type 归一到 pt_alipay，仅用于查通道与写库。
+    const paymentType = normalizePaymentType(type);
     const name = body.name as string || '在线收银台付款';
     const ticket = body.ticket as string;
     const timestamp = body.timestamp as string;
@@ -368,7 +383,7 @@ payRouter.post('/cashier', async (c) => {
 
         const channel = await env.DB.prepare(
             'SELECT * FROM channels WHERE payment_type_id = ? AND status = 1 ORDER BY sort_order LIMIT 1'
-        ).bind(type).first();
+        ).bind(paymentType).first();
 
         if (!channel) return c.json({ code: -1, msg: '暂不支持该支付方式' });
 
@@ -385,7 +400,7 @@ payRouter.post('/cashier', async (c) => {
                 created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-            tradeNo, merchantId, outTradeNo, type, channel.id,
+            tradeNo, merchantId, outTradeNo, paymentType, channel.id,
             channel.plugin, amount, 0, name, '',
             user.notify_url || '', user.return_url || '', clientIp, '', 'cashier',
             now
