@@ -1,6 +1,6 @@
 {
   "name": "teaven-pay-workers",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Teaven Pay - Cloudflare Workers 易支付系统",
   "private": true,
   "scripts": {

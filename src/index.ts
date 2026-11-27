@@ -105,7 +105,7 @@ app.get('/api/health', async (c) => {
 
     return c.json({
         status: 'ok',
-        version: '1.0.0',
+        version: '1.1.0',
         timestamp: new Date().toISOString(),
         // 限流计数实际使用的存储后端：kv / d1 / memory（按优先级自动降级）
         throttleBackend: throttle.getActiveBackend(),
